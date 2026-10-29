@@ -267,6 +267,103 @@ export async function createSheetBook(
 }
 
 /**
+ * Menghapus sheet buku/pos tabungan dari Google Sheets
+ */
+export async function deleteSheetBook(
+  rawName: string
+): Promise<{ success: boolean; message: string; bookName: string }> {
+  const cleanName = sanitizeBookName(rawName);
+  if (!cleanName) {
+    throw new Error('Nama pos tabungan tidak boleh kosong.');
+  }
+
+  // Lindungi buku utama & sheet sistem agar tidak terhapus
+  if (
+    cleanName.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase() ||
+    cleanName.toLowerCase() === 'kas' ||
+    cleanName.startsWith('_')
+  ) {
+    return {
+      success: false,
+      message: `Pos tabungan utama '${cleanName}' dilindungi dan tidak boleh dihapus.`,
+      bookName: cleanName,
+    };
+  }
+
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheetToDelete = meta.data.sheets?.find(
+    (s) => s.properties?.title?.toLowerCase() === cleanName.toLowerCase()
+  );
+
+  if (!sheetToDelete || sheetToDelete.properties?.sheetId === undefined) {
+    return {
+      success: false,
+      message: `Pos tabungan '${cleanName}' tidak ditemukan di Google Sheets.`,
+      bookName: cleanName,
+    };
+  }
+
+  const sheetId = sheetToDelete.properties.sheetId;
+
+  // Hapus sheet dari spreadsheet
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteSheet: {
+            sheetId,
+          },
+        },
+      ],
+    },
+  });
+
+  // Bersihkan cache daftar buku & web finance
+  cachedSheetList = null;
+  webFinanceCache.clear();
+
+  // Reset sesi aktif di memory cache
+  for (const [chatId, activeBook] of activeBookCache.entries()) {
+    if (activeBook.toLowerCase() === cleanName.toLowerCase()) {
+      activeBookCache.set(chatId, DEFAULT_BOOK_NAME);
+    }
+  }
+
+  // Reset sesi di Google Sheets jika ada yang sedang memakai buku ini
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${SESSION_SHEET_NAME}'!A2:B`,
+    });
+    const rows = res.data.values || [];
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][1] && String(rows[i][1]).trim().toLowerCase() === cleanName.toLowerCase()) {
+        const rowIdx = i + 2;
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `'${SESSION_SHEET_NAME}'!B${rowIdx}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[DEFAULT_BOOK_NAME]] },
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Gagal reset active book di session sheet:', err);
+  }
+
+  return {
+    success: true,
+    message: `Pos tabungan '${cleanName}' berhasil dihapus.`,
+    bookName: cleanName,
+  };
+}
+
+/**
  * Memastikan sheet _Sessions tersedia untuk menyimpan status buku aktif per pengguna
  */
 async function ensureSessionSheet(): Promise<void> {

@@ -8,6 +8,7 @@ import {
   updateTransactionNoteLink,
   getAllSheetBooks,
   createSheetBook,
+  deleteSheetBook,
   getUserActiveBook,
   setUserActiveBook,
   getAllSheetsSummary,
@@ -185,6 +186,7 @@ async function syncBotCommands(api: any) {
     const baseCommands = [
       { command: 'start', description: 'Panduan & menu utama' },
       { command: 'buat', description: 'Buat pos/tabungan baru' },
+      { command: 'hapusbuku', description: 'Hapus pos tabungan' },
       { command: 'budget', description: 'Atur budget belanja bulanan' },
       { command: 'badget', description: 'Atur badget belanja bulanan' },
       { command: 'dompet', description: 'Cek saldo Bank, E-Wallet & Cash' },
@@ -322,6 +324,15 @@ async function buildBooksKeyboard(activeBook: string): Promise<InlineKeyboard> {
     if ((idx + 1) % 2 === 0) keyboard.row();
   });
 
+  const deletable = books.filter(
+    (b) => b.toLowerCase() !== DEFAULT_BOOK_NAME.toLowerCase() && b.toLowerCase() !== 'kas' && !b.startsWith('_')
+  );
+
+  keyboard.row().text('➕ Buat Pos Baru', 'cmd_buat_buku');
+  if (deletable.length > 0) {
+    keyboard.text('🗑️ Hapus Pos Tabungan', 'cmd_hapus_buku');
+  }
+
   return keyboard;
 }
 
@@ -361,7 +372,8 @@ bot.command(['start', 'help'], async (ctx) => {
       `📌 *Pos / Tabungan Aktif:* \`${activeBook}\`\n` +
       `_(Semua chat transaksi & struk belanja akan otomatis dicatat ke sini)_\n\n` +
       `⚙️ *Menu Tabungan & Pengeluaran:*\n` +
-      `• /buat — *Buat Pos Tabungan Baru* (misal: Liburan, Ngedate, Menikah)\n` +
+      `• /buat — *Buat Pos Tabungan Baru* (misal: Liburan, Ngedate, Menikah)
+      • /hapusbuku — *Hapus Pos Tabungan* (hapus pos yang sudah selesai/tidak dipakai)\n` +
       `• /pindahsaldo — *Pindah Saldo* antar pos tabungan/dompet\n` +
       `• /rekap — *Rekap Tabungan Aktif* (\`${activeBook}\`)\n` +
       `• /rekapkas — *Rekap Total Semua Tabungan*\n` +
@@ -405,6 +417,121 @@ bot.command('buat', async (ctx) => {
       `_(Ketik *batal* jika ingin membatalkan)_`,
     { parse_mode: 'Markdown' }
   );
+});
+
+// Helper: Mengirim menu pilihan hapus pos tabungan
+async function sendDeleteBookMenu(ctx: any) {
+  const books = await getAllSheetBooks();
+  const deletable = books.filter(
+    (b) => b.toLowerCase() !== DEFAULT_BOOK_NAME.toLowerCase() && b.toLowerCase() !== 'kas' && !b.startsWith('_')
+  );
+
+  if (deletable.length === 0) {
+    await ctx.reply(
+      `ℹ️ *Tidak Ada Pos yang Dapat Dihapus*\n\n` +
+        `Saat ini hanya ada pos tabungan utama \`${DEFAULT_BOOK_NAME}\`. Pos utama dilindungi dan tidak boleh dihapus.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  const kb = new InlineKeyboard();
+  deletable.forEach((b) => {
+    kb.text(`🗑️ Hapus [${b}]`, `confirm_delete_book:${b}`).row();
+  });
+  kb.text('❌ Batal', 'cancel_delete_book');
+
+  await ctx.reply(
+    `🗑️ *Menu Hapus Pos Tabungan*\n\n` +
+      `Silakan klik pos tabungan yang ingin kamu hapus:\n` +
+      `_(⚠️ Peringatan: Menghapus pos tabungan akan menghapus tab sheet di Google Sheets secara permanen beserta seluruh riwayatnya)_`,
+    { parse_mode: 'Markdown', reply_markup: kb }
+  );
+}
+
+// Command: /hapusbuku /hapuspos
+bot.command(['hapusbuku', 'hapuspos', 'deletebuku', 'deletepos'], async (ctx) => {
+  await sendDeleteBookMenu(ctx);
+});
+
+// Callback: cmd_hapus_buku dari menu /buku
+bot.callbackQuery('cmd_hapus_buku', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await sendDeleteBookMenu(ctx);
+});
+
+// Callback: cmd_buat_buku dari menu /buku
+bot.callbackQuery('cmd_buat_buku', async (ctx) => {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+  createBookStates.set(chatId, true);
+  await ctx.answerCallbackQuery();
+  await ctx.reply(
+    `📝 *Buat Pos / Tabungan Baru*\n\n` +
+      `Silakan ketik *nama pos tabungan* yang ingin dibuat:\n` +
+      `_(contoh: \`Liburan\`, \`Ngedate\`, \`Emergency\`, \`Menikah\`)_\n\n` +
+      `💡 Bot akan otomatis membuatkan halaman (sheet) baru di Google Sheets Anda.\n\n` +
+      `_(Ketik *batal* jika ingin membatalkan)_`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// Callback: Konfirmasi hapus buku
+bot.callbackQuery(/^confirm_delete_book:(.+)$/, async (ctx) => {
+  const bookName = ctx.match[1];
+  await ctx.answerCallbackQuery();
+
+  const kb = new InlineKeyboard()
+    .text(`⚠️ Ya, Hapus [${bookName}]`, `do_delete_book:${bookName}`)
+    .text('❌ Batal', 'cancel_delete_book');
+
+  await ctx.reply(
+    `🚨 *Konfirmasi Penghapusan Pos Tabungan*\n\n` +
+      `Apakah kamu yakin ingin menghapus pos tabungan *${bookName}*?\n\n` +
+      `• Tab sheet *${bookName}* di Google Sheets akan dihapus permanen.\n` +
+      `• Seluruh catatan uang & riwayat transaksi di pos ini akan ikut terhapus.\n` +
+      `• Pengguna yang sedang aktif di pos ini akan otomatis dialihkan kembali ke Tabungan Utama.`,
+    { parse_mode: 'Markdown', reply_markup: kb }
+  );
+});
+
+// Callback: Eksekusi hapus buku
+bot.callbackQuery(/^do_delete_book:(.+)$/, async (ctx) => {
+  const bookName = ctx.match[1];
+  await ctx.answerCallbackQuery('Menghapus pos tabungan...');
+
+  try {
+    await ctx.replyWithChatAction('typing');
+    const res = await deleteSheetBook(bookName);
+    if (!res.success) {
+      await ctx.reply(`⚠️ ${res.message}`);
+      return;
+    }
+
+    // Perbarui daftar perintah bot di Telegram
+    syncBotCommands(ctx.api).catch(() => {});
+
+    await ctx.reply(
+      `✅ *Pos Tabungan Berhasil Dihapus!*\n\n` +
+        `🗑️ Tab sheet \`${bookName}\` telah dihapus dari Google Sheets.\n` +
+        `📌 Pos tabungan aktif kamu sekarang dialihkan kembali ke \`${DEFAULT_BOOK_NAME}\`.\n\n` +
+        `Ketik /buku untuk melihat daftar pos tabungan yang tersisa.`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (err: any) {
+    console.error('Gagal hapus buku:', err);
+    await ctx.reply(`❌ Gagal menghapus pos tabungan: ${err.message}`);
+  }
+});
+
+// Callback: Batal hapus buku
+bot.callbackQuery('cancel_delete_book', async (ctx) => {
+  await ctx.answerCallbackQuery('Penghapusan dibatalkan');
+  try {
+    await ctx.editMessageText('❌ Penghapusan pos tabungan dibatalkan.');
+  } catch {
+    await ctx.reply('❌ Penghapusan pos tabungan dibatalkan.');
+  }
 });
 
 // Command: /tabungan & /kas (Beralih ke Tabungan Utama)
@@ -2884,6 +3011,10 @@ bot.on('message:text', async (ctx) => {
       'start',
       'help',
       'buat',
+      'hapusbuku',
+      'hapuspos',
+      'deletebuku',
+      'deletepos',
       'pindahsaldo',
       'transfersaldo',
       'pindah',
