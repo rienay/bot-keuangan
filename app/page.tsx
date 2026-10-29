@@ -168,12 +168,6 @@ export default function FinanceDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBook, setSelectedBook] = useState<string>('Tabungan');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'Pemasukan' | 'Pengeluaran' | 'with_receipt'>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<string>('all');
-  const [selectedWallet, setSelectedWallet] = useState<string>('all');
   const [visibleCount, setVisibleCount] = useState(25);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -264,98 +258,9 @@ export default function FinanceDashboardPage() {
     }
   };
 
-  const availableYears = useMemo(() => {
-    if (!data?.transactions) return [];
-    const years = new Set<string>();
-    data.transactions.forEach((tx) => {
-      const { year } = parseDateParts(tx.date);
-      if (year) years.add(year);
-    });
-    return Array.from(years).sort().reverse();
+  const transactions = useMemo(() => {
+    return data?.transactions || [];
   }, [data?.transactions]);
-
-  const availableCategories = useMemo(() => {
-    if (!data?.transactions) return [];
-    const cats = new Set<string>();
-    data.transactions.forEach((tx) => {
-      if (tx.category && tx.category !== '-') {
-        cats.add(tx.category);
-      }
-    });
-    return Array.from(cats).sort();
-  }, [data?.transactions]);
-
-  const availableWallets = useMemo(() => {
-    if (!data?.transactions) return [];
-    const wallets = new Set<string>();
-    data.transactions.forEach((tx) => {
-      if (tx.wallet) wallets.add(tx.wallet);
-    });
-    return Array.from(wallets).sort();
-  }, [data?.transactions]);
-
-  const filteredTransactions = useMemo(() => {
-    if (!data?.transactions) return [];
-
-    return data.transactions.filter((tx) => {
-      if (typeFilter === 'Pemasukan' && tx.type !== 'Pemasukan') return false;
-      if (typeFilter === 'Pengeluaran' && tx.type !== 'Pengeluaran') return false;
-      if (typeFilter === 'with_receipt' && !tx.noteLink) return false;
-
-      if (selectedCategory !== 'all' && tx.category !== selectedCategory) return false;
-
-      // Filter Dompet
-      if (selectedWallet !== 'all') {
-        const w = (tx.wallet || 'Bank').toLowerCase();
-        if (selectedWallet === 'Bank') {
-          if (!w.startsWith('bank')) return false;
-        } else if (selectedWallet === 'E-Wallet') {
-          if (!w.startsWith('e-wallet') && !w.startsWith('ewallet') && !w.includes('dana') && !w.includes('gopay') && !w.includes('shopee') && !w.includes('ovo')) return false;
-        } else if (selectedWallet === 'Cash') {
-          if (!w.startsWith('cash') && !w.startsWith('tunai')) return false;
-        } else {
-          if ((tx.wallet || 'Bank') !== selectedWallet) return false;
-        }
-      }
-
-      if (selectedYear !== 'all' || selectedMonth !== 'all') {
-        const { year, month } = parseDateParts(tx.date);
-        if (selectedYear !== 'all' && year !== selectedYear) return false;
-        if (selectedMonth !== 'all' && month !== selectedMonth) return false;
-      }
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchDesc = tx.description.toLowerCase().includes(q);
-        const matchCat = tx.category.toLowerCase().includes(q);
-        const matchPic = tx.pic ? tx.pic.toLowerCase().includes(q) : false;
-        const matchBook = tx.book.toLowerCase().includes(q);
-        const matchDate = tx.date.toLowerCase().includes(q);
-        const matchAmount = String(tx.amount).includes(q);
-
-        return matchDesc || matchCat || matchPic || matchBook || matchDate || matchAmount;
-      }
-
-      return true;
-    });
-  }, [data?.transactions, typeFilter, selectedCategory, selectedMonth, selectedYear, selectedWallet, searchQuery]);
-
-  const hasActiveFilters =
-    typeFilter !== 'all' ||
-    selectedCategory !== 'all' ||
-    selectedMonth !== 'all' ||
-    selectedYear !== 'all' ||
-    selectedWallet !== 'all' ||
-    searchQuery.trim() !== '';
-
-  const handleResetFilters = () => {
-    setTypeFilter('all');
-    setSelectedCategory('all');
-    setSelectedMonth('all');
-    setSelectedYear('all');
-    setSelectedWallet('all');
-    setSearchQuery('');
-  };
 
   // Kategori pengeluaran sorted descending untuk progress bar tracking ala Image 2
   const categoryExpensesList = useMemo(() => {
@@ -654,124 +559,14 @@ export default function FinanceDashboardPage() {
           )}
         </section>
 
-        {/* 4. CONTROLS: SEARCH & FILTER BAR */}
-        <section className="controls-card">
-          <div className="search-field">
-            <span className="search-field-icon">🔍</span>
-            <input
-              type="text"
-              placeholder="Cari keterangan, kategori, atau PIC..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="search-clear-btn">
-                ✕
-              </button>
-            )}
-          </div>
-
-          <div className="filter-pills-row">
-            {/* Filter Jenis */}
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as any)}
-              className="ios-select"
-            >
-              <option value="all">Semua Jenis</option>
-              <option value="Pemasukan">📥 Pemasukan Saja</option>
-              <option value="Pengeluaran">📤 Pengeluaran Saja</option>
-              <option value="with_receipt">📎 Ada Nota Saja</option>
-            </select>
-
-            {/* Filter Dompet */}
-            <select
-              value={selectedWallet}
-              onChange={(e) => setSelectedWallet(e.target.value)}
-              className="ios-select"
-            >
-              <option value="all">💳 Semua Dompet</option>
-              <option value="Bank">🏦 Bank</option>
-              <option value="E-Wallet">📱 E-Wallet</option>
-              <option value="Cash">💵 Cash</option>
-              {availableWallets
-                .filter((w) => !['Bank', 'E-Wallet', 'Cash'].includes(w))
-                .map((w) => (
-                  <option key={w} value={w}>
-                    {w.toLowerCase().includes('wallet') ? '📱' : w.toLowerCase().includes('cash') ? '💵' : '🏦'} {w}
-                  </option>
-                ))}
-            </select>
-
-            {/* Filter Bulan */}
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="ios-select"
-            >
-              <option value="all">📅 Semua Bulan</option>
-              {MONTH_OPTIONS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-
-            {/* Filter Tahun */}
-            {availableYears.length > 0 && (
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="ios-select"
-              >
-                <option value="all">🗓️ Semua Tahun</option>
-                {availableYears.map((yr) => (
-                  <option key={yr} value={yr}>
-                    {yr}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {/* Reset Button */}
-            {hasActiveFilters && (
-              <button onClick={handleResetFilters} className="btn-filter-reset">
-                ✕ Reset
-              </button>
-            )}
-          </div>
-
-          {/* Quick Category Filter Pills */}
-          {availableCategories.length > 0 && (
-            <div className="chips-scroll">
-              <button
-                className={`cat-pill ${selectedCategory === 'all' ? 'active' : ''}`}
-                onClick={() => setSelectedCategory('all')}
-              >
-                Semua
-              </button>
-              {availableCategories.map((cat) => (
-                <button
-                  key={cat}
-                  className={`cat-pill ${selectedCategory === cat ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
-                >
-                  <span>{getCategoryConfig(cat).icon}</span>
-                  <span>{cat}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 5. TRANSACTIONS HISTORY (Clean rows, duplicate PIC tag removed from title) */}
+        {/* 4. TRANSACTIONS HISTORY (Clean rows, duplicate PIC tag removed from title) */}
         <section>
           <div className="transactions-header">
             <h2 className="transactions-title">
               Riwayat Transaksi
             </h2>
             <span className="transactions-count">
-              {filteredTransactions.length} transaksi
+              {transactions.length} transaksi
             </span>
           </div>
 
@@ -781,19 +576,17 @@ export default function FinanceDashboardPage() {
               <div className="empty-title">Memuat data...</div>
               <div className="empty-desc">Mengambil transaksi langsung dari Google Sheets.</div>
             </div>
-          ) : filteredTransactions.length === 0 ? (
+          ) : transactions.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">🌸</div>
               <div className="empty-title">Tidak ada transaksi</div>
               <div className="empty-desc">
-                {searchQuery
-                  ? `Tidak ada transaksi yang cocok dengan "${searchQuery}".`
-                  : 'Belum ada catatan transaksi pada filter ini.'}
+                Belum ada catatan transaksi pada pos ini.
               </div>
             </div>
           ) : (
             <div className="ios-list-group">
-              {filteredTransactions.slice(0, visibleCount).map((tx, idx) => {
+              {transactions.slice(0, visibleCount).map((tx, idx) => {
                 const isIncome = tx.type === 'Pemasukan';
                 const catCfg = getCategoryConfig(tx.category);
                 const isCash = (tx.wallet || '').toLowerCase().includes('cash');
@@ -885,13 +678,13 @@ export default function FinanceDashboardPage() {
           )}
 
           {/* Load More Button */}
-          {filteredTransactions.length > visibleCount && (
+          {transactions.length > visibleCount && (
             <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
               <button
                 onClick={() => setVisibleCount((prev) => prev + 25)}
                 className="btn-load-more"
               >
-                Muat Lebih Banyak ({filteredTransactions.length - visibleCount} tersisa)
+                Muat Lebih Banyak ({transactions.length - visibleCount} tersisa)
               </button>
             </div>
           )}
