@@ -78,5 +78,5 @@ ALLOWED_TELEGRAM_USER_IDS=
 2. Buka [Vercel](https://vercel.com), klik **Add New > Project**, lalu import repository ini.
 3. Pada bagian **Environment Variables**, masukkan semua variabel dari poin 2 di atas.
 4. Klik **Deploy**.
-5. Setelah selesai, buka URL aplikasi Vercel Anda (misal: `https://duit-pwd-bot.vercel.app`), lalu klik tombol **🔗 Aktifkan Webhook Telegram**.
-6. Selesai! Bot Anda di `@duit_pwd_bot` sudah aktif 24/7!
+5. Setelah selesai, buka URL aplikasi Vercel Anda (misal: `https://bot-keuangan-ebon.vercel.app`), lalu klik tombol **🔗 Aktifkan Webhook Telegram**.
+6. Selesai! Bot Anda di `@nabung_date_bot` sudah aktif 24/7!

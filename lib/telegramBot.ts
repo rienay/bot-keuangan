@@ -729,14 +729,14 @@ bot.command(['cabut', 'revoke'], async (ctx) => {
 
 // Command: /linkuang (Link website keuangan transparan)
 bot.command(['linkuang', 'linkweb', 'dashboard', 'website'], async (ctx) => {
-  const webUrl = 'https://bot-tele-topaz.vercel.app';
+  const webUrl = 'https://bot-keuangan-ebon.vercel.app';
   const keyboard = new InlineKeyboard().url('🌸 Buka Website Keuangan', webUrl);
 
   await ctx.reply(
-    `🌸 *Website Catatan Keuangan Transparan*\n\n` +
-      `Sekarang seluruh panitia & anggota dapat melihat laporan saldo kas, rincian pengeluaran tiap kegiatan, dan bukti struk nota secara asik, rapi, dan mudah dipahami:\n\n` +
+    `🌸 *Website Dashboard Tabungan & Keuangan Kita 💕*\n\n` +
+      `Sekarang kamu dan pasangan bisa melihat laporan saldo tabungan, rincian pengeluaran, saldo dompet (Bank, E-Wallet, Cash), dan bukti struk nota secara rapi, visual, dan transparan:\n\n` +
       `👉 [${webUrl}](${webUrl})\n\n` +
-      `💡 *Catatan:* Menulis pemasukan/pengeluaran & upload foto nota tetap dilakukan lewat chat bot ini ya! Website tersebut berfungsi khusus untuk melihat & memantau laporan secara terbuka. ✨`,
+      `💡 *Catatan:* Catat pemasukan/pengeluaran & upload foto nota tetap dilakukan lewat chat bot ini ya! Website tersebut berfungsi khusus untuk melihat & memantau laporan serta grafik tabungan kita bersama. 💕`,
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
@@ -2930,7 +2930,7 @@ bot.on(['message:photo', 'message:document'], async (ctx) => {
         `💰 *Total Nominal:* ${formatRupiah(parsed.amount)}\n` +
         `📝 *Keterangan:* ${parsed.description}\n\n` +
         `${driveStatusText}\n\n` +
-        `💡 _Tips: Jika ingin mencatat transaksi ke buku/tab lain (seperti tab pwd), ketik /pwd atau /buku._`,
+        `💡 _Tips: Jika ingin mencatat transaksi ke tab lain (seperti tab Liburan atau Ngedate), ketik /buku._`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard,

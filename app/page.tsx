@@ -853,7 +853,7 @@ export default function FinanceDashboardPage() {
             </p>
           </div>
           <a
-            href="https://t.me/duit_pwd_bot"
+            href="https://t.me/nabung_date_bot"
             target="_blank"
             rel="noopener noreferrer"
             style={{
