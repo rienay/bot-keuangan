@@ -439,7 +439,7 @@ export default function FinanceDashboardPage() {
     return { segments, total, C, R };
   }, [categoryExpensesList]);
 
-  // 3. Kalkulasi Bar Chart Arus Kas Bulanan
+  // 3. Rincian Arus Kas Bulanan (Tampilan List Vertikal agar tidak gepeng di HP saat pilih 12 bulan)
   const cashflowBarData = useMemo(() => {
     if (!data?.monthlyComparison?.months || data.monthlyComparison.months.length === 0) {
       return [];
@@ -448,32 +448,20 @@ export default function FinanceDashboardPage() {
     let months = data.monthlyComparison.months;
     if (selectedYear !== 'Semua') {
       months = months.filter((m) => m.month.startsWith(`${selectedYear}-`));
-    } else {
-      if (barChartRange === '6') {
-        months = months.slice(-6);
-      } else if (barChartRange === '12') {
-        months = months.slice(-12);
-      }
+    }
+
+    if (barChartRange === '6') {
+      months = months.slice(-6);
+    } else if (barChartRange === '12') {
+      months = months.slice(-12);
     }
 
     if (months.length === 0) {
       return [];
     }
 
-    const maxVal = Math.max(
-      ...months.map((m) => Math.max(m.income, m.expense)),
-      1
-    );
-
-    return months.map((m) => {
-      const incomeHeight = Math.max(6, Math.round((m.income / maxVal) * 150));
-      const expenseHeight = Math.max(6, Math.round((m.expense / maxVal) * 150));
-      return {
-        ...m,
-        incomeHeight,
-        expenseHeight,
-      };
-    });
+    // Urutkan bulan terbaru di paling atas
+    return months.slice().reverse();
   }, [data?.monthlyComparison?.months, selectedYear, barChartRange]);
 
   // Budget calculations
@@ -803,14 +791,14 @@ export default function FinanceDashboardPage() {
           </div>
         </section>
 
-        {/* 4. CHARTS ROW: DUAL BAR CHART + DONUT CHART */}
+        {/* 4. CHARTS ROW: RINCIAN ARUS KAS BULANAN + DONUT CHART */}
         <section className="crm-charts-grid">
-          {/* A. DUAL BAR CHART (Arus Kas Bulanan) */}
+          {/* A. RINCIAN ARUS KAS BULANAN (Format Kartu Vertikal Responsif) */}
           <div className="crm-card crm-chart-card">
             <div className="crm-card-header">
               <div>
                 <h2 className="crm-card-title">Arus Kas & Tren Bulanan</h2>
-                <div className="crm-card-subtitle">Perbandingan pemasukan vs pengeluaran antar bulan</div>
+                <div className="crm-card-subtitle">Perbandingan pemasukan vs pengeluaran per bulan</div>
               </div>
               <div className="crm-chart-header-actions">
                 <div className="crm-pill-toggle">
@@ -846,41 +834,63 @@ export default function FinanceDashboardPage() {
 
             {cashflowBarData.length === 0 ? (
               <div className="crm-chart-empty">
-                <span>📊 Belum ada riwayat perbandingan bulan. Catatan akan otomatis divisualisasikan di sini.</span>
+                <span>📊 Belum ada riwayat perbandingan bulan pada filter ini.</span>
               </div>
             ) : (
-              <div className="crm-bar-container">
-                <div
-                  className="crm-bar-chart"
-                  style={{
-                    minWidth: cashflowBarData.length > 8 ? `${cashflowBarData.length * 48}px` : '100%',
-                  }}
-                >
-                  {cashflowBarData.map((m) => (
-                    <div key={m.month} className="crm-bar-group">
-                      <div className="crm-bars-pair">
-                        {/* Bar Masuk */}
-                        <div
-                          className="crm-bar crm-bar-income"
-                          style={{ height: `${m.incomeHeight}px` }}
-                          title={`Masuk: +${formatRupiah(m.income)}`}
-                        >
-                          <span className="crm-bar-tooltip">+{formatRupiah(m.income)}</span>
+              <div className="crm-monthly-list">
+                {cashflowBarData.map((m) => {
+                  const totalCash = m.income + m.expense;
+                  const incomePct = totalCash > 0 ? Math.round((m.income / totalCash) * 100) : 50;
+                  const expensePct = 100 - incomePct;
+                  const isSurplus = m.balance >= 0;
+
+                  return (
+                    <div key={m.month} className="crm-month-card">
+                      <div className="crm-month-card-top">
+                        <div className="crm-month-info">
+                          <span className="crm-month-badge-icon">📅</span>
+                          <div className="crm-month-meta">
+                            <span className="crm-month-name">{m.monthLabel}</span>
+                            <span className={`crm-month-net-badge ${isSurplus ? 'surplus' : 'deficit'}`}>
+                              {isSurplus ? '🟢 Surplus' : '🔴 Defisit'} {formatRupiah(m.balance)}
+                            </span>
+                          </div>
                         </div>
 
-                        {/* Bar Keluar */}
-                        <div
-                          className="crm-bar crm-bar-expense"
-                          style={{ height: `${m.expenseHeight}px` }}
-                          title={`Keluar: -${formatRupiah(m.expense)}`}
-                        >
-                          <span className="crm-bar-tooltip">-{formatRupiah(m.expense)}</span>
+                        <div className="crm-month-values">
+                          <div className="crm-month-val-box income">
+                            <span className="crm-month-val-label">Masuk</span>
+                            <span className="crm-month-val-num">+{formatRupiah(m.income)}</span>
+                          </div>
+                          <div className="crm-month-val-box expense">
+                            <span className="crm-month-val-label">Keluar</span>
+                            <span className="crm-month-val-num">-{formatRupiah(m.expense)}</span>
+                          </div>
                         </div>
                       </div>
-                      <span className="crm-bar-label">{m.monthLabel.split(' ')[0]}</span>
+
+                      {/* Visual Ratio Progress Bar: Pemasukan (Biru) vs Pengeluaran (Ungu) */}
+                      <div className="crm-month-bar-wrap">
+                        <div className="crm-month-bar-track">
+                          <div
+                            className="crm-month-bar-fill income"
+                            style={{ width: `${incomePct}%` }}
+                            title={`Pemasukan: ${incomePct}% (${formatRupiah(m.income)})`}
+                          />
+                          <div
+                            className="crm-month-bar-fill expense"
+                            style={{ width: `${expensePct}%` }}
+                            title={`Pengeluaran: ${expensePct}% (${formatRupiah(m.expense)})`}
+                          />
+                        </div>
+                        <div className="crm-month-bar-labels">
+                          <span>Masuk {incomePct}%</span>
+                          <span>Keluar {expensePct}%</span>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             )}
           </div>
