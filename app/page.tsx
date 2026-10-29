@@ -247,7 +247,7 @@ export default function FinanceDashboardPage() {
           <div className="crm-brand">
             <div className="crm-brand-logo">💕</div>
             <div className="crm-brand-details">
-              <h1 className="crm-brand-title">Financial CRM & Tracking</h1>
+              <h1 className="crm-brand-title">Tabungan Kita</h1>
               <div className="crm-badge-book">
                 <span className="crm-status-dot" />
                 <span>Pos Aktif: <b>{selectedBook}</b></span>
