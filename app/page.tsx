@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { WebFinanceData, WebTransactionItem } from '@/lib/types';
+import { WebFinanceData } from '@/lib/types';
 
 function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -9,52 +9,6 @@ function formatRupiah(amount: number): string {
     currency: 'IDR',
     maximumFractionDigits: 0,
   }).format(amount);
-}
-
-function parseDateParts(dateStr: string): { year?: string; month?: string } {
-  if (!dateStr) return {};
-  const cleaned = String(dateStr).trim().replace(/^'/, '');
-  const ymdMatch = cleaned.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
-  if (ymdMatch) {
-    return {
-      year: ymdMatch[1],
-      month: ymdMatch[2].padStart(2, '0'),
-    };
-  }
-  const dmyMatch = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
-  if (dmyMatch) {
-    return {
-      year: dmyMatch[3],
-      month: dmyMatch[2].padStart(2, '0'),
-    };
-  }
-  return {};
-}
-
-function formatDateDisplay(dateStr: string): string {
-  if (!dateStr) return '-';
-  const cleaned = String(dateStr).trim().replace(/^'/, '');
-  const { year, month } = parseDateParts(cleaned);
-  const dayMatch = cleaned.match(/(?:[-/.]|^)(\d{1,2})(?:[-/.]|$)/);
-  const day = dayMatch ? dayMatch[1].padStart(2, '0') : '';
-  const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-  const mIdx = month ? parseInt(month, 10) : 0;
-  const mName = monthNames[mIdx] || month || '';
-
-  if (day && mName && year) {
-    return `${day} ${mName} ${year}`;
-  }
-  return cleaned;
-}
-
-// Bersihkan judul transaksi agar tidak menduplikasi tag (PIC: @username)
-function cleanTransactionTitle(desc: string): string {
-  if (!desc) return 'Transaksi';
-  const cleaned = desc
-    .replace(/\s*\\([Pp][Ii][Cc]:\s*@[^)]+\\)/gi, '')
-    .replace(/\s*\\([Pp][Ii][Cc]:\s*[^)]+\\)/gi, '')
-    .trim();
-  return cleaned || 'Transaksi';
 }
 
 interface CategoryStyle {
@@ -148,27 +102,11 @@ function getCategoryConfig(categoryName: string): CategoryStyle {
   };
 }
 
-const MONTH_OPTIONS = [
-  { value: '01', label: 'Januari' },
-  { value: '02', label: 'Februari' },
-  { value: '03', label: 'Maret' },
-  { value: '04', label: 'April' },
-  { value: '05', label: 'Mei' },
-  { value: '06', label: 'Juni' },
-  { value: '07', label: 'Juli' },
-  { value: '08', label: 'Agustus' },
-  { value: '09', label: 'September' },
-  { value: '10', label: 'Oktober' },
-  { value: '11', label: 'November' },
-  { value: '12', label: 'Desember' },
-];
-
 export default function FinanceDashboardPage() {
   const [data, setData] = useState<WebFinanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBook, setSelectedBook] = useState<string>('Tabungan');
-  const [visibleCount, setVisibleCount] = useState(25);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // State untuk form edit budget bulanan
@@ -230,7 +168,6 @@ export default function FinanceDashboardPage() {
 
   useEffect(() => {
     fetchData(selectedBook);
-    setVisibleCount(25);
   }, [selectedBook]);
 
   const handleSaveBudget = async () => {
@@ -257,10 +194,6 @@ export default function FinanceDashboardPage() {
       setIsSavingBudget(false);
     }
   };
-
-  const transactions = useMemo(() => {
-    return data?.transactions || [];
-  }, [data?.transactions]);
 
   // Kategori pengeluaran sorted descending untuk progress bar tracking ala Image 2
   const categoryExpensesList = useMemo(() => {
@@ -559,138 +492,7 @@ export default function FinanceDashboardPage() {
           )}
         </section>
 
-        {/* 4. TRANSACTIONS HISTORY (Clean rows, duplicate PIC tag removed from title) */}
-        <section>
-          <div className="transactions-header">
-            <h2 className="transactions-title">
-              Riwayat Transaksi
-            </h2>
-            <span className="transactions-count">
-              {transactions.length} transaksi
-            </span>
-          </div>
-
-          {loading && !data ? (
-            <div className="empty-state">
-              <div className="empty-icon">⏳</div>
-              <div className="empty-title">Memuat data...</div>
-              <div className="empty-desc">Mengambil transaksi langsung dari Google Sheets.</div>
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">🌸</div>
-              <div className="empty-title">Tidak ada transaksi</div>
-              <div className="empty-desc">
-                Belum ada catatan transaksi pada pos ini.
-              </div>
-            </div>
-          ) : (
-            <div className="ios-list-group">
-              {transactions.slice(0, visibleCount).map((tx, idx) => {
-                const isIncome = tx.type === 'Pemasukan';
-                const catCfg = getCategoryConfig(tx.category);
-                const isCash = (tx.wallet || '').toLowerCase().includes('cash');
-                const isEw =
-                  (tx.wallet || '').toLowerCase().includes('wallet') ||
-                  (tx.wallet || '').toLowerCase().includes('dana') ||
-                  (tx.wallet || '').toLowerCase().includes('gopay') ||
-                  (tx.wallet || '').toLowerCase().includes('shopee') ||
-                  (tx.wallet || '').toLowerCase().includes('ovo');
-                const walletIcon = isCash ? '💵' : isEw ? '📱' : '🏦';
-
-                // Bersihkan judul transaksi agar tidak menduplikasi PIC
-                const cleanTitle = cleanTransactionTitle(tx.description);
-
-                return (
-                  <div key={tx.id || idx} className="ios-row">
-                    {/* Left Icon Circle */}
-                    <div
-                      className="category-icon-circle"
-                      style={{
-                        background: isIncome ? '#ECFDF5' : catCfg.bgColor,
-                        width: '38px',
-                        height: '38px',
-                        fontSize: '1.15rem',
-                      }}
-                    >
-                      <span>{isIncome ? '📥' : catCfg.icon}</span>
-                    </div>
-
-                    {/* Center Info */}
-                    <div className="ios-row-main">
-                      <div className="ios-row-title">
-                        {cleanTitle}
-                      </div>
-                      <div className="ios-row-meta">
-                        <span>{formatDateDisplay(tx.date)}</span>
-                        <span>•</span>
-                        <span
-                          className="ios-badge-pill"
-                          style={{
-                            background: isCash
-                              ? '#ECFDF5'
-                              : isEw
-                              ? '#FAF5FF'
-                              : '#EFF6FF',
-                            color: isCash ? '#059669' : isEw ? '#7C3AED' : '#0284C7',
-                          }}
-                        >
-                          <span>{walletIcon}</span>
-                          <span>{tx.wallet || 'Bank'}</span>
-                        </span>
-                        <span>•</span>
-                        <span className="ios-badge-pill" style={{ background: '#F1F5F9', color: '#475569' }}>
-                          {tx.category}
-                        </span>
-                        {tx.pic && (
-                          <>
-                            <span>•</span>
-                            <span style={{ color: '#6366F1', fontWeight: 600 }}>{tx.pic}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right Amount & Receipt Button */}
-                    <div className="ios-row-end">
-                      <div className={`ios-row-amount ${isIncome ? 'income' : 'expense'}`}>
-                        {isIncome ? '+' : '-'} {formatRupiah(tx.amount)}
-                      </div>
-                      {tx.noteLink && (
-                        <div>
-                          <a
-                            href={tx.noteLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="ios-nota-btn"
-                            title="Buka bukti nota"
-                          >
-                            <span>📎</span>
-                            <span>Nota</span>
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Load More Button */}
-          {transactions.length > visibleCount && (
-            <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
-              <button
-                onClick={() => setVisibleCount((prev) => prev + 25)}
-                className="btn-load-more"
-              >
-                Muat Lebih Banyak ({transactions.length - visibleCount} tersisa)
-              </button>
-            </div>
-          )}
-        </section>
-
-        {/* 6. COLLAPSIBLE MONTH-OVER-MONTH COMPARISON (Neatly tucked at bottom) */}
+        {/* 4. COLLAPSIBLE MONTH-OVER-MONTH COMPARISON (Neatly tucked at bottom) */}
         {data?.monthlyComparison && data.monthlyComparison.months.length > 0 && (
           <section className="collapsible-card" style={{ marginTop: '1.5rem' }}>
             <div
