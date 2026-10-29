@@ -11,6 +11,7 @@ import {
   WebFinanceData,
   WebTransactionItem,
   WalletBalances,
+  RegisteredWallets,
   BudgetInfo,
   MonthlyStatsItem,
   MonthlyComparisonReport,
@@ -430,7 +431,7 @@ export async function appendTransaction(
 
   const formattedDate = tx.date.startsWith("'") ? tx.date : `'${tx.date}`;
 
-  const defaultWallet = tx.wallet || (tx.type === 'Pemasukan' ? 'Bank' : 'Cash');
+  const defaultWallet = tx.wallet || 'Belum Dipilih';
 
   const rowValues = [
     formattedDate,
@@ -1220,8 +1221,217 @@ export async function updateTransactionWallet(
   return true;
 }
 
+export const DOMPET_SHEET_NAME = '_Dompet';
+
+let cachedWallets: RegisteredWallets | null = null;
+let lastWalletsFetchTime = 0;
+const WALLETS_CACHE_TTL_MS = 60000; // 60 detik
+
 /**
- * Mengambil ringkasan saldo per dompet (Bank, E-Wallet, Cash)
+ * Memastikan sheet _Dompet tersedia untuk menyimpan daftar akun Bank & E-Wallet
+ */
+export async function ensureDompetSheet(): Promise<void> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = meta.data.sheets?.some(
+    (s) => s.properties?.title?.toLowerCase() === DOMPET_SHEET_NAME.toLowerCase()
+  );
+
+  if (!exists) {
+    try {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: DOMPET_SHEET_NAME,
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      const nowJakarta = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        dateStyle: 'short',
+        timeStyle: 'medium',
+      }).format(new Date());
+
+      const initialRows = [
+        ['Kategori', 'Nama Akun', 'Dibuat Pada'],
+        ['Bank', 'BCA', nowJakarta],
+        ['Bank', 'Mandiri', nowJakarta],
+        ['E-Wallet', 'Dana', nowJakarta],
+        ['E-Wallet', 'GoPay', nowJakarta],
+        ['E-Wallet', 'ShopeePay', nowJakarta],
+      ];
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${DOMPET_SHEET_NAME}'!A1:C6`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: initialRows,
+        },
+      });
+    } catch (e: any) {
+      console.warn('ensureDompetSheet notice:', e?.message);
+    }
+  }
+}
+
+/**
+ * Mengambil daftar akun Bank & E-Wallet yang terdaftar
+ */
+export async function getRegisteredWallets(forceRefresh = false): Promise<RegisteredWallets> {
+  const now = Date.now();
+  if (!forceRefresh && cachedWallets && now - lastWalletsFetchTime < WALLETS_CACHE_TTL_MS) {
+    return cachedWallets;
+  }
+
+  try {
+    await ensureDompetSheet();
+    const auth = getGoogleAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = getSpreadsheetId();
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${DOMPET_SHEET_NAME}'!A2:B`,
+    });
+
+    const rows = res.data.values || [];
+    const banks: string[] = [];
+    const ewallets: string[] = [];
+
+    for (const r of rows) {
+      const cat = String(r[0] || '').trim();
+      const name = String(r[1] || '').trim();
+      if (!name) continue;
+
+      if (cat.toLowerCase().includes('bank')) {
+        if (!banks.some((b) => b.toLowerCase() === name.toLowerCase())) {
+          banks.push(name);
+        }
+      } else if (cat.toLowerCase().includes('wallet') || cat.toLowerCase().includes('ewallet')) {
+        if (!ewallets.some((e) => e.toLowerCase() === name.toLowerCase())) {
+          ewallets.push(name);
+        }
+      }
+    }
+
+    if (banks.length === 0) banks.push('BCA', 'Mandiri');
+    if (ewallets.length === 0) ewallets.push('Dana', 'GoPay', 'ShopeePay');
+
+    cachedWallets = { banks, ewallets };
+    lastWalletsFetchTime = now;
+    return cachedWallets;
+  } catch (err) {
+    console.error('Error fetching registered wallets:', err);
+    return {
+      banks: ['BCA', 'Mandiri'],
+      ewallets: ['Dana', 'GoPay', 'ShopeePay'],
+    };
+  }
+}
+
+/**
+ * Menambahkan akun Bank atau E-Wallet baru
+ */
+export async function addRegisteredWallet(
+  category: 'Bank' | 'E-Wallet',
+  name: string
+): Promise<{ success: boolean; message: string }> {
+  await ensureDompetSheet();
+  const cleanName = name.trim();
+  if (!cleanName || cleanName.length < 2) {
+    return { success: false, message: 'Nama akun terlalu pendek (minimal 2 karakter).' };
+  }
+
+  const existing = await getRegisteredWallets(true);
+  const list = category === 'Bank' ? existing.banks : existing.ewallets;
+  if (list.some((item) => item.toLowerCase() === cleanName.toLowerCase())) {
+    return { success: false, message: `${category} "${cleanName}" sudah terdaftar sebelumnya!` };
+  }
+
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+
+  const nowJakarta = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  }).format(new Date());
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `'${DOMPET_SHEET_NAME}'!A:C`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: {
+      values: [[category, cleanName, nowJakarta]],
+    },
+  });
+
+  cachedWallets = null;
+  return { success: true, message: `${category} "${cleanName}" berhasil ditambahkan!` };
+}
+
+/**
+ * Menghapus akun Bank atau E-Wallet dari daftar
+ */
+export async function removeRegisteredWallet(
+  name: string
+): Promise<{ success: boolean; message: string }> {
+  await ensureDompetSheet();
+  const cleanName = name.trim().toLowerCase();
+
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${DOMPET_SHEET_NAME}'!A2:B`,
+  });
+
+  const rows = res.data.values || [];
+  let foundRowIdx = -1;
+  let foundCategory = '';
+  let foundName = '';
+
+  for (let i = 0; i < rows.length; i++) {
+    const n = (rows[i][1] || '').trim();
+    if (n.toLowerCase() === cleanName) {
+      foundRowIdx = i + 2;
+      foundCategory = rows[i][0] || '';
+      foundName = n;
+      break;
+    }
+  }
+
+  if (foundRowIdx === -1) {
+    return { success: false, message: `Akun dompet "${name}" tidak ditemukan di daftar.` };
+  }
+
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `'${DOMPET_SHEET_NAME}'!A${foundRowIdx}:C${foundRowIdx}`,
+  });
+
+  cachedWallets = null;
+  return { success: true, message: `${foundCategory} "${foundName}" berhasil dihapus dari daftar dompet.` };
+}
+
+/**
+ * Mengambil ringkasan saldo per dompet (Bank, E-Wallet, Cash) beserta rincian akun
  */
 export async function getWalletBalances(sheetName: string = DEFAULT_BOOK_NAME): Promise<WalletBalances> {
   await ensureHeaderRow(sheetName);
@@ -1241,6 +1451,7 @@ export async function getWalletBalances(sheetName: string = DEFAULT_BOOK_NAME): 
     'E-Wallet': 0,
     Cash: 0,
     total: 0,
+    details: {},
   };
 
   for (const row of rows) {
@@ -1254,16 +1465,43 @@ export async function getWalletBalances(sheetName: string = DEFAULT_BOOK_NAME): 
 
     const isPengeluaran = jenisRaw?.toLowerCase().includes('pengeluaran');
     const isPemasukan = jenisRaw?.toLowerCase().includes('pemasukan');
-    let wallet = dompetRaw ? String(dompetRaw).trim() : (isPemasukan ? 'Bank' : 'Cash');
-    if (!['Bank', 'E-Wallet', 'Cash'].includes(wallet)) {
-      wallet = 'Bank';
+    const rawWallet = dompetRaw ? String(dompetRaw).trim() : '';
+
+    let category: 'Bank' | 'E-Wallet' | 'Cash' = 'Bank';
+    const lower = rawWallet.toLowerCase();
+
+    if (
+      lower.startsWith('e-wallet') ||
+      lower.startsWith('ewallet') ||
+      lower.includes('dana') ||
+      lower.includes('gopay') ||
+      lower.includes('shopee') ||
+      lower.includes('ovo')
+    ) {
+      category = 'E-Wallet';
+    } else if (lower.startsWith('cash') || lower.startsWith('tunai')) {
+      category = 'Cash';
+    } else if (
+      lower.startsWith('bank') ||
+      lower.includes('bca') ||
+      lower.includes('mandiri') ||
+      lower.includes('bri') ||
+      lower.includes('bni') ||
+      lower.includes('jago') ||
+      lower.includes('seabank')
+    ) {
+      category = 'Bank';
+    } else if (rawWallet === 'Belum Dipilih' || !rawWallet) {
+      category = isPemasukan ? 'Bank' : 'Cash';
+    } else {
+      category = 'Bank';
     }
 
-    const key = wallet as 'Bank' | 'E-Wallet' | 'Cash';
-    if (isPemasukan) {
-      balances[key] += nominal;
-    } else if (isPengeluaran) {
-      balances[key] -= nominal;
+    const delta = isPemasukan ? nominal : isPengeluaran ? -nominal : 0;
+    balances[category] += delta;
+
+    if (rawWallet && rawWallet !== 'Belum Dipilih') {
+      balances.details![rawWallet] = (balances.details![rawWallet] || 0) + delta;
     }
   }
 

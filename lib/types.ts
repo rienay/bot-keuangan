@@ -7,6 +7,12 @@ export interface WalletBalances {
   'E-Wallet': number;
   Cash: number;
   total: number;
+  details?: Record<string, number>;
+}
+
+export interface RegisteredWallets {
+  banks: string[];
+  ewallets: string[];
 }
 
 export interface TransferWalletParams {

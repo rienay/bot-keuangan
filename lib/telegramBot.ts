@@ -21,6 +21,9 @@ import {
   updateTransactionWallet,
   transferWalletMoney,
   getWalletBalances,
+  getRegisteredWallets,
+  addRegisteredWallet,
+  removeRegisteredWallet,
   setBookBudget,
   getBookBudget,
   getBudgetInfo,
@@ -79,14 +82,21 @@ const transferStates = new Map<number, TransferState>();
 // ============================================================
 // STATE MACHINE: Percakapan multi-step untuk /pindahuang antar dompet
 // ============================================================
-type WalletChoice = 'Bank' | 'E-Wallet' | 'Cash';
 interface WalletTransferState {
   step: 'select_from' | 'select_to' | 'input_amount';
-  fromWallet?: WalletChoice;
-  toWallet?: WalletChoice;
+  fromWallet?: string;
+  toWallet?: string;
   sourceBalance?: number;
 }
 const walletTransferStates = new Map<number, WalletTransferState>();
+
+// State untuk input nama bank/ewallet baru
+interface WalletInputState {
+  category: 'Bank' | 'E-Wallet';
+  bookName?: string;
+  rowNumber?: number;
+}
+const walletInputStates = new Map<number, WalletInputState>();
 
 function renderProgressBar(percentage: number): string {
   const clamped = Math.max(0, Math.min(100, percentage));
@@ -96,23 +106,53 @@ function renderProgressBar(percentage: number): string {
 }
 
 function getWalletEmoji(wallet?: string): string {
-  switch (wallet) {
-    case 'Bank':
-      return '🏦';
-    case 'E-Wallet':
-      return '📱';
-    case 'Cash':
-      return '💵';
-    default:
-      return '💳';
+  if (!wallet) return '💳';
+  const lower = wallet.toLowerCase();
+  if (lower.startsWith('cash') || lower.startsWith('tunai')) return '💵';
+  if (
+    lower.startsWith('e-wallet') ||
+    lower.startsWith('ewallet') ||
+    lower.includes('dana') ||
+    lower.includes('gopay') ||
+    lower.includes('shopee') ||
+    lower.includes('ovo')
+  ) {
+    return '📱';
   }
+  if (
+    lower.startsWith('bank') ||
+    lower.includes('bca') ||
+    lower.includes('mandiri') ||
+    lower.includes('bri') ||
+    lower.includes('bni') ||
+    lower.includes('jago') ||
+    lower.includes('seabank')
+  ) {
+    return '🏦';
+  }
+  return '💳';
+}
+
+function buildWalletCategoryKeyboard(bookName: string, rowNumber: number, currentWallet?: string) {
+  const isCash = currentWallet === 'Cash';
+  const isBank = currentWallet?.startsWith('Bank');
+  const isEwallet = currentWallet?.startsWith('E-Wallet');
+
+  const kb = new InlineKeyboard();
+  kb.text(
+    isBank ? `✅ 🏦 Bank (${currentWallet?.replace(/^Bank - /, '')})` : '🏦 Bank',
+    `w_cat:${bookName}:${rowNumber}:Bank`
+  )
+    .text(
+      isEwallet ? `✅ 📱 E-Wallet (${currentWallet?.replace(/^E-Wallet - /, '')})` : '📱 E-Wallet',
+      `w_cat:${bookName}:${rowNumber}:E-Wallet`
+    )
+    .text(isCash ? '✅ 💵 Cash' : '💵 Cash', `w_acc:${bookName}:${rowNumber}:Cash:Cash`);
+  return kb;
 }
 
 function buildWalletKeyboard(bookName: string, rowNumber: number, selectedWallet?: string) {
-  return new InlineKeyboard()
-    .text(selectedWallet === 'Bank' ? '✅ 🏦 Bank' : '🏦 Bank', `set_wallet:${bookName}:${rowNumber}:Bank`)
-    .text(selectedWallet === 'E-Wallet' ? '✅ 📱 E-Wallet' : '📱 E-Wallet', `set_wallet:${bookName}:${rowNumber}:E-Wallet`)
-    .text(selectedWallet === 'Cash' ? '✅ 💵 Cash' : '💵 Cash', `set_wallet:${bookName}:${rowNumber}:Cash`);
+  return buildWalletCategoryKeyboard(bookName, rowNumber, selectedWallet);
 }
 
 
@@ -327,6 +367,12 @@ bot.command(['start', 'help'], async (ctx) => {
       `• /buku — Daftar & tombol pilih tabungan\n\n` +
       `🌸 *Website Dashboard Keuangan:*\n` +
       `• /linkuang — *Buka Link Web Keuangan* (grafik visual & transparan)\n\n` +
+      `💳 *Dompet & Anggaran:*\n` +
+      `• /dompet — Cek saldo rekening Bank, E-Wallet, dan Cash\n` +
+      `• /tambahbank <Nama> — Tambah bank baru (misal: BCA, Mandiri, Seabank)\n` +
+      `• /tambahewalet <Nama> — Tambah e-wallet baru (misal: Dana, GoPay, ShopeePay)\n` +
+      `• /pindahuang — Pindah uang antar akun/dompet\n` +
+      `• /budget <Nominal> — Atur batas pengeluaran bulanan\n\n` +
       adminMenuText +
       `📚 *Pos Tabungan Tersedia:*\n` +
       `${booksListText}\n` +
@@ -1176,31 +1222,66 @@ bot.callbackQuery('ps_exec', async (ctx) => {
 // FITUR DOMPET & PINDAH UANG (Bank, E-Wallet, Cash)
 // ============================================================
 
+// Helper untuk menyusun tampilan status saldo dompet
+async function buildDompetStatusMessage(activeBook: string) {
+  const balances = await getWalletBalances(activeBook);
+  const registered = await getRegisteredWallets();
+
+  let bankLines = '';
+  for (const b of registered.banks) {
+    const key = `Bank - ${b}`;
+    const bal = balances.details?.[key] || 0;
+    bankLines += `  • 🏛️ ${b}: ${formatRupiah(bal)}\n`;
+  }
+  if (balances.details?.['Bank']) {
+    bankLines += `  • 🏛️ Bank Umum/Lainnya: ${formatRupiah(balances.details['Bank'])}\n`;
+  }
+
+  let ewalletLines = '';
+  for (const ew of registered.ewallets) {
+    const key = `E-Wallet - ${ew}`;
+    const bal = balances.details?.[key] || 0;
+    ewalletLines += `  • 📱 ${ew}: ${formatRupiah(bal)}\n`;
+  }
+  if (balances.details?.['E-Wallet']) {
+    ewalletLines += `  • 📱 E-Wallet Umum: ${formatRupiah(balances.details['E-Wallet'])}\n`;
+  }
+
+  const text =
+    `💳 *Status Saldo Dompet [${activeBook}]*\n\n` +
+    `🏦 *Total Bank:* *${formatRupiah(balances.Bank)}*\n` +
+    bankLines +
+    `\n📱 *Total E-Wallet:* *${formatRupiah(balances['E-Wallet'])}*\n` +
+    ewalletLines +
+    `\n💵 *Total Cash:* *${formatRupiah(balances.Cash)}*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `💰 *Total Saldo Keseluruhan:* *${formatRupiah(balances.total)}*\n\n` +
+    `⚙️ *Kelola Akun Dompet:*\n` +
+    `• /tambahbank <Nama> — Tambah bank baru (misal: \`/tambahbank Seabank\`)\n` +
+    `• /tambahewalet <Nama> — Tambah e-wallet baru (misal: \`/tambahewalet OVO\`)\n` +
+    `• /hapusdompet <Nama> — Hapus akun dari daftar\n` +
+    `• /pindahuang — Pindah uang antar akun/dompet`;
+
+  const keyboard = new InlineKeyboard()
+    .text('➕ Tambah Bank', 'w_add_direct:Bank')
+    .text('➕ Tambah E-Wallet', 'w_add_direct:E-Wallet')
+    .row()
+    .text('💸 Pindah Uang', 'cmd_pindahuang')
+    .text('🔄 Refresh Saldo', 'refresh_dompet');
+
+  return { text, keyboard };
+}
+
 // Command: /dompet /saldo
 bot.command(['dompet', 'saldo', 'saldodompet'], async (ctx) => {
   const chatId = ctx.chat.id;
   const activeBook = await getUserActiveBook(chatId);
-  const balances = await getWalletBalances(activeBook);
+  const { text, keyboard } = await buildDompetStatusMessage(activeBook);
 
-  const keyboard = new InlineKeyboard()
-    .text('💸 Pindah Uang', 'cmd_pindahuang')
-    .text('🔄 Refresh Saldo', 'refresh_dompet');
-
-  await ctx.reply(
-    `💳 *Status Saldo Dompet [${activeBook}]*\n\n` +
-      `🏦 *Bank:* ${formatRupiah(balances.Bank)}\n` +
-      `📱 *E-Wallet:* ${formatRupiah(balances['E-Wallet'])}\n` +
-      `💵 *Cash:* ${formatRupiah(balances.Cash)}\n` +
-      `━━━━━━━━━━━━━━━━━━━━━\n` +
-      `💰 *Total Saldo:* *${formatRupiah(balances.total)}*\n\n` +
-      `💡 *Panduan Pindah Uang:*\n` +
-      `• Klik tombol *💸 Pindah Uang* di bawah, atau ketik /pindahuang\n` +
-      `• Bisa juga ketik langsung: \`tarik tunai 100rb\`, \`setor tunai 200rb\`, \`top up dana 50rb\``,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard,
-    }
-  );
+  await ctx.reply(text, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
 });
 
 // Callback refresh dompet
@@ -1208,30 +1289,67 @@ bot.callbackQuery('refresh_dompet', async (ctx) => {
   const chatId = ctx.chat?.id;
   if (!chatId) return;
   const activeBook = await getUserActiveBook(chatId);
-  const balances = await getWalletBalances(activeBook);
-
-  const keyboard = new InlineKeyboard()
-    .text('💸 Pindah Uang', 'cmd_pindahuang')
-    .text('🔄 Refresh Saldo', 'refresh_dompet');
+  const { text, keyboard } = await buildDompetStatusMessage(activeBook);
 
   await ctx.answerCallbackQuery({ text: 'Saldo dompet diperbarui!' });
   try {
-    await ctx.editMessageText(
-      `💳 *Status Saldo Dompet [${activeBook}]*\n\n` +
-        `🏦 *Bank:* ${formatRupiah(balances.Bank)}\n` +
-        `📱 *E-Wallet:* ${formatRupiah(balances['E-Wallet'])}\n` +
-        `💵 *Cash:* ${formatRupiah(balances.Cash)}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━\n` +
-        `💰 *Total Saldo:* *${formatRupiah(balances.total)}*\n\n` +
-        `💡 *Panduan Pindah Uang:*\n` +
-        `• Klik tombol *💸 Pindah Uang* di bawah, atau ketik /pindahuang\n` +
-        `• Bisa juga ketik langsung: \`tarik tunai 100rb\`, \`setor tunai 200rb\`, \`top up dana 50rb\``,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard,
-      }
-    );
+    await ctx.editMessageText(text, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
   } catch {}
+});
+
+// Command: /tambahbank <Nama>
+bot.command(['tambahbank', 'addbank'], async (ctx) => {
+  const name = ctx.match?.trim();
+  if (!name) {
+    walletInputStates.set(ctx.chat.id, { category: 'Bank' });
+    await ctx.reply(
+      `🏛️ *Tambah Rekening Bank*\n\n` +
+        `Silakan ketik nama Bank yang ingin kamu daftarkan:\n` +
+        `_(contoh: \`BCA\`, \`Mandiri\`, \`BRI\`, \`Seabank\`, \`Jago\`)_\n\n` +
+        `Atau ketik *batal* untuk membatalkan.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+  const res = await addRegisteredWallet('Bank', name);
+  await ctx.reply(res.success ? `✅ ${res.message}` : `⚠️ ${res.message}`);
+});
+
+// Command: /tambahewalet <Nama>
+bot.command(['tambahewalet', 'addewalet', 'tambahdompet'], async (ctx) => {
+  const name = ctx.match?.trim();
+  if (!name) {
+    walletInputStates.set(ctx.chat.id, { category: 'E-Wallet' });
+    await ctx.reply(
+      `📱 *Tambah Akun E-Wallet*\n\n` +
+        `Silakan ketik nama E-Wallet yang ingin kamu daftarkan:\n` +
+        `_(contoh: \`Dana\`, \`GoPay\`, \`ShopeePay\`, \`OVO\`)_\n\n` +
+        `Atau ketik *batal* untuk membatalkan.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+  const res = await addRegisteredWallet('E-Wallet', name);
+  await ctx.reply(res.success ? `✅ ${res.message}` : `⚠️ ${res.message}`);
+});
+
+// Command: /hapusdompet <Nama>
+bot.command(['hapusdompet', 'deletedompet'], async (ctx) => {
+  const name = ctx.match?.trim();
+  if (!name) {
+    await ctx.reply(
+      `🗑️ *Hapus Akun Dompet*\n\n` +
+        `Gunakan: \`/hapusdompet <Nama Akun>\`\n` +
+        `_(contoh: \`/hapusdompet Seabank\` atau \`/hapusdompet OVO\`)_`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+  const res = await removeRegisteredWallet(name);
+  await ctx.reply(res.success ? `✅ ${res.message}` : `⚠️ ${res.message}`);
 });
 
 // Helper memulai pemilihan dompet asal untuk transfer
@@ -1240,22 +1358,28 @@ async function startPindahUang(ctx: any) {
   if (!chatId) return;
   const activeBook = await getUserActiveBook(chatId);
   const balances = await getWalletBalances(activeBook);
+  const registered = await getRegisteredWallets();
 
   walletTransferStates.set(chatId, { step: 'select_from' });
 
-  const keyboard = new InlineKeyboard()
-    .text(`🏦 Bank (${formatRupiah(balances.Bank)})`, 'w_from:Bank')
-    .row()
-    .text(`📱 E-Wallet (${formatRupiah(balances['E-Wallet'])})`, 'w_from:E-Wallet')
-    .row()
-    .text(`💵 Cash (${formatRupiah(balances.Cash)})`, 'w_from:Cash')
-    .row()
-    .text('❌ Batal', 'w_cancel');
+  const keyboard = new InlineKeyboard();
+  for (const b of registered.banks) {
+    const key = `Bank - ${b}`;
+    const bal = balances.details?.[key] || 0;
+    keyboard.text(`🏛️ ${b} (${formatRupiah(bal)})`, `w_from:${key}`).row();
+  }
+  for (const ew of registered.ewallets) {
+    const key = `E-Wallet - ${ew}`;
+    const bal = balances.details?.[key] || 0;
+    keyboard.text(`📱 ${ew} (${formatRupiah(bal)})`, `w_from:${key}`).row();
+  }
+  keyboard.text(`💵 Cash (${formatRupiah(balances.Cash)})`, 'w_from:Cash').row();
+  keyboard.text('❌ Batal', 'w_cancel');
 
   const text =
     `💸 *Pindah Uang Antar Dompet*\n\n` +
     `📖 *Buku:* \`${activeBook}\`\n\n` +
-    `Pilih *dompet asal* (sumber uang yang ingin dipindahkan):`;
+    `Pilih *dompet asal* (sumber dana yang ingin dipindahkan):`;
 
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery();
@@ -1275,14 +1399,15 @@ bot.callbackQuery('cmd_pindahuang', async (ctx) => {
 });
 
 // Callback: Memilih dompet asal
-bot.callbackQuery(/^w_from:(Bank|E-Wallet|Cash)$/, async (ctx) => {
-  const fromWallet = ctx.match[1] as WalletChoice;
+bot.callbackQuery(/^w_from:(.+)$/, async (ctx) => {
+  const fromWallet = ctx.match[1];
   const chatId = ctx.chat?.id;
   if (!chatId) return;
 
   const activeBook = await getUserActiveBook(chatId);
   const balances = await getWalletBalances(activeBook);
-  const fromBalance = balances[fromWallet] || 0;
+  const registered = await getRegisteredWallets();
+  const fromBalance = balances.details?.[fromWallet] ?? (fromWallet === 'Cash' ? balances.Cash : 0);
 
   walletTransferStates.set(chatId, {
     step: 'select_to',
@@ -1293,10 +1418,17 @@ bot.callbackQuery(/^w_from:(Bank|E-Wallet|Cash)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
 
   const keyboard = new InlineKeyboard();
-  const allWallets: WalletChoice[] = ['Bank', 'E-Wallet', 'Cash'];
-  for (const w of allWallets) {
-    if (w !== fromWallet) {
-      keyboard.text(`${getWalletEmoji(w)} ${w} (${formatRupiah(balances[w] || 0)})`, `w_to:${fromWallet}:${w}`).row();
+  const allAccounts: string[] = [
+    ...registered.banks.map((b) => `Bank - ${b}`),
+    ...registered.ewallets.map((ew) => `E-Wallet - ${ew}`),
+    'Cash',
+  ];
+
+  for (const acc of allAccounts) {
+    if (acc !== fromWallet) {
+      const bal = balances.details?.[acc] ?? (acc === 'Cash' ? balances.Cash : 0);
+      const label = acc.replace(/^(Bank|E-Wallet) - /, '');
+      keyboard.text(`${getWalletEmoji(acc)} ${label} (${formatRupiah(bal)})`, `w_to:${fromWallet}:${acc}`).row();
     }
   }
   keyboard.text('❌ Batal', 'w_cancel');
@@ -1313,15 +1445,15 @@ bot.callbackQuery(/^w_from:(Bank|E-Wallet|Cash)$/, async (ctx) => {
 });
 
 // Callback: Memilih dompet tujuan
-bot.callbackQuery(/^w_to:(Bank|E-Wallet|Cash):(Bank|E-Wallet|Cash)$/, async (ctx) => {
-  const fromWallet = ctx.match[1] as WalletChoice;
-  const toWallet = ctx.match[2] as WalletChoice;
+bot.callbackQuery(/^w_to:(.+):(.+)$/, async (ctx) => {
+  const fromWallet = ctx.match[1];
+  const toWallet = ctx.match[2];
   const chatId = ctx.chat?.id;
   if (!chatId) return;
 
   const activeBook = await getUserActiveBook(chatId);
   const balances = await getWalletBalances(activeBook);
-  const fromBalance = balances[fromWallet] || 0;
+  const fromBalance = balances.details?.[fromWallet] ?? (fromWallet === 'Cash' ? balances.Cash : 0);
 
   walletTransferStates.set(chatId, {
     step: 'input_amount',
@@ -1353,62 +1485,144 @@ bot.callbackQuery('w_cancel', async (ctx) => {
   } catch {}
 });
 
-// Callback: Mengubah / memilih dompet untuk transaksi tertentu (set_wallet)
-bot.callbackQuery(/^set_wallet:(.+):(\d+):(.+)$/, async (ctx) => {
-  const targetBook = ctx.match[1];
+// Callback: Pilih Kategori Dompet (Bank / E-Wallet) pada transaksi
+bot.callbackQuery(/^w_cat:(.+):(\d+):(Bank|E-Wallet)$/, async (ctx) => {
+  const bookName = ctx.match[1];
   const rowNumber = parseInt(ctx.match[2], 10);
-  const wallet = ctx.match[3] as WalletChoice;
+  const category = ctx.match[3] as 'Bank' | 'E-Wallet';
+
+  const registered = await getRegisteredWallets();
+  const accounts = category === 'Bank' ? registered.banks : registered.ewallets;
+  const icon = category === 'Bank' ? '🏛️' : '📱';
+
+  const kb = new InlineKeyboard();
+  for (let i = 0; i < accounts.length; i += 2) {
+    kb.text(`${icon} ${accounts[i]}`, `w_acc:${bookName}:${rowNumber}:${category}:${accounts[i]}`);
+    if (i + 1 < accounts.length) {
+      kb.text(`${icon} ${accounts[i + 1]}`, `w_acc:${bookName}:${rowNumber}:${category}:${accounts[i + 1]}`);
+    }
+    kb.row();
+  }
+
+  kb.text(`➕ Tambah ${category}`, `w_add:${bookName}:${rowNumber}:${category}`)
+    .text('⬅️ Kembali', `w_back:${bookName}:${rowNumber}`);
+
+  await ctx.answerCallbackQuery();
+  try {
+    await ctx.editMessageReplyMarkup({ reply_markup: kb });
+  } catch {}
+});
+
+// Callback: Kembali ke Kategori Dompet (Bank, E-Wallet, Cash)
+bot.callbackQuery(/^w_back:(.+):(\d+)$/, async (ctx) => {
+  const bookName = ctx.match[1];
+  const rowNumber = parseInt(ctx.match[2], 10);
+
+  const kb = buildWalletCategoryKeyboard(bookName, rowNumber);
+  await ctx.answerCallbackQuery();
+  try {
+    await ctx.editMessageReplyMarkup({ reply_markup: kb });
+  } catch {}
+});
+
+// Callback: Memilih Akun Dompet Tertentu untuk transaksi (w_acc)
+bot.callbackQuery(/^w_acc:(.+):(\d+):(Bank|E-Wallet|Cash):(.+)$/, async (ctx) => {
+  const bookName = ctx.match[1];
+  const rowNumber = parseInt(ctx.match[2], 10);
+  const category = ctx.match[3];
+  const account = ctx.match[4];
+
+  const walletStr = category === 'Cash' ? 'Cash' : `${category} - ${account}`;
+  const emoji = getWalletEmoji(walletStr);
 
   try {
-    await updateTransactionWallet(targetBook, rowNumber, wallet);
-    const emoji = getWalletEmoji(wallet);
-    await ctx.answerCallbackQuery({
-      text: `✅ Tersimpan ke ${emoji} ${wallet}`,
-    });
-
-    // Rebuild keyboard with checkmark
-    const currentKeyboard = ctx.callbackQuery.message?.reply_markup?.inline_keyboard;
-    const keyboard = new InlineKeyboard()
-      .text(wallet === 'Bank' ? '✅ 🏦 Bank' : '🏦 Bank', `set_wallet:${targetBook}:${rowNumber}:Bank`)
-      .text(wallet === 'E-Wallet' ? '✅ 📱 E-Wallet' : '📱 E-Wallet', `set_wallet:${targetBook}:${rowNumber}:E-Wallet`)
-      .text(wallet === 'Cash' ? '✅ 💵 Cash' : '💵 Cash', `set_wallet:${targetBook}:${rowNumber}:Cash`);
-
-    if (currentKeyboard && currentKeyboard.length > 1) {
-      keyboard.row();
-      for (const btn of currentKeyboard[1]) {
-        if ('url' in btn) {
-          keyboard.url(btn.text, btn.url);
-        } else if ('callback_data' in btn) {
-          keyboard.text(btn.text, btn.callback_data);
-        }
-      }
-    }
+    await updateTransactionWallet(bookName, rowNumber, walletStr);
+    await ctx.answerCallbackQuery({ text: `✅ Disimpan ke ${emoji} ${walletStr}` });
 
     const currentText = ctx.callbackQuery.message?.text || '';
     let updatedText = currentText;
-    if (currentText.includes('💳 Saldo Berasal / Masuk Ke:')) {
-      updatedText = currentText.replace(
-        /💳\s*Saldo Berasal \/ Masuk Ke:\s*.*$/m,
-        `💳 *Saldo Berasal / Masuk Ke:* ${emoji} *${wallet}*`
+
+    if (
+      updatedText.includes('❓ Saldo berasal') ||
+      updatedText.includes('❓ Dibayar menggunakan')
+    ) {
+      updatedText = updatedText.replace(
+        /❓\s*(?:Saldo berasal \/ masuk ke dompet mana\?|Dibayar menggunakan dompet mana\?)\s*\n?_?Silakan pilih dompet di bawah:_?/i,
+        `💳 *Dompet:* ${emoji} *${walletStr}*`
       );
-    } else if (currentText.includes('💳 Dibayar Dari:')) {
-      updatedText = currentText.replace(
-        /💳\s*Dibayar Dari:\s*.*$/m,
-        `💳 *Dibayar Dari:* ${emoji} *${wallet}*`
+    } else if (updatedText.includes('💳 Dompet:')) {
+      updatedText = updatedText.replace(
+        /💳\s*\*Dompet:\*\s*[^\n]+/i,
+        `💳 *Dompet:* ${emoji} *${walletStr}*`
       );
-    } else if (currentText.includes('💳 Dompet:')) {
-      updatedText = currentText.replace(
-        /💳\s*Dompet:\s*.*$/m,
-        `💳 *Dompet:* ${emoji} *${wallet}*`
-      );
+    } else {
+      updatedText += `\n\n💳 *Dompet:* ${emoji} *${walletStr}*`;
     }
+
+    const kb = new InlineKeyboard().text(`🔄 Ganti Dompet (${walletStr})`, `w_back:${bookName}:${rowNumber}`);
 
     await ctx.editMessageText(updatedText, {
       parse_mode: 'Markdown',
-      reply_markup: keyboard,
+      reply_markup: kb,
     });
   } catch (err: any) {
     console.error('Error updating wallet:', err);
+    await ctx.answerCallbackQuery({ text: 'Gagal mengubah dompet', show_alert: true });
+  }
+});
+
+// Callback: Tambah akun baru untuk transaksi tertentu
+bot.callbackQuery(/^w_add:(.+):(\d+):(Bank|E-Wallet)$/, async (ctx) => {
+  const bookName = ctx.match[1];
+  const rowNumber = parseInt(ctx.match[2], 10);
+  const category = ctx.match[3] as 'Bank' | 'E-Wallet';
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  walletInputStates.set(chatId, {
+    category,
+    bookName,
+    rowNumber,
+  });
+
+  await ctx.answerCallbackQuery();
+  const example = category === 'Bank' ? '`BCA`, `Mandiri`, `BRI`, `Seabank`, `Jago`' : '`Dana`, `GoPay`, `ShopeePay`, `OVO`';
+  await ctx.reply(
+    `${category === 'Bank' ? '🏛️' : '📱'} *Tambah ${category} Baru*\n\n` +
+      `Silakan ketik nama ${category} yang ingin kamu daftarkan:\n` +
+      `_(contoh: ${example})_\n\n` +
+      `Atau ketik *batal* untuk membatalkan.`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// Callback: Tambah akun baru langsung dari menu /dompet
+bot.callbackQuery(/^w_add_direct:(Bank|E-Wallet)$/, async (ctx) => {
+  const category = ctx.match[1] as 'Bank' | 'E-Wallet';
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  walletInputStates.set(chatId, { category });
+  await ctx.answerCallbackQuery();
+  const example = category === 'Bank' ? '`BCA`, `Mandiri`, `BRI`, `Seabank`, `Jago`' : '`Dana`, `GoPay`, `ShopeePay`, `OVO`';
+  await ctx.reply(
+    `${category === 'Bank' ? '🏛️' : '📱'} *Tambah ${category} Baru*\n\n` +
+      `Silakan ketik nama ${category} yang ingin kamu daftarkan:\n` +
+      `_(contoh: ${example})_\n\n` +
+      `Atau ketik *batal* untuk membatalkan.`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// Fallback legacy callback set_wallet
+bot.callbackQuery(/^set_wallet:(.+):(\d+):(.+)$/, async (ctx) => {
+  const targetBook = ctx.match[1];
+  const rowNumber = parseInt(ctx.match[2], 10);
+  const wallet = ctx.match[3];
+  try {
+    await updateTransactionWallet(targetBook, rowNumber, wallet);
+    await ctx.answerCallbackQuery({ text: `✅ Disimpan ke ${wallet}` });
+  } catch (err: any) {
     await ctx.answerCallbackQuery({ text: 'Gagal mengubah dompet', show_alert: true });
   }
 });
@@ -2380,6 +2594,108 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
+    // === 1b. Cek apakah pengguna sedang dalam proses input nama Bank / E-Wallet baru ===
+  const wInput = walletInputStates.get(chatId);
+  if (wInput) {
+    if (text.toLowerCase() === 'batal' || text === '/batal') {
+      walletInputStates.delete(chatId);
+      await ctx.reply('❌ Penambahan akun dompet dibatalkan.');
+      return;
+    }
+
+    const addRes = await addRegisteredWallet(wInput.category, text);
+    walletInputStates.delete(chatId);
+
+    if (!addRes.success) {
+      await ctx.reply(`⚠️ ${addRes.message}`);
+      return;
+    }
+
+    const walletStr = `${wInput.category} - ${text.trim()}`;
+    if (wInput.bookName && wInput.rowNumber) {
+      try {
+        await updateTransactionWallet(wInput.bookName, wInput.rowNumber, walletStr);
+      } catch (err) {
+        console.error('Failed to link wallet:', err);
+      }
+    }
+
+    await ctx.reply(
+      `🎉 *${wInput.category} Berhasil Didaftarkan!*\n\n` +
+        `✨ *Nama:* \`${text.trim()}\`\n` +
+        `📂 *Tersimpan sebagai:* \`${walletStr}\`\n\n` +
+        (wInput.rowNumber
+          ? '✅ Transaksi kamu telah otomatis dihubungkan ke dompet ini!'
+          : 'Akun ini kini sudah muncul di pilihan dompet saat mencatat transaksi dan pemindahan uang.'),
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // === 1c. Cek apakah pengguna sedang dalam proses input nominal /pindahuang antar dompet ===
+  const wtState = walletTransferStates.get(chatId);
+  if (wtState && wtState.step === 'input_amount') {
+    if (text.toLowerCase() === 'batal' || text === '/batal') {
+      walletTransferStates.delete(chatId);
+      await ctx.reply('❌ Pemindahan uang antar dompet dibatalkan.');
+      return;
+    }
+
+    const nominal = parseNominalInput(text);
+    if (!nominal || nominal <= 0) {
+      await ctx.reply(
+        '⚠️ Format nominal tidak valid.\n' +
+          'Silakan masukkan angka nominal (contoh: `100000`, `50rb`, atau `1.5jt`), atau ketik *batal*:',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    if (wtState.sourceBalance !== undefined && nominal > wtState.sourceBalance) {
+      await ctx.reply(
+        `⚠️ Nominal melebihi saldo di dompet ${wtState.fromWallet}!\n` +
+          `Saldo saat ini hanya *${formatRupiah(wtState.sourceBalance)}*.\n` +
+          'Silakan masukkan nominal yang mencukupi, atau ketik *batal*:',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    const senderName = ctx.from?.first_name || 'Pengguna';
+    const activeBook = await getUserActiveBook(chatId);
+    walletTransferStates.delete(chatId);
+
+    await ctx.replyWithChatAction('typing');
+    try {
+      const res = await transferWalletMoney({
+        bookName: activeBook,
+        fromWallet: wtState.fromWallet!,
+        toWallet: wtState.toWallet!,
+        amount: nominal,
+        senderName,
+      });
+
+      await ctx.reply(
+        `✅ *Pemindahan Uang Berhasil!*\n\n` +
+          `📖 *Buku:* \`${activeBook}\`\n` +
+          `📤 *Dari:* ${getWalletEmoji(res.fromWallet)} *${res.fromWallet}*\n` +
+          `📥 *Ke:* ${getWalletEmoji(res.toWallet)} *${res.toWallet}*\n` +
+          `💰 *Nominal:* *${formatRupiah(res.amount)}*\n\n` +
+          '━━━━━━━━━━━━━━━━━━━━━\n' +
+          `📊 *Sisa Saldo Dompet [${activeBook}]:*\n` +
+          `🏦 *Bank:* ${formatRupiah(res.balances.Bank)}\n` +
+          `📱 *E-Wallet:* ${formatRupiah(res.balances['E-Wallet'])}\n` +
+          `💵 *Cash:* ${formatRupiah(res.balances.Cash)}\n` +
+          `💰 *Total:* ${formatRupiah(res.balances.total)}`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (err: any) {
+      console.error('Error transfer wallet money:', err);
+      await ctx.reply(`❌ Gagal memindahkan uang: ${err.message}`);
+    }
+    return;
+  }
+
   // === 3. Cek apakah pengguna sedang dalam proses input nominal /pindahsaldo ===
   const tState = transferStates.get(chatId);
   if (tState && tState.step === 'input_amount') {
@@ -2500,6 +2816,22 @@ bot.on('message:text', async (ctx) => {
       'linkweb',
       'dashboard',
       'website',
+      'budget',
+      'anggaran',
+      'dompet',
+      'saldo',
+      'saldodompet',
+      'pindahuang',
+      'transferuang',
+      'tariktunai',
+      'setortunai',
+      'tambahbank',
+      'addbank',
+      'tambahewalet',
+      'addewalet',
+      'tambahdompet',
+      'hapusdompet',
+      'deletedompet',
     ];
 
     if (!standardCmds.includes(rawCmd)) {
@@ -2560,20 +2892,43 @@ bot.on('message:text', async (ctx) => {
       parsed.description = `${parsed.description} ${picTag}`;
     }
 
-    // Simpan ke sheet buku yang sedang aktif
-    await appendTransaction(parsed, activeBook);
+        // Simpan ke sheet buku yang sedang aktif
+    const rowNumber = await appendTransaction(parsed, activeBook);
 
     const emoji = parsed.type === 'Pemasukan' ? '🟢' : '🔴';
+    const hasSpecificWallet = parsed.wallet && parsed.wallet !== 'Belum Dipilih';
+    const walletPrompt = hasSpecificWallet
+      ? `💳 *Dompet:* ${getWalletEmoji(parsed.wallet)} *${parsed.wallet}*`
+      : (parsed.type === 'Pemasukan'
+          ? '❓ *Saldo berasal / masuk ke dompet mana?*\n_Silakan pilih dompet di bawah:_'
+          : '❓ *Dibayar menggunakan dompet mana?*\n_Silakan pilih dompet di bawah:_');
+
+    const walletKb = buildWalletCategoryKeyboard(activeBook, rowNumber || 2, hasSpecificWallet ? parsed.wallet : undefined);
+
     await ctx.reply(
       `✅ *Transaksi Berhasil Dicatat!*\n\n` +
-        `📖 *Buku:* \`${activeBook}\`\n` +
+        `📖 *Buku Tabungan:* \`${activeBook}\`\n` +
         `📅 *Tanggal:* ${parsed.date}\n` +
         `${emoji} *Jenis:* ${parsed.type}\n` +
         `📂 *Kategori:* ${parsed.category}\n` +
         `💰 *Nominal:* ${formatRupiah(parsed.amount)}\n` +
-        `📝 *Keterangan:* ${parsed.description}`,
-      { parse_mode: 'Markdown' }
+        `📝 *Keterangan:* ${parsed.description}\n\n` +
+        `${walletPrompt}`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: walletKb,
+      }
     );
+
+    // Cek batas budget bulanan jika pengeluaran
+    if (parsed.type === 'Pengeluaran') {
+      try {
+        const alertRes = await checkBudgetThresholdAlert(activeBook, parsed.amount);
+        if (alertRes?.alertMessage) {
+          await ctx.reply(alertRes.alertMessage, { parse_mode: 'Markdown' });
+        }
+      } catch {}
+    }
 
     // Monitoring realtime: Kirim alert ke Admin jika penginput adalah anggota (bukan Admin sendiri)
     if (!isAdmin) {
@@ -2858,37 +3213,54 @@ bot.on(['message:photo', 'message:document'], async (ctx) => {
       parsed.noteLink = driveLink;
     }
 
-    // Simpan ke Google Sheets (sudah otomatis menyertakan link Drive di kolom F)
+        // Simpan ke Google Sheets (sudah otomatis menyertakan link Drive di kolom F)
     const rowNumber = await appendTransaction(parsed, activeBook);
 
     const emoji = parsed.type === 'Pemasukan' ? '🟢' : '🔴';
     const driveStatusText = driveLink
       ? `📎 *Foto Nota:* [Lihat Foto di Google Drive](${driveLink})`
-      : `⚠️ *Foto Nota:* _Belum tersimpan di Drive (Ketik /unggahfoto untuk melengkapi)_`;
+      : '⚠️ *Foto Nota:* _Belum tersimpan di Drive (Ketik /unggahfoto untuk melengkapi)_';
 
-    const keyboard = new InlineKeyboard();
+    const hasSpecificWallet = parsed.wallet && parsed.wallet !== 'Belum Dipilih';
+    const walletPrompt = hasSpecificWallet
+      ? `💳 *Dompet:* ${getWalletEmoji(parsed.wallet)} *${parsed.wallet}*`
+      : (parsed.type === 'Pemasukan'
+          ? '❓ *Saldo berasal / masuk ke dompet mana?*\n_Silakan pilih dompet di bawah:_'
+          : '❓ *Dibayar menggunakan dompet mana?*\n_Silakan pilih dompet di bawah:_');
+
+    const keyboard = buildWalletCategoryKeyboard(activeBook, rowNumber || 2, hasSpecificWallet ? parsed.wallet : undefined);
     if (driveLink) {
-      keyboard.url('📸 Buka Foto di Drive', driveLink);
+      keyboard.row().url('📸 Buka Foto di Drive', driveLink);
     } else if (rowNumber) {
-      keyboard.text('📤 Unggah Ulang Foto Ini', `reupload_pick:${activeBook}:${rowNumber}`);
+      keyboard.row().text('📤 Unggah Ulang Foto Ini', `reupload_pick:${activeBook}:${rowNumber}`);
     }
 
     await ctx.reply(
       `🧾 *Transaksi Berhasil Dicatat!*\n\n` +
-        `📖 *Buku Kegiatan:* \`${activeBook}\` _(Tersimpan di Tab Sheets: ${activeBook})_\n` +
+        `📖 *Buku Tabungan:* \`${activeBook}\`\n` +
         `📅 *Tanggal:* ${parsed.date}\n` +
         `${emoji} *Jenis:* ${parsed.type}\n` +
         `📂 *Kategori:* ${parsed.category}\n` +
         `💰 *Total Nominal:* ${formatRupiah(parsed.amount)}\n` +
         `📝 *Keterangan:* ${parsed.description}\n\n` +
         `${driveStatusText}\n\n` +
-        `💡 _Tips: Jika ingin mencatat transaksi ke tab lain (seperti tab Liburan atau Ngedate), ketik /buku._`,
+        `${walletPrompt}`,
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard,
         link_preview_options: { is_disabled: true },
       }
     );
+
+    // Cek batas budget bulanan jika pengeluaran
+    if (parsed.type === 'Pengeluaran') {
+      try {
+        const alertRes = await checkBudgetThresholdAlert(activeBook, parsed.amount);
+        if (alertRes?.alertMessage) {
+          await ctx.reply(alertRes.alertMessage, { parse_mode: 'Markdown' });
+        }
+      } catch {}
+    }
 
     // Monitoring realtime: Notifikasi ke Admin jika penginput adalah anggota
     if (!isAdmin) {

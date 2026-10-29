@@ -111,11 +111,11 @@ Aturan Penting:
    - "Pindah Uang": untuk tarik tunai ATM atau top up e-wallet antar dompet sendiri.
    - "Lain-lain": untuk pengeluaran tak terduga lainnya.
 5. Keterangan: Deskripsi singkat dan jelas tentang transaksi tersebut (sertakan nama orang yang berutang/piutang jika ada di pesan).
-6. Dompet (wallet): Deteksi metode atau penyimpanan saldo:
-   - "Bank": jika ada kata transfer, rekening, bank, bca, mandiri, bri, bni, jago, seabank, m-banking, qris.
-   - "E-Wallet": jika ada kata gopay, ovo, dana, shopeepay, linkaja, e-wallet.
-   - "Cash": jika ada kata tunai, cash, uang fisik.
-   - Jika tidak disebut secara eksplisit: "Bank" jika Pemasukan (misal gaji/transfer), atau "Cash" jika belanja kasir warung/makan.
+6. Dompet (wallet): Deteksi metode atau penyimpanan saldo jika disebut eksplisit oleh pengguna:
+   - Jika pengguna menyebut nama bank spesifik (seperti BCA, Mandiri, BRI, BNI, Jago, Seabank, dll), gunakan format: "Bank - <NamaBank>" (contoh: "Bank - BCA", "Bank - Mandiri").
+   - Jika pengguna menyebut nama e-wallet spesifik (seperti DANA, GoPay, OVO, ShopeePay, LinkAja, dll), gunakan format: "E-Wallet - <NamaEwallet>" (contoh: "E-Wallet - Dana", "E-Wallet - GoPay").
+   - Jika pengguna menyebut cash / tunai / uang fisik, gunakan: "Cash".
+   - Jika TIDAK disebut secara spesifik sama sekali: kembalikan wallet: null (jangan menebak, biarkan pengguna memilih langsung lewat tombol bot).
 
 Pesan pengguna: "${text}"
 
@@ -126,7 +126,7 @@ Kembalikan respon JSON persis dengan struktur berikut:
   "category": string,
   "description": string,
   "date": "YYYY-MM-DD",
-  "wallet": "Bank" | "E-Wallet" | "Cash"
+  "wallet": string | null
 }
 
 Jika pesan tersebut bukan catatan keuangan (misal cuma menyapa "halo"), kembalikan JSON: null.`;
@@ -193,9 +193,10 @@ Tugas Analisis:
    - "Gaji": bukti transfer penerimaan gaji atau upah.
    - "Lain-lain": jika tidak ada yang cocok.
 6. DOMPET (wallet):
-   - "Bank": bukti m-banking / transfer bank (BCA, Mandiri, BRI, BNI, Seabank, Jago, dll).
-   - "E-Wallet": bukti pembayaran / transfer GoPay, OVO, DANA, ShopeePay, dll.
-   - "Cash": struk belanja fisik kasir toko/minimarket/tunai.
+   - Jika bukti transfer m-banking terlihat jelas nama banknya (BCA, Mandiri, BRI, BNI, Seabank, Jago, dll): "Bank - <NamaBank>" (contoh: "Bank - BCA").
+   - Jika bukti pembayaran / transfer e-wallet terlihat jelas (GoPay, DANA, OVO, ShopeePay, dll): "E-Wallet - <NamaEwallet>" (contoh: "E-Wallet - Dana").
+   - Jika struk belanja fisik kasir toko/minimarket/tunai: "Cash".
+   - Jika tidak dapat dipastikan atau tidak tertulis: null.
 
 Kembalikan respon JSON persis dengan struktur berikut:
 {
@@ -204,7 +205,7 @@ Kembalikan respon JSON persis dengan struktur berikut:
   "category": string,
   "description": string,
   "date": "YYYY-MM-DD",
-  "wallet": "Bank" | "E-Wallet" | "Cash"
+  "wallet": string | null
 }
 
 Jika gambar sama sekali bukan bukti transfer, bukan struk/nota, dan tidak ada nominal transaksi finansial, kembalikan JSON: null.`;

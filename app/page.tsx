@@ -179,7 +179,18 @@ export default function FinanceDashboardPage() {
       if (selectedCategory !== 'all' && tx.category !== selectedCategory) return false;
 
       // Filter Dompet
-      if (selectedWallet !== 'all' && (tx.wallet || 'Bank') !== selectedWallet) return false;
+      if (selectedWallet !== 'all') {
+        const w = (tx.wallet || 'Bank').toLowerCase();
+        if (selectedWallet === 'Bank') {
+          if (!w.startsWith('bank')) return false;
+        } else if (selectedWallet === 'E-Wallet') {
+          if (!w.startsWith('e-wallet') && !w.startsWith('ewallet') && !w.includes('dana') && !w.includes('gopay') && !w.includes('shopee') && !w.includes('ovo')) return false;
+        } else if (selectedWallet === 'Cash') {
+          if (!w.startsWith('cash') && !w.startsWith('tunai')) return false;
+        } else {
+          if ((tx.wallet || 'Bank') !== selectedWallet) return false;
+        }
+      }
 
       // Filter Bulan & Tahun
       if (selectedYear !== 'all' || selectedMonth !== 'all') {
@@ -450,6 +461,17 @@ export default function FinanceDashboardPage() {
                 <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1E3A8A' }}>
                   {formatRupiah(data.stats.walletBalances.Bank)}
                 </div>
+                {data.stats.walletBalances.details && Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('Bank')) && (
+                  <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                    {Object.entries(data.stats.walletBalances.details)
+                      .filter(([k]) => k.startsWith('Bank'))
+                      .map(([k, val]) => (
+                        <span key={k} style={{ fontSize: '0.68rem', background: '#DBEAFE', color: '#1E40AF', padding: '0.1rem 0.4rem', borderRadius: '6px', fontWeight: 600 }}>
+                          {k.replace(/^Bank - /, '')}: {formatRupiah(val)}
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -486,6 +508,17 @@ export default function FinanceDashboardPage() {
                 <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#5B21B6' }}>
                   {formatRupiah(data.stats.walletBalances['E-Wallet'])}
                 </div>
+                {data.stats.walletBalances.details && Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('E-Wallet')) && (
+                  <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                    {Object.entries(data.stats.walletBalances.details)
+                      .filter(([k]) => k.startsWith('E-Wallet'))
+                      .map(([k, val]) => (
+                        <span key={k} style={{ fontSize: '0.68rem', background: '#EDE9FE', color: '#6D28D9', padding: '0.1rem 0.4rem', borderRadius: '6px', fontWeight: 600 }}>
+                          {k.replace(/^E-Wallet - /, '')}: {formatRupiah(val)}
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1050,9 +1083,16 @@ export default function FinanceDashboardPage() {
                 title="Filter berdasarkan Dompet"
               >
                 <option value="all">💳 Semua Dompet</option>
-                <option value="Bank">🏦 Bank</option>
-                <option value="E-Wallet">📱 E-Wallet</option>
-                <option value="Cash">💵 Cash</option>
+                <option value="Bank">🏦 Semua Bank</option>
+                <option value="E-Wallet">📱 Semua E-Wallet</option>
+                <option value="Cash">💵 Tunai / Cash</option>
+                {Array.from(new Set(data?.transactions?.map((t) => t.wallet).filter(Boolean)))
+                  .filter((w) => !['Bank', 'E-Wallet', 'Cash'].includes(w as string))
+                  .map((w) => (
+                    <option key={w as string} value={w as string}>
+                      {(w as string).toLowerCase().includes('wallet') ? '📱' : (w as string).toLowerCase().includes('cash') ? '💵' : '🏦'} {w as string}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -1192,7 +1232,10 @@ export default function FinanceDashboardPage() {
                                 <span>•</span>
                                 <span className="book-badge">📖 {tx.book}</span>
                                 <span>•</span>
-                                <span>{tx.wallet === 'Cash' ? '💵' : tx.wallet === 'E-Wallet' ? '📱' : '🏦'} {tx.wallet || 'Bank'}</span>
+                                <span>
+                                  {(tx.wallet || '').toLowerCase().includes('cash') ? '💵' : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay') ? '📱' : '🏦'}{' '}
+                                  {tx.wallet || 'Bank'}
+                                </span>
                                 <span>•</span>
                                 <span className="cat-badge">{tx.category}</span>
                                 {tx.pic && (
@@ -1220,27 +1263,27 @@ export default function FinanceDashboardPage() {
                                   fontSize: '0.75rem',
                                   fontWeight: 600,
                                   background:
-                                    tx.wallet === 'Cash'
+                                    (tx.wallet || '').toLowerCase().includes('cash')
                                       ? '#ECFDF5'
-                                      : tx.wallet === 'E-Wallet'
+                                      : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay')
                                       ? '#F5F3FF'
                                       : '#EFF6FF',
                                   color:
-                                    tx.wallet === 'Cash'
+                                    (tx.wallet || '').toLowerCase().includes('cash')
                                       ? '#065F46'
-                                      : tx.wallet === 'E-Wallet'
+                                      : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay')
                                       ? '#5B21B6'
                                       : '#1E3A8A',
                                   border: `1px solid ${
-                                    tx.wallet === 'Cash'
+                                    (tx.wallet || '').toLowerCase().includes('cash')
                                       ? 'rgba(16, 185, 129, 0.25)'
-                                      : tx.wallet === 'E-Wallet'
+                                      : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay')
                                       ? 'rgba(139, 92, 246, 0.25)'
                                       : 'rgba(59, 130, 246, 0.25)'
                                   }`,
                                 }}
                               >
-                                <span>{tx.wallet === 'Cash' ? '💵' : tx.wallet === 'E-Wallet' ? '📱' : '🏦'}</span>
+                                <span>{(tx.wallet || '').toLowerCase().includes('cash') ? '💵' : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay') ? '📱' : '🏦'}</span>
                                 <span>{tx.wallet || 'Bank'}</span>
                               </span>
                             </td>
