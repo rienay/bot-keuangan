@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: '🌸 Dashboard Keuangan DKC - Transparan & Realtime',
-  description: 'Portal akses catatan keuangan terbuka: pantau saldo kas, pemasukan, pengeluaran, dan bukti struk nota kegiatan DKC.',
+  title: '💕 Dashboard Tabungan & Keuangan Kita - Nabung Date',
+  description: 'Portal catatan tabungan dan keuangan berdua: pantau saldo tabungan, pemasukan, pengeluaran, dan bukti struk nota bersama.',
 };
 
 export default function RootLayout({

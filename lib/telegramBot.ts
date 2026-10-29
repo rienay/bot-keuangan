@@ -19,17 +19,6 @@ import {
   findMatchingTransactionRow,
   findMatchingTransactionRowAcrossBooks,
 } from './googleSheets';
-import {
-  getDaftarAnggota,
-  tambahAnggota,
-  ubahStatusAnggota,
-  catatPembayaranKas,
-  cekStatusKasBulan,
-  cekStatusKasAnggota,
-  normalisasiBulan,
-  DAFTAR_BULAN,
-  NOMINAL_IURAN_DEFAULT,
-} from './kasAnggota';
 import { uploadReceiptToDrive, getDriveConfigStatus, testDriveUpload } from './googleDrive';
 import { formatPrivateKey, getGoogleAuth } from './googleAuth';
 import { generateNotaPdf, HARGA_PER_KG, rupiahFormat } from './generateNota';
@@ -127,28 +116,25 @@ async function syncBotCommands(api: any) {
     const books = await getAllSheetBooks();
     const baseCommands = [
       { command: 'start', description: 'Panduan & menu utama' },
-      { command: 'buat', description: 'Buat catatan/buku kegiatan baru' },
-      { command: 'pindahsaldo', description: 'Pindah saldo antar buku/kegiatan' },
-      { command: 'rekap', description: 'Rekap buku kegiatan aktif' },
-      { command: 'rekapkas', description: 'Rekap seluruh kas & kegiatan' },
-      { command: 'cekfoto', description: 'Cek status unggahan foto nota di Drive' },
+      { command: 'buat', description: 'Buat pos/tabungan baru' },
+      { command: 'pindahsaldo', description: 'Pindah saldo antar tabungan' },
+      { command: 'rekap', description: 'Rekap tabungan yang aktif' },
+      { command: 'rekapkas', description: 'Rekap total seluruh tabungan' },
+      { command: 'cekfoto', description: 'Cek foto nota di Google Drive' },
       { command: 'unggahfoto', description: 'Unggah ulang foto nota transaksi' },
-      { command: 'kas', description: 'Beralih ke buku Kas Utama' },
-      { command: 'buku', description: 'Daftar & ganti buku kegiatan' },
-      { command: 'cekkas', description: 'Cek kas anggota (lunas & belum bayar)' },
-      { command: 'bayarkas', description: 'Catat pembayaran kas anggota' },
-      { command: 'anggota', description: 'Daftar & kelola anggota kas' },
-      { command: 'akses', description: 'Kelola hak akses & anggota bot' },
-      { command: 'invite', description: 'Cara undang anggota baru' },
-      { command: 'linkuang', description: 'Link website keuangan transparan' },
+      { command: 'tabungan', description: 'Beralih ke Tabungan Utama' },
+      { command: 'buku', description: 'Daftar pos tabungan' },
+      { command: 'akses', description: 'Kelola izin akses bot' },
+      { command: 'invite', description: 'Cara undang pasangan ke bot' },
+      { command: 'linkuang', description: 'Link website keuangan kita' },
     ];
 
-    // Tambahkan command untuk buku kegiatan yang valid (hanya huruf, angka, underscore)
+    // Tambahkan command untuk pos tabungan yang valid (hanya huruf, angka, underscore)
     for (const b of books) {
-      if (b.toLowerCase() === 'kas') continue;
+      if (b.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase() || b.toLowerCase() === 'kas') continue;
       const cmd = b.toLowerCase().replace(/[^a-z0-9_]/g, '');
       if (cmd && cmd.length <= 32 && !baseCommands.some((c) => c.command === cmd)) {
-        baseCommands.push({ command: cmd, description: `Beralih ke buku ${b}` });
+        baseCommands.push({ command: cmd, description: `Beralih ke ${b}` });
       }
     }
 
@@ -299,29 +285,25 @@ bot.command(['start', 'help'], async (ctx) => {
     : '';
 
   await ctx.reply(
-    `👋 *Halo! Saya Bot Pencatat Keuangan & Kas Anggota.*\n\n` +
-      `📌 *Buku Aktif Saat Ini:* \`${activeBook}\`\n` +
-      `_(Semua chat transaksi & struk nota akan dicatat ke buku ini)_\n\n` +
-      `⚙️ *Menu Pembukuan & Rekap:*\n` +
-      `• /buat — *Buat Catatan/Buku Baru* (tab baru Sheets)\n` +
-      `• /pindahsaldo — *Pindah Saldo* (sisa kegiatan ke Kas/lainnya)\n` +
-      `• /rekap — *Rekap Buku Aktif* (\`${activeBook}\`)\n` +
-      `• /rekapkas — *Rekap Seluruh Kas* (semua kegiatan + kas)\n` +
-      `• /cekfoto — *Cek Foto Nota* (status nota & link Google Drive)\n` +
-      `• /unggahfoto — *Unggah Ulang Foto* (tambahkan nota ke transaksi lama)\n` +
-      `• /kas — Beralih ke Buku *Kas Utama*\n` +
-      `• /buku — Daftar & tombol ganti buku\n\n` +
-      `👥 *Menu Iuran Kas Anggota:*\n` +
-      `• /cekkas — *Cek Pembayaran Kas* (siapa yang lunas & belum)\n` +
-      `• /bayarkas — *Catat Bayar Kas Anggota* (otomatis masuk ke Kas)\n` +
-      `• /anggota — *Kelola Anggota* (daftar, tambah, nonaktifkan)\n\n` +
+    `👋 *Halo! Saya Bot Pencatat Keuangan & Tabungan Kita 💕*\n\n` +
+      `📌 *Pos / Tabungan Aktif:* \`${activeBook}\`\n` +
+      `_(Semua chat transaksi & struk belanja akan otomatis dicatat ke sini)_\n\n` +
+      `⚙️ *Menu Tabungan & Pengeluaran:*\n` +
+      `• /buat — *Buat Pos Tabungan Baru* (misal: Liburan, Ngedate, Menikah)\n` +
+      `• /pindahsaldo — *Pindah Saldo* antar pos tabungan/dompet\n` +
+      `• /rekap — *Rekap Tabungan Aktif* (\`${activeBook}\`)\n` +
+      `• /rekapkas — *Rekap Total Semua Tabungan*\n` +
+      `• /cekfoto — *Cek Foto Nota* di Google Drive\n` +
+      `• /unggahfoto — *Tautkan Nota ke Transaksi Lama*\n` +
+      `• /tabungan — Beralih ke *Tabungan Utama*\n` +
+      `• /buku — Daftar & tombol pilih tabungan\n\n` +
       `🌸 *Website Dashboard Keuangan:*\n` +
-      `• /linkuang — *Buka Link Web Keuangan* (tampilan pastel & transparan)\n\n` +
+      `• /linkuang — *Buka Link Web Keuangan* (grafik visual & transparan)\n\n` +
       adminMenuText +
-      `📚 *Buku Kegiatan Tersedia:*\n` +
+      `📚 *Pos Tabungan Tersedia:*\n` +
       `${booksListText}\n` +
-      `💡 *Cara Catat Transaksi Cepat:*\n` +
-      `• Kirim teks biasa: \`makan siang 35rb\`, \`beli bensin 50rb\`\n` +
+      `💡 *Cara Catat Cepat:*\n` +
+      `• Kirim teks biasa: \`makan malam 45rb\`, \`nabung 100rb\`\n` +
       `• Kirim foto struk/nota belanja: otomatis dibaca AI!\n\n` +
       `🆔 _ID Telegram Anda: \`${senderId}\`_`,
     {
@@ -331,7 +313,7 @@ bot.command(['start', 'help'], async (ctx) => {
   );
 });
 
-// Command: /buat (Membuat kegiatan / buku baru)
+// Command: /buat (Membuat pos tabungan baru)
 bot.command('buat', async (ctx) => {
   const chatId = ctx.chat.id;
   createBookStates.set(chatId, true);
@@ -339,23 +321,23 @@ bot.command('buat', async (ctx) => {
   transferStates.delete(chatId);
 
   await ctx.reply(
-    `📝 *Buat Catatan / Buku Kegiatan Baru*\n\n` +
-      `Silakan ketik *nama kegiatan* yang ingin dibuat:\n` +
-      `_(contoh: \`jojo\`, \`pwd\`, \`gathering\`, \`renovasi\`)_\n\n` +
-      `💡 Bot akan otomatis membuatkan halaman (sheet) baru di Google Sheets Anda. Penyimpanan struk tetap terpusat di Google Drive.\n\n` +
+    `📝 *Buat Pos / Tabungan Baru*\n\n` +
+      `Silakan ketik *nama pos tabungan* yang ingin dibuat:\n` +
+      `_(contoh: \`Liburan\`, \`Ngedate\`, \`Emergency\`, \`Menikah\`)_\n\n` +
+      `💡 Bot akan otomatis membuatkan halaman (sheet) baru di Google Sheets Anda. Foto struk tetap terpusat di Google Drive.\n\n` +
       `_(Ketik *batal* jika ingin membatalkan)_`,
     { parse_mode: 'Markdown' }
   );
 });
 
-// Command: /kas (Beralih ke buku Kas Utama)
-bot.command('kas', async (ctx) => {
+// Command: /tabungan & /kas (Beralih ke Tabungan Utama)
+bot.command(['tabungan', 'kas'], async (ctx) => {
   const chatId = ctx.chat.id;
   await setUserActiveBook(chatId, DEFAULT_BOOK_NAME);
   await ctx.reply(
-    `📖 *Buku Aktif Diubah:* *Kas Utama*\n\n` +
+    `📖 *Pos Aktif Diubah:* *${DEFAULT_BOOK_NAME} Utama*\n\n` +
       `Semua transaksi dan foto nota selanjutnya akan dicatat ke tab *${DEFAULT_BOOK_NAME}*.\n` +
-      `Ketik /rekap untuk melihat rekap kas ini.`,
+      `Ketik /rekap untuk melihat rekap tabungan ini.`,
     { parse_mode: 'Markdown' }
   );
 });
@@ -1491,297 +1473,6 @@ async function sendRekapKas(ctx: any, queryText: string = '') {
   }
 }
 
-// ============================================================
-// HANDLER KAS ANGGOTA: /cekkas, /bayarkas, /anggota, dll.
-// ============================================================
-
-/**
- * Handler /cekkas
- * Bisa: /cekkas (bulan ini) | /cekkas januari | /cekkas said
- */
-async function handleCekKas(ctx: any, query: string = '') {
-  try {
-    await ctx.replyWithChatAction('typing');
-    const clean = query.trim();
-
-    const currentYear = new Date().getFullYear();
-    const yearMatch = clean.match(/\b(20\d\d)\b/);
-    const tahun = yearMatch ? parseInt(yearMatch[1], 10) : currentYear;
-    const cleanWithoutYear = clean.replace(/\b(20\d\d)\b/g, '').trim();
-
-    // 1. Cek apakah pengguna mencari nama anggota spesifik
-    if (cleanWithoutYear) {
-      const daftarAnggota = await getDaftarAnggota();
-      const matchedAnggota = daftarAnggota.find(
-        (a) =>
-          a.nama.toLowerCase() === cleanWithoutYear.toLowerCase() ||
-          a.nama.toLowerCase().includes(cleanWithoutYear.toLowerCase())
-      );
-
-      // Jika cocok nama anggota dan bukan nama bulan
-      const isBulan = normalisasiBulan(cleanWithoutYear);
-      if (matchedAnggota && !isBulan) {
-        const res = await cekStatusKasAnggota(matchedAnggota.nama, tahun);
-        let msg = `👤 *Kartu Kas Anggota:* *${res.nama}*\n`;
-        msg += `💼 *Jabatan:* ${res.jabatan}\n`;
-        msg += `📌 *Status:* ${res.status === 'Aktif' ? '🟢 Aktif' : '⏸️ Nonaktif'}\n`;
-        msg += `🗓️ *Tahun:* ${res.tahun}\n\n`;
-
-        msg += `🟢 *Bulan Lunas (${res.bulanLunas.length}):*\n`;
-        msg += res.bulanLunas.length > 0 ? res.bulanLunas.map((b) => ` • ${b}`).join('\n') : ` _Belum ada_\n`;
-
-        msg += `\n🔴 *Bulan Belum Lunas (${res.bulanBelum.length}):*\n`;
-        msg += res.bulanBelum.length > 0 ? res.bulanBelum.map((b) => ` • ${b}`).join('\n') : ` 🎉 _Semua bulan lunas!_\n`;
-
-        msg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `📊 *Ringkasan Iuran Tahun ${res.tahun}:*\n`;
-        msg += `• 💰 *Sudah Bayar:* *${formatRupiah(res.totalBayar)}*\n`;
-        msg += `• 🔻 *Kurang (Tunggakan):* *${formatRupiah(res.totalKurang)}*\n`;
-        msg += `• 🎯 *Target Setahun:* *${formatRupiah(res.targetTahun)}* (${res.bulanLunas.length}/12 bulan lunas)`;
-
-        await ctx.reply(msg, { parse_mode: 'Markdown' });
-        return;
-      }
-    }
-
-    // 2. Cek status kas per bulan
-    const currentMonthName = DAFTAR_BULAN[new Date().getMonth()];
-    const targetBulan = cleanWithoutYear ? normalisasiBulan(cleanWithoutYear) || currentMonthName : currentMonthName;
-
-    const result = await cekStatusKasBulan(targetBulan, tahun);
-
-    let msg = `📋 *Iuran Kas Anggota — ${result.bulan} ${result.tahun}*\n`;
-    msg += `💵 *Tarif:* ${formatRupiah(NOMINAL_IURAN_DEFAULT)} / anggota\n\n`;
-
-    msg += `🟢 *Sudah Bayar (${result.sudahBayar.length} orang):*\n`;
-    if (result.sudahBayar.length > 0) {
-      for (const s of result.sudahBayar) {
-        const extraNote = s.bayar > NOMINAL_IURAN_DEFAULT
-          ? ` _(Lunas + Lebih ${formatRupiah(s.bayar - NOMINAL_IURAN_DEFAULT)})_`
-          : ` _(Lunas)_`;
-        msg += ` • ${s.nama} — *Bayar:* ${formatRupiah(s.bayar)} | *Kurang:* Rp 0${extraNote}\n`;
-      }
-    } else {
-      msg += ` _Belum ada yang membayar_\n`;
-    }
-
-    msg += `\n🔴 *Belum Bayar (${result.belumBayar.length} orang):*\n`;
-    if (result.belumBayar.length > 0) {
-      for (const b of result.belumBayar) {
-        const statusKet = b.bayar > 0 ? `Nyicil` : `Belum Bayar`;
-        msg += ` • ${b.nama} _(${b.jabatan})_\n    └ 💰 *Bayar:* ${formatRupiah(b.bayar)} | 🔻 *Kurang:* ${formatRupiah(b.kurang)} _(${statusKet})_\n`;
-      }
-    } else {
-      msg += ` 🎉 _Semua anggota aktif sudah lunas!_\n`;
-    }
-
-    msg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
-    msg += `📊 *Ringkasan Bulan ${result.bulan}:*\n`;
-    msg += `• 💰 *Sudah Terbayar:* *${formatRupiah(result.totalTerkumpul)}*\n`;
-    msg += `• 🔻 *Kurang (Tunggakan):* *${formatRupiah(result.totalTunggakan)}*\n`;
-    msg += `• 🎯 *Target Kas (100%):* *${formatRupiah(result.targetKas)}*\n`;
-    msg += `• 👥 *Anggota Aktif:* *${result.totalAnggotaAktif} orang* (${result.sudahBayar.length} lunas, ${result.belumBayar.length} belum)\n\n`;
-    msg += `💡 _Tips:_ Ketik \`/cekkas [nama]\` (contoh: \`/cekkas Said\`) untuk cek histori per orang, atau \`/cekkas [nama bulan]\`.`;
-
-    await ctx.reply(msg, { parse_mode: 'Markdown' });
-  } catch (error: any) {
-    console.error('Error saat cek kas:', error);
-    await ctx.reply(`⚠️ Gagal memeriksa kas: ${error?.message || 'Terjadi kesalahan sistem.'}`);
-  }
-}
-
-/**
- * Handler /bayarkas
- * Contoh: /bayarkas Said Januari 10000
- */
-async function handleBayarKas(ctx: any, query: string = '') {
-  const clean = query.trim();
-  if (!clean) {
-    await ctx.reply(
-      `💡 *Format Mencatat Pembayaran Kas:*\n\n` +
-        `Ketik: \`/bayarkas [Nama] [Bulan] [Nominal?]\`\n\n` +
-        `*Contoh Penggunaan:*\n` +
-        `• \`/bayarkas Said Rahman Januari\`\n` +
-        `• \`/bayarkas Fajar Februari 10000\`\n` +
-        `• Atau teks bebas: \`bayar kas sulis maret\`\n\n` +
-        `_(Nominal default adalah Rp 10.000 jika tidak ditulis)_`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  try {
-    await ctx.replyWithChatAction('typing');
-
-    // Parse nominal (jika ada angka di query)
-    const nominalMatch = clean.match(/\b(\d{4,7})\b/);
-    const nominal = nominalMatch ? parseInt(nominalMatch[1], 10) : NOMINAL_IURAN_DEFAULT;
-    let sisaText = clean.replace(/\b(\d{4,7})\b/g, '').trim();
-
-    // Parse tahun (jika ada)
-    const currentYear = new Date().getFullYear();
-    const yearMatch = sisaText.match(/\b(20\d\d)\b/);
-    const tahun = yearMatch ? parseInt(yearMatch[1], 10) : currentYear;
-    sisaText = sisaText.replace(/\b(20\d\d)\b/g, '').trim();
-
-    // Cari bulan
-    let foundBulan: string | null = null;
-    const tokens = sisaText.split(/\s+/);
-    let bulanIndex = -1;
-
-    for (let i = 0; i < tokens.length; i++) {
-      const bNorm = normalisasiBulan(tokens[i]);
-      if (bNorm) {
-        foundBulan = bNorm;
-        bulanIndex = i;
-        break;
-      }
-    }
-
-    if (!foundBulan) {
-      // Default bulan saat ini jika tidak ditulis
-      foundBulan = DAFTAR_BULAN[new Date().getMonth()];
-    }
-
-    // Nama anggota adalah sisa kata
-    let namaAnggota = '';
-    if (bulanIndex !== -1) {
-      tokens.splice(bulanIndex, 1);
-      namaAnggota = tokens.join(' ').replace(/^(untuk|bulan|kas)\s+/gi, '').trim();
-    } else {
-      namaAnggota = sisaText.replace(/^(untuk|bulan|kas)\s+/gi, '').trim();
-    }
-
-    if (!namaAnggota) {
-      await ctx.reply('⚠️ Mohon sebutkan nama anggota yang membayar. Contoh: `/bayarkas Said Januari`', { parse_mode: 'Markdown' });
-      return;
-    }
-
-    const res = await catatPembayaranKas(namaAnggota, foundBulan, tahun, nominal);
-    if (!res.success) {
-      await ctx.reply(res.message, { parse_mode: 'Markdown' });
-      return;
-    }
-
-    await ctx.reply(
-      `✅ *Pembayaran Kas Berhasil Dicatat!*\n\n` +
-        `👤 *Anggota:* *${res.nama}*\n` +
-        `🗓️ *Iuran Bulan:* *${res.bulan} ${res.tahun}*\n` +
-        `💰 *Nominal:* *${formatRupiah(res.nominal)}*\n` +
-        `📝 *Status:* Lunas\n\n` +
-        `📊 _Tercatat di tab *Kas_Anggota* dan otomatis masuk sebagai Pemasukan di tab *Kas Utama*._`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error: any) {
-    console.error('Error saat mencatat pembayaran kas:', error);
-    await ctx.reply(`❌ Gagal mencatat kas: ${error?.message || 'Terjadi kesalahan sistem.'}`);
-  }
-}
-
-/**
- * Handler /anggota
- */
-async function handleDaftarAnggota(ctx: any) {
-  try {
-    await ctx.replyWithChatAction('typing');
-    const anggota = await getDaftarAnggota();
-
-    const aktif = anggota.filter((a) => a.status === 'Aktif');
-    const nonaktif = anggota.filter((a) => a.status === 'Nonaktif');
-
-    let msg = `👥 *Daftar Anggota Kas*\n\n`;
-
-    msg += `🟢 *Anggota Aktif (${aktif.length} orang):*\n`;
-    for (const a of aktif) {
-      msg += ` • *${a.nama}* — _${a.jabatan}_\n`;
-    }
-
-    if (nonaktif.length > 0) {
-      msg += `\n⏸️ *Anggota Nonaktif (${nonaktif.length} orang):*\n`;
-      for (const a of nonaktif) {
-        msg += ` • ~${a.nama}~ — _${a.jabatan}_\n`;
-      }
-    }
-
-    msg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
-    msg += `⚙️ *Perintah Pengelolaan Anggota:*\n`;
-    msg += `• \`/tambahanggota [Nama]\` — Tambah anggota baru\n`;
-    msg += `• \`/nonaktifanggota [Nama]\` — Nonaktifkan anggota\n`;
-    msg += `• \`/aktifkananggota [Nama]\` — Aktifkan kembali anggota`;
-
-    await ctx.reply(msg, { parse_mode: 'Markdown' });
-  } catch (error: any) {
-    console.error('Error saat mengambil daftar anggota:', error);
-    await ctx.reply(`⚠️ Gagal mengambil daftar anggota: ${error?.message || 'Terjadi kesalahan sistem.'}`);
-  }
-}
-
-/**
- * Handler /tambahanggota
- */
-async function handleTambahAnggota(ctx: any, query: string = '') {
-  const clean = query.trim();
-  if (!clean) {
-    await ctx.reply(
-      `💡 *Format Tambah Anggota:*\nKetik: \`/tambahanggota [Nama Lengkap]\`\n\n_Contoh:_ \`/tambahanggota Budi Santoso\``,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  try {
-    await ctx.replyWithChatAction('typing');
-    const res = await tambahAnggota(clean);
-    await ctx.reply(res.message, { parse_mode: 'Markdown' });
-  } catch (error: any) {
-    await ctx.reply(`❌ Gagal menambah anggota: ${error?.message}`);
-  }
-}
-
-/**
- * Handler /nonaktifanggota
- */
-async function handleNonaktifAnggota(ctx: any, query: string = '') {
-  const clean = query.trim();
-  if (!clean) {
-    await ctx.reply(
-      `💡 *Format Nonaktifkan Anggota:*\nKetik: \`/nonaktifanggota [Nama Anggota]\`\n\n_Contoh:_ \`/nonaktifanggota Zulfa\`\n\n_(Anggota nonaktif tidak akan ditagih iuran kas lagi)_`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  try {
-    await ctx.replyWithChatAction('typing');
-    const res = await ubahStatusAnggota(clean, 'Nonaktif');
-    await ctx.reply(res.message, { parse_mode: 'Markdown' });
-  } catch (error: any) {
-    await ctx.reply(`❌ Gagal menonaktifkan anggota: ${error?.message}`);
-  }
-}
-
-/**
- * Handler /aktifkananggota
- */
-async function handleAktifkanAnggota(ctx: any, query: string = '') {
-  const clean = query.trim();
-  if (!clean) {
-    await ctx.reply(
-      `💡 *Format Aktifkan Anggota:*\nKetik: \`/aktifkananggota [Nama Anggota]\`\n\n_Contoh:_ \`/aktifkananggota Zulfa\``,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  try {
-    await ctx.replyWithChatAction('typing');
-    const res = await ubahStatusAnggota(clean, 'Aktif');
-    await ctx.reply(res.message, { parse_mode: 'Markdown' });
-  } catch (error: any) {
-    await ctx.reply(`❌ Gagal mengaktifkan anggota: ${error?.message}`);
-  }
-}
-
 // Command: /rekap & /recap
 bot.command(['rekap', 'recap'], async (ctx) => {
   const text = ctx.message?.text || '';
@@ -2083,40 +1774,7 @@ bot.command(['unggahfoto', 'unggahulang', 'reupload', 'uploadfoto'], async (ctx)
   await handlePilihUnggahUlang(ctx, parts || undefined);
 });
 
-// Command Kas Anggota
-bot.command('cekkas', async (ctx) => {
-  const text = ctx.message?.text || '';
-  const parts = text.split(' ').slice(1).join(' ').trim();
-  await handleCekKas(ctx, parts);
-});
 
-bot.command('bayarkas', async (ctx) => {
-  const text = ctx.message?.text || '';
-  const parts = text.split(' ').slice(1).join(' ').trim();
-  await handleBayarKas(ctx, parts);
-});
-
-bot.command('anggota', async (ctx) => {
-  await handleDaftarAnggota(ctx);
-});
-
-bot.command('tambahanggota', async (ctx) => {
-  const text = ctx.message?.text || '';
-  const parts = text.split(' ').slice(1).join(' ').trim();
-  await handleTambahAnggota(ctx, parts);
-});
-
-bot.command(['nonaktifanggota', 'nonaktifkananggota'], async (ctx) => {
-  const text = ctx.message?.text || '';
-  const parts = text.split(' ').slice(1).join(' ').trim();
-  await handleNonaktifAnggota(ctx, parts);
-});
-
-bot.command('aktifkananggota', async (ctx) => {
-  const text = ctx.message?.text || '';
-  const parts = text.split(' ').slice(1).join(' ').trim();
-  await handleAktifkanAnggota(ctx, parts);
-});
 
 // Command: /pindahsaldo (dan alias)
 bot.command(['pindahsaldo', 'transfersaldo', 'pindah', 'transfer'], async (ctx) => {
@@ -2546,44 +2204,7 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
-  if (textLower.startsWith('cek kas') || textLower.startsWith('cekkas')) {
-    const q = text.replace(/^(cek\s*kas|cekkas)/i, '').trim();
-    await handleCekKas(ctx, q);
-    return;
-  }
 
-  if (textLower.startsWith('bayar kas') || textLower.startsWith('bayarkas')) {
-    const q = text.replace(/^(bayar\s*kas|bayarkas)/i, '').trim();
-    await handleBayarKas(ctx, q);
-    return;
-  }
-
-  if (textLower.startsWith('tambah anggota') || textLower.startsWith('tambahanggota')) {
-    const q = text.replace(/^(tambah\s*anggota|tambahanggota)/i, '').trim();
-    await handleTambahAnggota(ctx, q);
-    return;
-  }
-
-  if (
-    textLower.startsWith('nonaktifkan anggota') ||
-    textLower.startsWith('nonaktif anggota') ||
-    textLower.startsWith('nonaktifkan') ||
-    textLower.startsWith('nonaktifanggota')
-  ) {
-    const q = text.replace(/^(nonaktifkan\s*anggota|nonaktif\s*anggota|nonaktifkan|nonaktifanggota)/i, '').trim();
-    await handleNonaktifAnggota(ctx, q);
-    return;
-  }
-
-  if (
-    textLower.startsWith('aktifkan anggota') ||
-    textLower.startsWith('aktifkan') ||
-    textLower.startsWith('aktifkananggota')
-  ) {
-    const q = text.replace(/^(aktifkan\s*anggota|aktifkan|aktifkananggota)/i, '').trim();
-    await handleAktifkanAnggota(ctx, q);
-    return;
-  }
 
   // === 4. Cek apakah ini perintah slash (misal /pwd, /jojo, /rekap, dll) ===
   if (text.startsWith('/')) {
@@ -2619,19 +2240,15 @@ bot.on('message:text', async (ctx) => {
       'transfersaldo',
       'pindah',
       'transfer',
+      'tabungan',
       'kas',
       'buku',
       'rekap',
       'recap',
       'rekapkas',
       'recapkas',
-      'cekkas',
-      'bayarkas',
-      'anggota',
-      'tambahanggota',
-      'nonaktifanggota',
-      'nonaktifkananggota',
-      'aktifkananggota',
+      'cekfoto',
+      'unggahfoto',
       'nota',
       'debug',
       'akses',
@@ -2652,9 +2269,9 @@ bot.on('message:text', async (ctx) => {
     if (!standardCmds.includes(rawCmd)) {
       await ctx.reply(
         '❓ Perintah tidak dikenali.\n' +
-          '• Ketik /start untuk melihat menu dan daftar buku\n' +
-          '• Ketik /cekkas untuk cek status iuran kas anggota\n' +
-          '• Ketik /bayarkas untuk catat bayar kas'
+          '• Ketik /start untuk melihat menu dan daftar tabungan\n' +
+          '• Ketik /rekap untuk melihat rekap tabungan aktif\n' +
+          '• Ketik /buku untuk memilih tabungan'
       );
     }
     return;
@@ -2695,10 +2312,10 @@ bot.on('message:text', async (ctx) => {
       await ctx.reply(
         `🤔 Maaf, saya belum mengenali catatan keuangan dari pesan tersebut.\n` +
           `Contoh yang bisa dipahami:\n` +
-          `• \`Makan sate 45rb\`\n` +
-          `• \`Kemarin ganti oli motor 75.000\`\n` +
-          `• \`bayar kas Said Januari\` (untuk iuran anggota)\n` +
-          `• Ketik /cekkas untuk cek iuran kas anggota`
+          `• \`Makan malam sate 45rb\`\n` +
+          `• \`Nabung berdua 100.000\`\n` +
+          `• \`Beli bensin motor 25rb\`\n` +
+          `• Atau langsung kirim foto struk/nota belanja!`
       );
       return;
     }

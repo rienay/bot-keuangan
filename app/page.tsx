@@ -191,22 +191,22 @@ export default function FinanceDashboardPage() {
       <nav className="navbar">
         <div className="nav-container">
           <a href="#" className="brand">
-            <div className="brand-icon">🌸</div>
+            <div className="brand-icon">💕</div>
             <div>
-              <div className="brand-title">Catatan Keuangan</div>
-              <div className="brand-subtitle">Dewan Kerja Cabang (DKC)</div>
+              <div className="brand-title">Tabungan & Keuangan Kita</div>
+              <div className="brand-subtitle">Catatan Pengeluaran & Tabungan Bersama</div>
             </div>
           </a>
 
           <a
-            href="https://t.me/duit_pwd_bot"
+            href="https://t.me/nabung_date_bot"
             target="_blank"
             rel="noopener noreferrer"
             className="bot-badge"
             title="Catat pengeluaran lewat Telegram"
           >
             <span>🤖</span>
-            <span>@duit_pwd_bot</span>
+            <span>@nabung_date_bot</span>
           </a>
         </div>
       </nav>
@@ -214,10 +214,10 @@ export default function FinanceDashboardPage() {
       <main className="main-wrapper">
         {/* Hero Section */}
         <header className="hero-banner">
-          <div className="hero-tag">✨ Portal Keuangan Transparan</div>
-          <h1 className="hero-title">Akses Keuangan Lebih Asik & Terbuka</h1>
+          <div className="hero-tag">💕 Tabungan & Keuangan Bersama</div>
+          <h1 className="hero-title">Nabung & Catat Pengeluaran Bareng Jadi Makin Teratur</h1>
           <p className="hero-desc">
-            Pantau seluruh saldo kas, pengeluaran kegiatan, dan bukti struk nota secara transparan & mudah dipahami.
+            Pantau seluruh saldo tabungan bersama, pengeluaran harian & date, serta bukti struk nota secara rapi & transparan.
           </p>
         </header>
 
@@ -231,12 +231,12 @@ export default function FinanceDashboardPage() {
                   className={`book-tab-btn ${selectedBook === b ? 'active' : ''}`}
                   onClick={() => setSelectedBook(b)}
                 >
-                  <span>{b === 'Semua' ? '🌟' : b.toLowerCase() === 'kas' ? '📌' : '📖'}</span>
-                  <span>{b === 'Semua' ? 'Semua Buku' : b}</span>
+                  <span>{b === 'Semua' ? '🌟' : (b.toLowerCase() === 'tabungan' || b.toLowerCase() === 'kas') ? '📌' : '📖'}</span>
+                  <span>{b === 'Semua' ? 'Semua Pos' : b}</span>
                 </button>
               ))
             ) : (
-              <button className="book-tab-btn active">Memuat Buku...</button>
+              <button className="book-tab-btn active">Memuat Pos...</button>
             )}
           </div>
         </div>
@@ -263,7 +263,7 @@ export default function FinanceDashboardPage() {
               {loading && !data ? '...' : formatRupiah(data?.stats.saldo || 0)}
             </div>
             <div className="stat-subtext">
-              {(data?.stats.saldo || 0) >= 0 ? '🟢 Kas aman & surplus' : '🔻 Terjadi defisit kas'}
+              {(data?.stats.saldo || 0) >= 0 ? '🟢 Tabungan aman & surplus' : '🔻 Pengeluaran melebihi tabungan'}
             </div>
           </div>
 
@@ -542,7 +542,7 @@ export default function FinanceDashboardPage() {
                         <th className="col-num desktop-only">#</th>
                         <th className="col-date desktop-only">Tanggal</th>
                         <th>Keterangan</th>
-                        <th className="desktop-only">Buku Kas</th>
+                        <th className="desktop-only">Pos Tabungan</th>
                         <th className="desktop-only">Kategori</th>
                         <th className="desktop-only">Jenis</th>
                         <th style={{ textAlign: 'right' }}>Nominal</th>
@@ -696,7 +696,7 @@ export default function FinanceDashboardPage() {
 
       {/* Footer */}
       <footer className="footer">
-        <p>🌸 Dashboard Keuangan DKC • Terhubung Otomatis ke Google Sheets & Drive</p>
+        <p>💕 Dashboard Tabungan & Keuangan Kita • Terhubung Otomatis ke Google Sheets & Drive</p>
         <p style={{ marginTop: '0.35rem', fontSize: '0.78rem' }}>
           Terakhir sinkronisasi: {data?.lastUpdated || 'Baru saja'}
         </p>

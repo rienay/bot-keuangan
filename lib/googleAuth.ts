@@ -1,4 +1,9 @@
 import { google } from 'googleapis';
+import dns from 'dns';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
 
 /**
  * Merekonstruksi Private Key menjadi format PEM kanonikal yang valid.

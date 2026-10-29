@@ -12,7 +12,7 @@ import {
   WebTransactionItem,
 } from './types';
 
-export const DEFAULT_BOOK_NAME = 'Kas';
+export const DEFAULT_BOOK_NAME = 'Tabungan';
 
 const SHEET_COLUMNS = [
   'Tanggal',
@@ -58,6 +58,40 @@ export async function ensureHeaderRow(sheetName: string = DEFAULT_BOOK_NAME): Pr
   const auth = getGoogleAuth();
   const sheets = google.sheets({ version: 'v4', auth });
   const spreadsheetId = getSpreadsheetId();
+
+  // Jika mencari Tabungan, tetapi tab di Google Sheets masih 'Kas', otomatis rename ke 'Tabungan'
+  if (sheetName.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase()) {
+    try {
+      const meta = await sheets.spreadsheets.get({ spreadsheetId });
+      const hasDefaultSheet = meta.data.sheets?.some(
+        (s) => s.properties?.title?.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase()
+      );
+      const oldKasSheet = meta.data.sheets?.find(
+        (s) => s.properties?.title?.toLowerCase() === 'kas'
+      );
+      if (!hasDefaultSheet && oldKasSheet && oldKasSheet.properties?.sheetId !== undefined) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: {
+            requests: [
+              {
+                updateSheetProperties: {
+                  properties: {
+                    sheetId: oldKasSheet.properties.sheetId,
+                    title: DEFAULT_BOOK_NAME,
+                  },
+                  fields: 'title',
+                },
+              },
+            ],
+          },
+        });
+        cachedSheetList = null;
+      }
+    } catch (e) {
+      // Abaikan jika gagal rename, lanjutkan get biasa
+    }
+  }
 
   try {
     const res = await sheets.spreadsheets.values.get({
@@ -149,16 +183,16 @@ export async function getAllSheetBooks(forceRefresh = false): Promise<string[]> 
     validBooks.push(title);
   }
 
-  // Pastikan 'Kas' ada dalam list
-  const hasKas = validBooks.some((b) => b.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase());
-  if (!hasKas) {
+  // Pastikan Tabungan (DEFAULT_BOOK_NAME) ada dalam list
+  const hasDefault = validBooks.some((b) => b.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase());
+  if (!hasDefault) {
     validBooks.unshift(DEFAULT_BOOK_NAME);
   } else {
-    // Taruh 'Kas' di urutan pertama
-    const kasIdx = validBooks.findIndex((b) => b.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase());
-    if (kasIdx > 0) {
-      const [kasItem] = validBooks.splice(kasIdx, 1);
-      validBooks.unshift(kasItem);
+    // Taruh Tabungan di urutan pertama
+    const defIdx = validBooks.findIndex((b) => b.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase());
+    if (defIdx > 0) {
+      const [item] = validBooks.splice(defIdx, 1);
+      validBooks.unshift(item);
     }
   }
 
