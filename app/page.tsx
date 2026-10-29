@@ -191,7 +191,14 @@ export default function FinanceDashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/finances?book=${encodeURIComponent(book)}`);
+      const url = `/api/finances?book=${encodeURIComponent(book)}&_t=${Date.now()}${showRefreshSpinner ? '&force=true' : ''}`;
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
       const json = await res.json();
       if (json.success && json.data) {
         setData(json.data);
@@ -213,6 +220,16 @@ export default function FinanceDashboardPage() {
       const b = params.get('buku') || params.get('book');
       if (b) {
         setSelectedBook(b);
+        try {
+          localStorage.setItem('last_active_book', b);
+        } catch (_) {}
+      } else {
+        try {
+          const saved = localStorage.getItem('last_active_book');
+          if (saved) {
+            setSelectedBook(saved);
+          }
+        } catch (_) {}
       }
     }
   }, []);

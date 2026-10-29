@@ -243,6 +243,7 @@ export async function createSheetBook(
     // Sheet sudah ada (mungkin dibuat saat panggilan sebelumnya), pastikan header A1:H1 lengkap
     await ensureHeaderRow(existingTitle);
     cachedSheetList = null;
+    webFinanceCache.clear();
     return { created: true, bookName: existingTitle };
   }
 
@@ -263,6 +264,7 @@ export async function createSheetBook(
   await ensureHeaderRow(cleanName);
 
   cachedSheetList = null;
+  webFinanceCache.clear();
   return { created: true, bookName: cleanName };
 }
 
@@ -551,6 +553,9 @@ export async function appendTransaction(
       values: [rowValues],
     },
   });
+
+  // Bersihkan cache web finance agar dashboard langsung membaca data baru secara instan
+  webFinanceCache.clear();
 
   const updatedRange = res.data.updates?.updatedRange;
   if (updatedRange) {
@@ -893,24 +898,41 @@ const WEB_CACHE_TTL_MS = 20_000; // 20 detik
 /**
  * Mengambil seluruh data transaksi dan agregasi statistik untuk ditampilkan di Website Dashboard Keuangan
  */
-export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Promise<WebFinanceData> {
+export async function getAllTransactionsForWeb(
+  targetBook: string = 'Tabungan',
+  forceRefresh = false
+): Promise<WebFinanceData> {
   const normalizedTarget = targetBook.trim().toLowerCase();
   const now = Date.now();
   const cacheKey = normalizedTarget;
 
-  const cached = webFinanceCache.get(cacheKey);
-  if (cached && now - cached.timestamp < WEB_CACHE_TTL_MS) {
-    return cached.data;
+  if (!forceRefresh) {
+    const cached = webFinanceCache.get(cacheKey);
+    if (cached && now - cached.timestamp < WEB_CACHE_TTL_MS) {
+      return cached.data;
+    }
   }
 
-  const books = await getAllSheetBooks();
+  const books = await getAllSheetBooks(forceRefresh);
   const auth = getGoogleAuth();
   const sheets = google.sheets({ version: 'v4', auth });
   const spreadsheetId = getSpreadsheetId();
 
   const isAll = normalizedTarget === 'semua' || normalizedTarget === 'all' || normalizedTarget === '';
 
-  const allBookPromises = books.map(async (book) => {
+  // Pastikan targetBook selalu ada di daftar buku yang akan dicari
+  if (!isAll) {
+    const hasTarget = books.some((b) => b.toLowerCase() === normalizedTarget);
+    if (!hasTarget) {
+      books.push(targetBook);
+    }
+  }
+
+  const booksToFetch = isAll
+    ? books
+    : books.filter((b) => b.toLowerCase() === normalizedTarget);
+
+  const allBookPromises = booksToFetch.map(async (book) => {
     try {
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId,
