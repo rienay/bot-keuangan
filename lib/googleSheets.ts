@@ -11,6 +11,9 @@ import {
   WebFinanceData,
   WebTransactionItem,
   WalletBalances,
+  BudgetInfo,
+  MonthlyStatsItem,
+  MonthlyComparisonReport,
 } from './types';
 
 export const DEFAULT_BOOK_NAME = 'Tabungan';
@@ -27,6 +30,7 @@ const SHEET_COLUMNS = [
 ];
 
 const SESSION_SHEET_NAME = '_Sessions';
+export const BUDGET_SHEET_NAME = '_Budget';
 
 function getSpreadsheetId(): string {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
@@ -806,11 +810,8 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
   const spreadsheetId = getSpreadsheetId();
 
   const isAll = normalizedTarget === 'semua' || normalizedTarget === 'all' || normalizedTarget === '';
-  const booksToFetch = isAll
-    ? books
-    : books.filter((b) => b.toLowerCase() === normalizedTarget);
 
-  const fetchPromises = booksToFetch.map(async (book) => {
+  const allBookPromises = books.map(async (book) => {
     try {
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId,
@@ -823,7 +824,33 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
     }
   });
 
-  const results = await Promise.all(fetchPromises);
+  const allBookResults = await Promise.all(allBookPromises);
+
+  // Hitung saldo masing-masing pos buku untuk label tab web
+  const bookBalances: Record<string, number> = {};
+  for (const { book, rows } of allBookResults) {
+    let inc = 0;
+    let exp = 0;
+    for (const r of rows) {
+      const [tglRaw, jenisRaw, , nominalRaw] = r;
+      if (!tglRaw || !nominalRaw) continue;
+      const cleanNom =
+        typeof nominalRaw === 'number'
+          ? nominalRaw
+          : parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
+      if (cleanNom <= 0) continue;
+      if (String(jenisRaw || '').toLowerCase().includes('pemasukan')) {
+        inc += cleanNom;
+      } else {
+        exp += cleanNom;
+      }
+    }
+    bookBalances[book] = inc - exp;
+  }
+
+  const results = isAll
+    ? allBookResults
+    : allBookResults.filter((b) => b.book.toLowerCase() === normalizedTarget);
 
   const allItems: WebTransactionItem[] = [];
   let totalPemasukan = 0;
@@ -913,9 +940,14 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
     timeStyle: 'short',
   }).format(new Date());
 
+  const monthlyComparison = buildMonthlyComparison(allItems);
+  const activeBookForBudget = isAll ? DEFAULT_BOOK_NAME : (books.find((b) => b.toLowerCase() === normalizedTarget) || DEFAULT_BOOK_NAME);
+  const budget = await getBudgetInfo(activeBookForBudget);
+
   const data: WebFinanceData = {
     books: ['Semua', ...books],
     activeBook: isAll ? 'Semua' : (books.find((b) => b.toLowerCase() === normalizedTarget) || 'Semua'),
+    bookBalances,
     transactions: allItems,
     stats: {
       totalPemasukan,
@@ -926,6 +958,8 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
       categoryIncome,
       walletBalances,
     },
+    budget,
+    monthlyComparison,
     lastUpdated: nowJakarta,
   };
 
@@ -1311,3 +1345,347 @@ export async function transferWalletMoney(params: {
 
 
 
+
+// ============================================================
+// HELPER KOMPARASI BULANAN (MONTH-OVER-MONTH)
+// ============================================================
+
+function parseYearMonth(dateStr: string): { key: string; label: string } | null {
+  if (!dateStr) return null;
+  const cleaned = String(dateStr).trim().replace(/^'/, '');
+  // Format YYYY-MM-DD
+  const ymd = cleaned.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (ymd) {
+    const y = ymd[1];
+    const m = ymd[2].padStart(2, '0');
+    const key = `${y}-${m}`;
+    const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+    const label = new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long' }).format(dateObj);
+    return { key, label };
+  }
+  // Format DD-MM-YYYY
+  const dmy = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (dmy) {
+    const y = dmy[3];
+    const m = dmy[2].padStart(2, '0');
+    const key = `${y}-${m}`;
+    const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+    const label = new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long' }).format(dateObj);
+    return { key, label };
+  }
+  return null;
+}
+
+function buildMonthlyComparison(items: WebTransactionItem[]): MonthlyComparisonReport {
+  const monthMap = new Map<string, { label: string; income: number; expense: number }>();
+
+  for (const item of items) {
+    const parsed = parseYearMonth(item.date);
+    if (!parsed) continue;
+    const existing = monthMap.get(parsed.key) || { label: parsed.label, income: 0, expense: 0 };
+    if (item.type === 'Pemasukan') {
+      existing.income += item.amount;
+    } else {
+      existing.expense += item.amount;
+    }
+    monthMap.set(parsed.key, existing);
+  }
+
+  const sortedKeys = Array.from(monthMap.keys()).sort();
+  const months: MonthlyStatsItem[] = [];
+
+  let highestIncomeMonth: { month: string; monthLabel: string; amount: number } | undefined;
+  let highestExpenseMonth: { month: string; monthLabel: string; amount: number } | undefined;
+  let lowestExpenseMonth: { month: string; monthLabel: string; amount: number } | undefined;
+
+  let totalIncomeAll = 0;
+  let totalExpenseAll = 0;
+
+  for (let i = 0; i < sortedKeys.length; i++) {
+    const key = sortedKeys[i];
+    const data = monthMap.get(key)!;
+    const balance = data.income - data.expense;
+
+    totalIncomeAll += data.income;
+    totalExpenseAll += data.expense;
+
+    if (!highestIncomeMonth || data.income > highestIncomeMonth.amount) {
+      if (data.income > 0) {
+        highestIncomeMonth = { month: key, monthLabel: data.label, amount: data.income };
+      }
+    }
+
+    if (!highestExpenseMonth || data.expense > highestExpenseMonth.amount) {
+      if (data.expense > 0) {
+        highestExpenseMonth = { month: key, monthLabel: data.label, amount: data.expense };
+      }
+    }
+
+    if (data.expense > 0) {
+      if (!lowestExpenseMonth || data.expense < lowestExpenseMonth.amount) {
+        lowestExpenseMonth = { month: key, monthLabel: data.label, amount: data.expense };
+      }
+    }
+
+    let expenseChangePercent: number | undefined;
+    if (i > 0) {
+      const prevExpense = monthMap.get(sortedKeys[i - 1])!.expense;
+      if (prevExpense > 0) {
+        expenseChangePercent = Math.round(((data.expense - prevExpense) / prevExpense) * 100);
+      }
+    }
+
+    months.push({
+      month: key,
+      monthLabel: data.label,
+      income: data.income,
+      expense: data.expense,
+      balance,
+      expenseChangePercent,
+    });
+  }
+
+  const averageMonthlyIncome = months.length > 0 ? Math.round(totalIncomeAll / months.length) : 0;
+  const averageMonthlyExpense = months.length > 0 ? Math.round(totalExpenseAll / months.length) : 0;
+
+  return {
+    months: months.reverse(),
+    highestIncomeMonth,
+    highestExpenseMonth,
+    lowestExpenseMonth,
+    averageMonthlyIncome,
+    averageMonthlyExpense,
+  };
+}
+
+// ============================================================
+// MANAJEMEN ANGGARAN & BUDGET BULANAN (_Budget)
+// ============================================================
+
+async function ensureBudgetSheet(sheets: any, spreadsheetId: string) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const exists = meta.data.sheets?.some(
+      (s: any) => s.properties?.title?.toLowerCase() === BUDGET_SHEET_NAME.toLowerCase()
+    );
+    if (!exists) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: BUDGET_SHEET_NAME,
+                  hidden: false,
+                },
+              },
+            },
+          ],
+        },
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${BUDGET_SHEET_NAME}'!A1:D1`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [['Buku', 'Bulan', 'Nominal', 'Diupdate']],
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('Gagal ensureBudgetSheet:', err);
+  }
+}
+
+export async function setBookBudget(bookName: string, month: string, amount: number): Promise<void> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+  await ensureBudgetSheet(sheets, spreadsheetId);
+
+  const cleanBook = sanitizeBookName(bookName) || DEFAULT_BOOK_NAME;
+  const cleanMonth = month.trim();
+  const nowJakarta = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date());
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${BUDGET_SHEET_NAME}'!A2:D`,
+  });
+
+  const rows = res.data.values || [];
+  let foundRowIndex = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    const [b, m] = rows[i];
+    if (
+      String(b || '').trim().toLowerCase() === cleanBook.toLowerCase() &&
+      String(m || '').trim().toLowerCase() === cleanMonth.toLowerCase()
+    ) {
+      foundRowIndex = i + 2;
+      break;
+    }
+  }
+
+  if (foundRowIndex > 0) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${BUDGET_SHEET_NAME}'!C${foundRowIndex}:D${foundRowIndex}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[amount, nowJakarta]],
+      },
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `'${BUDGET_SHEET_NAME}'!A:D`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[cleanBook, cleanMonth, amount, nowJakarta]],
+      },
+    });
+  }
+
+  // Bersihkan cache web
+  webFinanceCache.clear();
+}
+
+export async function getBookBudget(bookName: string, month: string): Promise<number | null> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+  await ensureBudgetSheet(sheets, spreadsheetId);
+
+  const cleanBook = sanitizeBookName(bookName) || DEFAULT_BOOK_NAME;
+  const cleanMonth = month.trim();
+
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${BUDGET_SHEET_NAME}'!A2:C`,
+    });
+    const rows = res.data.values || [];
+    let exactMatch: number | null = null;
+    let defaultMatch: number | null = null;
+
+    for (const row of rows) {
+      const [b, m, nominal] = row;
+      const bStr = String(b || '').trim().toLowerCase();
+      const mStr = String(m || '').trim().toLowerCase();
+      const num = parseFloat(String(nominal || '').replace(/[^0-9.-]+/g, '')) || 0;
+
+      if (bStr === cleanBook.toLowerCase() && mStr === cleanMonth.toLowerCase()) {
+        exactMatch = num;
+        break;
+      }
+      if (bStr === cleanBook.toLowerCase() && mStr === 'default') {
+        defaultMatch = num;
+      }
+    }
+
+    return exactMatch !== null ? exactMatch : defaultMatch;
+  } catch (err) {
+    console.warn('Gagal getBookBudget:', err);
+    return null;
+  }
+}
+
+export async function getBudgetInfo(bookName: string, targetMonth?: string): Promise<BudgetInfo> {
+  const d = new Date();
+  const currentMonthKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(d).slice(0, 7);
+
+  const month = targetMonth || currentMonthKey;
+  const [y, m] = month.split('-');
+  const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+  const monthLabel = new Intl.DateTimeFormat('id-ID', {
+    year: 'numeric',
+    month: 'long',
+  }).format(dateObj);
+
+  const cleanBook = sanitizeBookName(bookName) || DEFAULT_BOOK_NAME;
+  const budgetAmount = (await getBookBudget(cleanBook, month)) || 0;
+
+  const summary = await getMonthSummary(month, monthLabel, cleanBook);
+  const spent = summary.totalPengeluaran;
+  const remaining = budgetAmount - spent;
+  const percentage = budgetAmount > 0 ? Math.round((spent / budgetAmount) * 100) : 0;
+
+  let status: BudgetInfo['status'] = 'none';
+  if (budgetAmount > 0) {
+    if (percentage >= 100) {
+      status = 'overbudget';
+    } else if (percentage >= 80) {
+      status = 'warning';
+    } else if (percentage >= 50) {
+      status = 'half';
+    } else {
+      status = 'safe';
+    }
+  }
+
+  return {
+    book: cleanBook,
+    month,
+    monthLabel,
+    amount: budgetAmount,
+    spent,
+    remaining,
+    percentage,
+    status,
+  };
+}
+
+export async function checkBudgetThresholdAlert(
+  bookName: string,
+  newExpenseAmount: number
+): Promise<{
+  alertType: 'half' | 'warning' | 'overbudget' | null;
+  alertMessage: string | null;
+  budgetInfo: BudgetInfo;
+}> {
+  const budgetInfo = await getBudgetInfo(bookName);
+  if (!budgetInfo || budgetInfo.amount <= 0) {
+    return { alertType: null, alertMessage: null, budgetInfo };
+  }
+
+  const previousSpent = budgetInfo.spent - newExpenseAmount;
+  const prevPct = Math.round((previousSpent / budgetInfo.amount) * 100);
+  const currPct = budgetInfo.percentage;
+
+  let alertType: 'half' | 'warning' | 'overbudget' | null = null;
+  let alertMessage: string | null = null;
+
+  const formatRp = (num: number) =>
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+
+  if (currPct >= 100 && prevPct < 100) {
+    alertType = 'overbudget';
+    alertMessage =
+      `🛑 *PERINGATAN: BUDGET BULAN INI HABIS / OVERBUDGET!*\n` +
+      `Pengeluaran telah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
+      `Total belanja bulan ini: *${formatRp(budgetInfo.spent)}* (Melebihi budget: ${formatRp(Math.abs(budgetInfo.remaining))})!`;
+  } else if (currPct >= 80 && prevPct < 80) {
+    alertType = 'warning';
+    alertMessage =
+      `🚨 *PERINGATAN: BUDGET HAMPIR HABIS (${currPct}%)!*\n` +
+      `Pengeluaran bulan ini sudah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
+      `Sisa budget yang aman digunakan tinggal *${formatRp(budgetInfo.remaining)}* lagi!`;
+  } else if (currPct >= 50 && prevPct < 50) {
+    alertType = 'half';
+    alertMessage =
+      `⚠️ *PERHATIAN: BUDGET SUDAH TERSERAP SETENGAH (50%)!*\n` +
+      `Pengeluaran bulan ini telah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
+      `Sisa budget tersedia: *${formatRp(budgetInfo.remaining)}*.`;
+  }
+
+  return { alertType, alertMessage, budgetInfo };
+}

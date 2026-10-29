@@ -1,4 +1,5 @@
-export type TransactionType = 'Pengeluaran' | 'Pemasukan';
+export type TransactionType = 'Pemasukan' | 'Pengeluaran';
+
 export type WalletType = 'Bank' | 'E-Wallet' | 'Cash';
 
 export interface WalletBalances {
@@ -8,14 +9,21 @@ export interface WalletBalances {
   total: number;
 }
 
+export interface TransferWalletParams {
+  activeBook: string;
+  fromWallet: WalletType;
+  toWallet: WalletType;
+  amount: number;
+  senderName?: string;
+}
+
 export interface ParsedTransaction {
   type: TransactionType;
-  amount: number;
   category: string;
+  amount: number;
   description: string;
-  date: string; // Format: YYYY-MM-DD
+  date: string;
   noteLink?: string;
-  rawMerchantOrItem?: string;
   wallet?: string;
 }
 
@@ -23,14 +31,15 @@ export interface ExpenseDetail {
   date: string;
   category: string;
   nominal: number;
+  amount?: number;
   description: string;
   noteLink?: string;
   wallet?: string;
 }
 
 export interface SummaryReport {
-  isAllTime: boolean;
-  periodeLabel: string;
+  isAllTime?: boolean;
+  periodeLabel?: string;
   totalPengeluaran: number;
   totalPemasukan: number;
   saldo: number;
@@ -39,6 +48,7 @@ export interface SummaryReport {
   categoryIncome: Record<string, number>;
   expenseDetails: ExpenseDetail[];
   incomeDetails: ExpenseDetail[];
+  bookName?: string;
   walletBalances?: WalletBalances;
 }
 
@@ -107,9 +117,41 @@ export interface WebTransactionItem {
   wallet?: string;
 }
 
+export interface BudgetInfo {
+  book: string;
+  month: string; // 'YYYY-MM'
+  monthLabel: string; // 'Oktober 2026'
+  amount: number;
+  spent: number;
+  remaining: number;
+  percentage: number;
+  status: 'none' | 'safe' | 'half' | 'warning' | 'overbudget';
+}
+
+export interface MonthlyStatsItem {
+  month: string; // '2026-10'
+  monthLabel: string; // 'Oktober 2026'
+  income: number;
+  expense: number;
+  balance: number;
+  budget?: number;
+  percentageOfBudget?: number;
+  expenseChangePercent?: number; // Perubahan % dibanding bulan sebelumnya (+ / -)
+}
+
+export interface MonthlyComparisonReport {
+  months: MonthlyStatsItem[];
+  highestIncomeMonth?: { month: string; monthLabel: string; amount: number };
+  highestExpenseMonth?: { month: string; monthLabel: string; amount: number };
+  lowestExpenseMonth?: { month: string; monthLabel: string; amount: number };
+  averageMonthlyIncome: number;
+  averageMonthlyExpense: number;
+}
+
 export interface WebFinanceData {
   books: string[];
   activeBook: string;
+  bookBalances?: Record<string, number>;
   transactions: WebTransactionItem[];
   stats: {
     totalPemasukan: number;
@@ -120,5 +162,7 @@ export interface WebFinanceData {
     categoryIncome: Record<string, number>;
     walletBalances?: WalletBalances;
   };
+  budget?: BudgetInfo;
+  monthlyComparison?: MonthlyComparisonReport;
   lastUpdated: string;
 }
