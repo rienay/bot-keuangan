@@ -314,7 +314,50 @@ export default function FinanceDashboardPage() {
     };
   }, [filteredTransactions, data?.stats, selectedYear]);
 
-  // 1. DATA TREKING HARIAN (Senin s/d Minggu, mencocokkan referensi Net Worth)
+  // Alokasi Dompet (Bank, E-Wallet, Cash) yang difilter sesuai tahun yang dipilih
+  const filteredWalletBalances = useMemo(() => {
+    const balances = {
+      Bank: 0,
+      'E-Wallet': 0,
+      Cash: 0,
+      total: 0,
+      details: {} as Record<string, number>,
+    };
+
+    filteredTransactions.forEach((tx) => {
+      const wStr = (tx.wallet || '').toLowerCase();
+      const isBank = wStr.includes('bank');
+      const isEwallet =
+        wStr.includes('wallet') ||
+        wStr.includes('e-wallet') ||
+        wStr.includes('dana') ||
+        wStr.includes('gopay') ||
+        wStr.includes('ovo') ||
+        wStr.includes('shopeepay');
+      const isCash = wStr.includes('cash') || wStr.includes('tunai');
+
+      const change = tx.type === 'Pemasukan' ? tx.amount : -tx.amount;
+
+      if (isBank) {
+        balances.Bank += change;
+      } else if (isEwallet) {
+        balances['E-Wallet'] += change;
+      } else if (isCash) {
+        balances.Cash += change;
+      } else {
+        balances.Cash += change;
+      }
+
+      if (tx.wallet) {
+        balances.details[tx.wallet] = (balances.details[tx.wallet] || 0) + change;
+      }
+    });
+
+    balances.total = balances.Bank + balances['E-Wallet'] + balances.Cash;
+    return balances;
+  }, [filteredTransactions]);
+
+  // 1. DATA TREKING HARIAN (Senin s/d Minggu, mencocokkan saldo kas sesuai tahun aktif)
   const dailyTracking = useMemo(() => {
     const now = new Date();
     const currentDayOfWeek = (now.getDay() + 6) % 7; // 0 = Mon, 1 = Tue, ..., 3 = Thu, ..., 6 = Sun
@@ -327,11 +370,11 @@ export default function FinanceDashboardPage() {
     const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const DAY_LABELS_ID = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
-    const allTx = (data?.transactions || []).filter((tx) => !isTransferTx(tx));
+    const activeTx = filteredTransactions.filter((tx) => !isTransferTx(tx));
 
-    // Hitung saldo awal sebelum Senin minggu ini
+    // Hitung saldo awal sebelum Senin minggu ini dalam tahun yang dipilih
     let baselineBalance = 0;
-    allTx.forEach((tx) => {
+    activeTx.forEach((tx) => {
       const d = parseTxDate(tx.date);
       if (d && d < monday) {
         if (tx.type === 'Pemasukan') baselineBalance += tx.amount;
@@ -349,7 +392,7 @@ export default function FinanceDashboardPage() {
       let income = 0;
       let expense = 0;
 
-      allTx.forEach((tx) => {
+      activeTx.forEach((tx) => {
         const d = parseTxDate(tx.date);
         if (
           d &&
@@ -847,7 +890,7 @@ export default function FinanceDashboardPage() {
                 <span className={`crm-daily-growth-badge ${dailyChartMode === 'spent' ? 'expense' : 'balance'}`}>
                   {dailyChartMode === 'spent'
                     ? (activeDayData.isToday ? '🔴 Belanja Hari Ini' : activeDayData.isPastOrToday ? '📅 Belanja' : '⏳ Estimasi')
-                    : '🟢 Akumulasi Real-Time'}
+                    : `🟢 Saldo Kas ${selectedYear === 'Semua' ? 'All-Time' : selectedYear}`}
                 </span>
                 <span className="crm-daily-date-label">
                   {activeDayData.dayNameId}, {activeDayData.dateFormatted}
@@ -1267,78 +1310,92 @@ export default function FinanceDashboardPage() {
         {/* 5. CRM BOTTOM ROW: DOMPET ALLOCATION + PERFORMANCE BENCHMARKS */}
         <section className="crm-bottom-grid">
           {/* Card Dompet & Saldo Aktif */}
-          {data?.stats?.walletBalances && (
-            <div className="crm-card crm-wallets-card">
-              <div className="crm-card-header">
-                <div>
-                  <h2 className="crm-card-title">Alokasi Dompet & Rekening</h2>
-                  <div className="crm-card-subtitle">Saldo fisik & digital yang siap digunakan</div>
+          <div className="crm-card crm-wallets-card">
+            <div className="crm-card-header">
+              <div>
+                <h2 className="crm-card-title">Alokasi Dompet & Rekening</h2>
+                <div className="crm-card-subtitle">
+                  Saldo fisik & digital tahun {selectedYear === 'Semua' ? 'akumulasi' : selectedYear}
+                </div>
+              </div>
+            </div>
+
+            <div className="crm-wallets-list">
+              {/* Bank */}
+              <div className="crm-wallet-item">
+                <div className="crm-wallet-icon-box">🏦</div>
+                <div className="crm-wallet-info">
+                  <div className="crm-wallet-name">Bank</div>
+                  <div className="crm-wallet-val">
+                    {formatRupiah(filteredWalletBalances.Bank)}
+                  </div>
+                  {filteredWalletBalances.details &&
+                    Object.keys(filteredWalletBalances.details).some((k) => k.toLowerCase().includes('bank')) && (
+                      <div className="crm-wallet-subchips">
+                        {Object.entries(filteredWalletBalances.details)
+                          .filter(([k]) => k.toLowerCase().includes('bank'))
+                          .map(([k, val]) => (
+                            <span key={k} className="crm-subchip">
+                              {k.replace(/^Bank - /i, '')}: {formatRupiah(val)}
+                            </span>
+                          ))}
+                      </div>
+                    )}
                 </div>
               </div>
 
-              <div className="crm-wallets-list">
-                {/* Bank */}
-                <div className="crm-wallet-item">
-                  <div className="crm-wallet-icon-box">🏦</div>
-                  <div className="crm-wallet-info">
-                    <div className="crm-wallet-name">Bank</div>
-                    <div className="crm-wallet-val">
-                      {formatRupiah(data.stats.walletBalances.Bank)}
-                    </div>
-                    {data.stats.walletBalances.details &&
-                      Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('Bank')) && (
-                        <div className="crm-wallet-subchips">
-                          {Object.entries(data.stats.walletBalances.details)
-                            .filter(([k]) => k.startsWith('Bank'))
-                            .map(([k, val]) => (
-                              <span key={k} className="crm-subchip">
-                                {k.replace(/^Bank - /, '')}: {formatRupiah(val)}
-                              </span>
-                            ))}
-                        </div>
-                      )}
+              {/* E-Wallet */}
+              <div className="crm-wallet-item">
+                <div className="crm-wallet-icon-box">📱</div>
+                <div className="crm-wallet-info">
+                  <div className="crm-wallet-name">E-Wallet</div>
+                  <div className="crm-wallet-val">
+                    {formatRupiah(filteredWalletBalances['E-Wallet'])}
                   </div>
+                  {filteredWalletBalances.details &&
+                    Object.keys(filteredWalletBalances.details).some(
+                      (k) =>
+                        k.toLowerCase().includes('wallet') ||
+                        k.toLowerCase().includes('dana') ||
+                        k.toLowerCase().includes('gopay') ||
+                        k.toLowerCase().includes('ovo') ||
+                        k.toLowerCase().includes('shopeepay')
+                    ) && (
+                      <div className="crm-wallet-subchips">
+                        {Object.entries(filteredWalletBalances.details)
+                          .filter(
+                            ([k]) =>
+                              k.toLowerCase().includes('wallet') ||
+                              k.toLowerCase().includes('dana') ||
+                              k.toLowerCase().includes('gopay') ||
+                              k.toLowerCase().includes('ovo') ||
+                              k.toLowerCase().includes('shopeepay')
+                          )
+                          .map(([k, val]) => (
+                            <span key={k} className="crm-subchip">
+                              {k.replace(/^E-Wallet - /i, '')}: {formatRupiah(val)}
+                            </span>
+                          ))}
+                      </div>
+                    )}
                 </div>
+              </div>
 
-                {/* E-Wallet */}
-                <div className="crm-wallet-item">
-                  <div className="crm-wallet-icon-box">📱</div>
-                  <div className="crm-wallet-info">
-                    <div className="crm-wallet-name">E-Wallet</div>
-                    <div className="crm-wallet-val">
-                      {formatRupiah(data.stats.walletBalances['E-Wallet'])}
-                    </div>
-                    {data.stats.walletBalances.details &&
-                      Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('E-Wallet')) && (
-                        <div className="crm-wallet-subchips">
-                          {Object.entries(data.stats.walletBalances.details)
-                            .filter(([k]) => k.startsWith('E-Wallet'))
-                            .map(([k, val]) => (
-                              <span key={k} className="crm-subchip">
-                                {k.replace(/^E-Wallet - /, '')}: {formatRupiah(val)}
-                              </span>
-                            ))}
-                        </div>
-                      )}
+              {/* Cash */}
+              <div className="crm-wallet-item">
+                <div className="crm-wallet-icon-box">💵</div>
+                <div className="crm-wallet-info">
+                  <div className="crm-wallet-name">Cash (Uang Fisik)</div>
+                  <div className="crm-wallet-val">
+                    {formatRupiah(filteredWalletBalances.Cash)}
                   </div>
-                </div>
-
-                {/* Cash */}
-                <div className="crm-wallet-item">
-                  <div className="crm-wallet-icon-box">💵</div>
-                  <div className="crm-wallet-info">
-                    <div className="crm-wallet-name">Cash (Uang Fisik)</div>
-                    <div className="crm-wallet-val">
-                      {formatRupiah(data.stats.walletBalances.Cash)}
-                    </div>
-                    <div className="crm-wallet-subchips">
-                      <span className="crm-subchip">Uang Tunai di Dompet</span>
-                    </div>
+                  <div className="crm-wallet-subchips">
+                    <span className="crm-subchip">Uang Tunai di Dompet</span>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Card Performance Rekor & Rata-Rata */}
           {data?.monthlyComparison && (
