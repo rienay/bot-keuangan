@@ -1330,7 +1330,7 @@ export default function FinanceDashboardPage() {
               💬 Ingin mencatat pemasukan atau pengeluaran baru?
             </h3>
             <p style={{ fontSize: '0.85rem', color: '#881337' }}>
-              Gunakan bot Telegram kami. Cukup ketik chat biasa (contoh: <i>Beli konsumsi 35rb</i>) atau kirim foto nota struk belanja!
+              Gunakan bot Telegram kami. Cukup ketik chat biasa (contoh: <i>Makan malam sate 45rb</i>, <i>Nabung 500rb</i>) atau kirim foto nota struk belanja!
             </p>
           </div>
           <a

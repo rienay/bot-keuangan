@@ -28,7 +28,6 @@ import {
 } from './googleSheets';
 import { uploadReceiptToDrive, getDriveConfigStatus, testDriveUpload } from './googleDrive';
 import { formatPrivateKey, getGoogleAuth } from './googleAuth';
-import { generateNotaPdf, HARGA_PER_KG, rupiahFormat } from './generateNota';
 import { ExpenseDetail } from './types';
 import {
   checkUserAccess,
@@ -116,23 +115,6 @@ function buildWalletKeyboard(bookName: string, rowNumber: number, selectedWallet
     .text(selectedWallet === 'Cash' ? '✅ 💵 Cash' : '💵 Cash', `set_wallet:${bookName}:${rowNumber}:Cash`);
 }
 
-// ============================================================
-// STATE MACHINE: Percakapan multi-step untuk /nota
-// ============================================================
-type NotaStep = 'invoice_no' | 'tanggal' | 'nama' | 'alamat' | 'catatan' | 'items';
-interface NotaState {
-  step: NotaStep;
-  data: {
-    noInvoice?: string;
-    tanggal?: string;
-    namaKepada?: string;
-    alamatKepada?: string;
-    catatan?: string;
-    items: number[];
-  };
-}
-// Map: chatId → state nota yang sedang berlangsung
-const notaStates = new Map<number, NotaState>();
 
 // ============================================================
 // STATE: Unggah ulang foto nota untuk transaksi tertentu
@@ -363,8 +345,7 @@ bot.command(['start', 'help'], async (ctx) => {
 bot.command('buat', async (ctx) => {
   const chatId = ctx.chat.id;
   createBookStates.set(chatId, true);
-  notaStates.delete(chatId);
-  transferStates.delete(chatId);
+    transferStates.delete(chatId);
 
   await ctx.reply(
     `📝 *Buat Pos / Tabungan Baru*\n\n` +
@@ -832,8 +813,7 @@ async function handleStartPindahSaldo(ctx: any, argsText: string = '') {
   await ctx.replyWithChatAction('typing');
 
   createBookStates.delete(chatId);
-  notaStates.delete(chatId);
-  transferStates.delete(chatId);
+    transferStates.delete(chatId);
 
   const summary = await getAllSheetsSummary();
   const books = summary.books.map((b) => ({ bookName: b.bookName, saldo: b.saldo }));
@@ -2278,8 +2258,7 @@ async function processNotaStep(ctx: any, chatId: number, text: string): Promise<
           await ctx.reply('⚠️ Belum ada item yang ditambahkan. Masukkan berat (kg) minimal 1 item.');
           break;
         }
-        notaStates.delete(chatId);
-        await ctx.reply('⏳ _Sedang membuat nota PDF..._', { parse_mode: 'Markdown' });
+                await ctx.reply('⏳ _Sedang membuat nota PDF..._', { parse_mode: 'Markdown' });
         try {
           const pdfBuffer = await generateNotaPdf({
             noInvoice: state.data.noInvoice!,
@@ -2327,8 +2306,7 @@ async function processNotaStep(ctx: any, chatId: number, text: string): Promise<
       const nextItemNum = itemIdx + 1;
 
       if (itemIdx >= 10) {
-        notaStates.delete(chatId);
-        await ctx.reply('✅ Item penuh (maks 10). Membuat nota...');
+                await ctx.reply('✅ Item penuh (maks 10). Membuat nota...');
         const pdfBuffer = await generateNotaPdf({
           noInvoice: state.data.noInvoice!,
           tanggal: state.data.tanggal!,
@@ -2554,12 +2532,6 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
-  // === 2. Cek apakah pengguna sedang dalam mode /nota ===
-  if (notaStates.has(chatId)) {
-    await processNotaStep(ctx, chatId, text);
-    return;
-  }
-
   // === 3. Cek apakah pengguna sedang dalam proses input nominal /pindahsaldo ===
   const tState = transferStates.get(chatId);
   if (tState && tState.step === 'input_amount') {
@@ -2666,7 +2638,6 @@ bot.on('message:text', async (ctx) => {
       'recapkas',
       'cekfoto',
       'unggahfoto',
-      'nota',
       'debug',
       'akses',
       'aksesbot',

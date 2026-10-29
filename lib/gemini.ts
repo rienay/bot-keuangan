@@ -87,19 +87,29 @@ Aturan Penting:
    - Jika tanggal spesifik seperti "tgl 5 agustus", "10/09/2026", "2 hari lalu", konversikan ke format standar YYYY-MM-DD.
    - Jika tidak ada tanggal yang disebut, gunakan tanggal hari ini: ${todayStr}.
 3. Tipe:
-   - "Pemasukan": jika ada uang masuk (gaji, transfer masuk, penjualan, pinjam uang/utang baru, atau orang bayar piutang ke kita).
-   - "Pengeluaran": jika ada uang keluar (beli barang, bayar konsumsi, bensin, pinjamkan uang ke orang/kasbon/piutang, atau bayar cicilan utang kita).
-4. Kategori: WAJIB pilih salah satu dari kategori berikut yang paling relevan:
-   - "Konsumsi": untuk makanan, minuman, snack, catering, kopi, air mineral, dll.
-   - "Perlengkapan": untuk alat, ATK, perlengkapan acara/kantor, banner, lakban, kabel, sewa alat, dll.
-   - "Transportasi": untuk bensin, ongkir, grab/gojek, sewa kendaraan, tol, parkir, dll.
-   - "Honor": untuk upah/fee pembicara, juri, narasumber, pengisi acara, insentif, gaji, dll.
-   - "Media": untuk publikasi, dokumentasi, cetak poster/flyer, promosi, kamera, konten, dll.
-   - "Peserta": untuk biaya terkait peserta, registrasi/tiket peserta, id card, sertifikat, merchandise/souvenir peserta, dll.
-   - "Bendahara": untuk kas, uang modal/kas kecil, transfer dana, simpanan, admin bank, dll.
-   - "Utang": untuk uang yang kita pinjam dari orang/pihak lain, atau pelunasan/cicilan utang kita ke orang lain.
-   - "Piutang": untuk uang yang kita pinjamkan/kasbon ke orang lain, atau penerimaan uang saat orang melunasi utangnya ke kita.
-   - "Lain-lain": hanya jika benar-benar tidak cocok dengan kategori di atas.
+   - "Pemasukan": jika ada uang masuk (gaji, bonus, tabungan bersama, freelance, hadiah/THR, penjualan bisnis/sampingan).
+   - "Pengeluaran": jika ada uang keluar (makanan/minuman, kencan/ngedate, belanja kebutuhan, bensin/transportasi, tagihan/kos, perawatan).
+4. Kategori: WAJIB pilih salah satu kategori keuangan pribadi & tabungan berdua berikut yang paling relevan:
+   Jika Pemasukan:
+   - "Gaji": untuk gaji bulanan, upah kerja, lembur, payroll kantor.
+   - "Bonus": untuk bonus kerja, insentif, tunjangan, THR, reward.
+   - "Tabungan": untuk setoran tabungan berdua, uang yang disisihkan untuk ditabung bersama.
+   - "Bisnis & Sampingan": untuk hasil jualan, freelance, proyek sampingan, side hustle.
+   - "Investasi": untuk dividen, return reksadana/saham, bunga simpanan.
+   - "Hadiah": untuk uang kado ulang tahun, angpau, pemberian keluarga/teman.
+   - "Lain-lain": untuk pemasukan lainnya.
+
+   Jika Pengeluaran:
+   - "Makanan & Minuman": untuk sarapan, makan siang/malam, ngopi, jajan, cafe, resto, kulineran, groceries belanja bahan masakan/sayur/buah, pesan makan online (GoFood, ShopeeFood, GrabFood).
+   - "Kencan & Hiburan": untuk kencan/ngedate bareng pasangan, nonton bioskop (XXI/CGV), jalan-jalan, liburan/wisata, tiket masuk tempat wisata, nonton konser, karaoke, staycation.
+   - "Belanja & Kebutuhan": untuk pakaian, baju, celana, sepatu, outfit, tas, skincare, makeup/kosmetik, belanja online e-commerce (Shopee, Tokopedia, TikTok Shop), perlengkapan rumah/kos, barang pribadi.
+   - "Transportasi": untuk bensin motor/mobil, servis/ganti oli kendaraan, parkir, tarif tol, ojek online (Gojek, Grab, Maxim), tiket KRL/busway/kereta/pesawat.
+   - "Tagihan & Langganan": untuk token listrik PLN, tagihan air PDAM, WiFi internet rumah, pulsa, kuota paket data, sewa kos/kontrakan, langganan aplikasi (Netflix, Spotify, YouTube Premium).
+   - "Kesehatan & Perawatan": untuk obat apotek, vitamin, periksa dokter/klinik, potong rambut/barbershop, salon/facial, gym/olahraga.
+   - "Hadiah & Donasi": untuk kado pasangan/teman/keluarga, amplop kondangan/pernikahan, sedekah/zakat/infaq, traktiran.
+   - "Pendidikan": untuk buku bacaan, kursus online, pelatihan, webinar.
+   - "Pindah Uang": untuk tarik tunai ATM atau top up e-wallet antar dompet sendiri.
+   - "Lain-lain": untuk pengeluaran tak terduga lainnya.
 5. Keterangan: Deskripsi singkat dan jelas tentang transaksi tersebut (sertakan nama orang yang berutang/piutang jika ada di pesan).
 6. Dompet (wallet): Deteksi metode atau penyimpanan saldo:
    - "Bank": jika ada kata transfer, rekening, bank, bca, mandiri, bri, bni, jago, seabank, m-banking, qris.
@@ -172,16 +182,15 @@ Tugas Analisis:
    - Jika Bukti Transfer: sebutkan bank/e-wallet dan nama penerima/pengirim serta berita/catatan transfer jika ada. Contoh: "Transfer BCA ke Budi (Konsumsi)", "QRIS Resto Padang", "Transfer Masuk dari Ahmad".
    - Jika Struk Belanja: nama toko dan barang utama (contoh: "Indomaret", "SPBU Pertamina").
    - Utamakan informasi dari Caption pengguna jika pengguna menuliskan catatan tambahan.
-5. KATEGORI (category): WAJIB pilih salah satu kategori yang paling relevan:
-   - "Konsumsi": untuk makanan, minuman, katering, resto, cafe, minimarket bahan makanan.
-   - "Perlengkapan": untuk alat, ATK, hardware, sewa alat, banner, operasional kantor/acara.
-   - "Transportasi": bensin, tiket, tol, parkir, ojek/taksi online, sewa mobil.
-   - "Honor": fee/honor pembicara, juri, pengisi acara, upah kerja, gaji.
-   - "Media": cetak flyer/poster, dokumentasi, kamera, promosi, ads.
-   - "Peserta": registrasi peserta, seminar kit, souvenir, sertifikat.
-   - "Bendahara": transfer kas, tarik tunai, kas kecil, biaya admin, uang modal.
-   - "Utang": pinjaman yang kita terima atau pembayaran cicilan/pelunasan utang ke orang lain.
-   - "Piutang": pinjaman yang kita berikan ke orang lain (kasbon) atau orang melunasi utangnya ke kita.
+5. KATEGORI (category): WAJIB pilih salah satu kategori pribadi & pasangan yang paling relevan:
+   - "Makanan & Minuman": struk resto, warung makan, cafe, minimarket belanja makanan/snack/minuman (Indomaret, Alfamart, Superindo, dll).
+   - "Kencan & Hiburan": struk tiket bioskop (XXI, CGV), tiket rekreasi/wisata, hiburan, hotel/staycation berdua.
+   - "Belanja & Kebutuhan": struk toko baju/fashion, kosmetik/skincare (Guardian, Watsons), perabotan rumah/kos, barang elektronik, belanja e-commerce.
+   - "Transportasi": struk SPBU Pertamina/Shell, karcis parkir, struk tarif tol, tiket transportasi umum, struk Gojek/Grab.
+   - "Tagihan & Langganan": struk bayar listrik PLN, WiFi internet, pulsa, PDAM, sewa kos.
+   - "Kesehatan & Perawatan": struk apotek/obat, klinik, salon, potong rambut.
+   - "Tabungan": bukti transfer tabungan, setoran simpanan bersama.
+   - "Gaji": bukti transfer penerimaan gaji atau upah.
    - "Lain-lain": jika tidak ada yang cocok.
 6. DOMPET (wallet):
    - "Bank": bukti m-banking / transfer bank (BCA, Mandiri, BRI, BNI, Seabank, Jago, dll).
