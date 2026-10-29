@@ -97,7 +97,7 @@ export default function FinanceDashboardPage() {
   const [data, setData] = useState<WebFinanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedBook, setSelectedBook] = useState<string>('Semua');
+  const [selectedBook, setSelectedBook] = useState<string>('Tabungan');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'Pemasukan' | 'Pengeluaran' | 'with_receipt'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -115,7 +115,7 @@ export default function FinanceDashboardPage() {
   // State toggle accordion perbandingan bulanan
   const [showComparison, setShowComparison] = useState(false);
 
-  const fetchData = async (book: string = 'Semua', showRefreshSpinner = false) => {
+  const fetchData = async (book: string = 'Tabungan', showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
     else setLoading(true);
     setError(null);
@@ -140,7 +140,7 @@ export default function FinanceDashboardPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const b = params.get('book');
+      const b = params.get('buku') || params.get('book');
       if (b) {
         setSelectedBook(b);
       }
@@ -157,9 +157,11 @@ export default function FinanceDashboardPage() {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       if (book === 'Semua') {
+        url.searchParams.set('buku', 'Semua');
         url.searchParams.delete('book');
       } else {
-        url.searchParams.set('book', book);
+        url.searchParams.set('buku', book);
+        url.searchParams.delete('book');
       }
       window.history.pushState({}, '', url.toString());
     }
@@ -352,7 +354,7 @@ export default function FinanceDashboardPage() {
                     onClick={() => handleSelectBook(b)}
                   >
                     <span>{emoji}</span>
-                    <span>{b === 'Semua' ? 'Semua Pos' : b}</span>
+                    <span>{b === 'Semua' ? 'Total Gabungan (Semua)' : b}</span>
                     {balance !== undefined && (
                       <span className="book-tab-badge">
                         {formatRupiah(balance)}

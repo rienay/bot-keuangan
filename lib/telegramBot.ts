@@ -767,14 +767,31 @@ bot.command(['cabut', 'revoke'], async (ctx) => {
 
 // Command: /linkuang (Link website keuangan transparan)
 bot.command(['linkuang', 'linkweb', 'dashboard', 'website'], async (ctx) => {
-  const webUrl = 'https://bot-keuangan-ebon.vercel.app';
-  const keyboard = new InlineKeyboard().url('🌸 Buka Website Keuangan', webUrl);
+  const chatId = ctx.chat.id;
+  const [activeBook, books] = await Promise.all([
+    getUserActiveBook(chatId),
+    getAllSheetBooks().catch(() => [DEFAULT_BOOK_NAME]),
+  ]);
+
+  const baseWebUrl = 'https://bot-keuangan-ebon.vercel.app';
+  const activeBookUrl = `${baseWebUrl}/?buku=${encodeURIComponent(activeBook)}`;
+
+  const keyboard = new InlineKeyboard()
+    .url(`📖 Buka Pos Aktif (${activeBook})`, activeBookUrl)
+    .row();
+
+  const otherBooks = books.filter((b) => b.toLowerCase() !== activeBook.toLowerCase());
+  for (const b of otherBooks) {
+    keyboard.url(`🌸 Buka Pos [${b}]`, `${baseWebUrl}/?buku=${encodeURIComponent(b)}`).row();
+  }
+  keyboard.url('📊 Buka Total Gabungan (Semua Pos)', `${baseWebUrl}/?buku=Semua`);
 
   await ctx.reply(
-    `🌸 *Website Dashboard Tabungan & Keuangan Kita 💕*\n\n` +
-      `Sekarang kamu dan pasangan bisa melihat laporan saldo tabungan, rincian pengeluaran, saldo dompet (Bank, E-Wallet, Cash), dan bukti struk nota secara rapi, visual, dan transparan:\n\n` +
-      `👉 [${webUrl}](${webUrl})\n\n` +
-      `💡 *Catatan:* Catat pemasukan/pengeluaran & upload foto nota tetap dilakukan lewat chat bot ini ya! Website tersebut berfungsi khusus untuk melihat & memantau laporan serta grafik tabungan kita bersama. 💕`,
+    `🌸 *Website Dashboard Keuangan Kita 💕*\n\n` +
+      `Setiap pos tabungan memiliki laporan tersendiri dan tidak saling tercampur:\n\n` +
+      `📌 *Pos Aktif Kamu Sekarang:* \`${activeBook}\`\n` +
+      `👉 [Klik untuk Buka Laporan ${activeBook}](${activeBookUrl})\n\n` +
+      `💡 _Kamu juga bisa memilih tombol pos lainnya di bawah untuk melihat laporan masing-masing tabungan secara terpisah!_`,
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
