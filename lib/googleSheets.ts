@@ -225,18 +225,26 @@ export async function createSheetBook(
 ): Promise<{ created: boolean; bookName: string }> {
   const cleanName = sanitizeBookName(rawName);
   if (!cleanName) {
-    throw new Error('Nama kegiatan tidak boleh kosong.');
-  }
-
-  const books = await getAllSheetBooks(true);
-  const existing = books.find((b) => b.toLowerCase() === cleanName.toLowerCase());
-  if (existing) {
-    return { created: false, bookName: existing };
+    throw new Error('Nama pos tabungan tidak boleh kosong.');
   }
 
   const auth = getGoogleAuth();
   const sheets = google.sheets({ version: 'v4', auth });
   const spreadsheetId = getSpreadsheetId();
+
+  // Ambil meta sheets yang ada di spreadsheet untuk cek apakah sudah ada
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const existingSheet = meta.data.sheets?.find(
+    (s) => s.properties?.title?.toLowerCase() === cleanName.toLowerCase()
+  );
+
+  if (existingSheet && existingSheet.properties?.title) {
+    const existingTitle = existingSheet.properties.title;
+    // Sheet sudah ada (mungkin dibuat saat panggilan sebelumnya), pastikan header A1:H1 lengkap
+    await ensureHeaderRow(existingTitle);
+    cachedSheetList = null;
+    return { created: true, bookName: existingTitle };
+  }
 
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId,
@@ -251,15 +259,8 @@ export async function createSheetBook(
     },
   });
 
-  // Tulis header kolom
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `'${cleanName}'!A1:G1`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: {
-      values: [SHEET_COLUMNS],
-    },
-  });
+  // Tulis header kolom lengkap (A1:H1)
+  await ensureHeaderRow(cleanName);
 
   cachedSheetList = null;
   return { created: true, bookName: cleanName };
@@ -978,6 +979,7 @@ export interface RecentTransactionItem {
   noteLink: string;
   hasPhoto: boolean;
   createdAt: string;
+  wallet?: string;
 }
 
 /**
@@ -995,7 +997,7 @@ export async function getRecentTransactionsWithNotes(
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${sheetName}'!A2:G`,
+    range: `'${sheetName}'!A2:H`,
   });
 
   const rows = res.data.values || [];
@@ -1003,7 +1005,7 @@ export async function getRecentTransactionsWithNotes(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw] = row;
+    const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw, dompetRaw] = row;
     if (!tglRaw && !nominalRaw) continue;
 
     const cleanNominal = typeof nominalRaw === 'number'
@@ -1023,6 +1025,7 @@ export async function getRecentTransactionsWithNotes(
       noteLink: link,
       hasPhoto,
       createdAt: String(waktuRaw || '-'),
+      wallet: dompetRaw ? String(dompetRaw).trim() : undefined,
     });
   }
 
@@ -1044,13 +1047,13 @@ export async function getTransactionByRow(
   try {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${sheetName}'!A${rowNumber}:G${rowNumber}`,
+      range: `'${sheetName}'!A${rowNumber}:H${rowNumber}`,
     });
 
     const rows = res.data.values || [];
     if (rows.length === 0) return null;
 
-    const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw] = rows[0];
+    const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw, dompetRaw] = rows[0];
     const cleanNominal = typeof nominalRaw === 'number'
       ? nominalRaw
       : parseInt(String(nominalRaw || 0).replace(/[^0-9]/g, ''), 10) || 0;
@@ -1066,6 +1069,7 @@ export async function getTransactionByRow(
       noteLink: link,
       hasPhoto: link.startsWith('http://') || link.startsWith('https://'),
       createdAt: String(waktuRaw || '-'),
+      wallet: dompetRaw ? String(dompetRaw).trim() : undefined,
     };
   } catch {
     return null;
@@ -1092,7 +1096,7 @@ export async function findMatchingTransactionRow(
   try {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${sheetName}'!A2:G`,
+      range: `'${sheetName}'!A2:H`,
     });
 
     const rows = res.data.values || [];
@@ -1104,7 +1108,7 @@ export async function findMatchingTransactionRow(
     // Scan dari baris paling bawah (transaksi terbaru)
     for (let i = rows.length - 1; i >= 0; i--) {
       const row = rows[i];
-      const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw] = row;
+      const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw, dompetRaw] = row;
       if (!tglRaw && !nominalRaw) continue;
 
       const cleanNominal = typeof nominalRaw === 'number'
@@ -1144,6 +1148,7 @@ export async function findMatchingTransactionRow(
         noteLink: link,
         hasPhoto,
         createdAt: String(waktuRaw || '-'),
+        wallet: dompetRaw ? String(dompetRaw).trim() : undefined,
       };
 
       // Prioritaskan transaksi yang belum memiliki foto

@@ -2576,15 +2576,14 @@ bot.on('message:text', async (ctx) => {
 
       const cmd = result.bookName.toLowerCase().replace(/[^a-z0-9_]/g, '');
       await ctx.reply(
-        `🎉 *Buku Kegiatan Berhasil Dibuat!*\n\n` +
-          `📖 *Buku Aktif Sekarang:* \`${result.bookName}\`\n` +
+        `🎉 *Pos Tabungan Berhasil Dibuat!*\n\n` +
+          `📖 *Tabungan Aktif Sekarang:* \`${result.bookName}\`\n` +
           `📊 Tab baru *${result.bookName}* telah siap di Google Sheets Anda.\n\n` +
           `Mulai sekarang:\n` +
-          `• Chat transaksi & foto nota Anda akan dicatat ke buku ini.\n` +
-          `• Ketik /rekap untuk melihat rekap kegiatan ini.\n` +
-          `• Ketik /rekapkas untuk melihat rekap seluruh kas & kegiatan.\n` +
-          `• Ketik /kas untuk kembali ke Kas Utama.\n` +
-          `• Ketik /${cmd} kapan saja untuk berpindah ke buku ini.`,
+          `• Catatan transaksi & foto nota Anda akan dicatat ke tabungan ini.\n` +
+          `• Ketik /rekap untuk melihat rekap tabungan ini.\n` +
+          `• Ketik /buku untuk memilih atau beralih pos tabungan.\n` +
+          `• Ketik /${cmd} kapan saja untuk langsung berpindah ke pos ini.`,
         { parse_mode: 'Markdown' }
       );
     } catch (err: any) {
