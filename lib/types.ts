@@ -157,6 +157,11 @@ export interface BudgetInfo {
   remaining: number;
   percentage: number;
   status: 'none' | 'safe' | 'half' | 'warning' | 'overbudget';
+  dailyAmount?: number;
+  dailySpent?: number;
+  dailyRemaining?: number;
+  dailyPercentage?: number;
+  dailyStatus?: 'none' | 'safe' | 'half' | 'warning' | 'overbudget';
 }
 
 export interface MonthlyStatsItem {

@@ -28,6 +28,7 @@ import {
   addRegisteredWallet,
   removeRegisteredWallet,
   setBookBudget,
+  setBookDailyBudget,
   getBookBudget,
   getBudgetInfo,
   checkBudgetThresholdAlert,
@@ -190,7 +191,7 @@ async function syncBotCommands(api: any) {
       { command: 'buat', description: 'Buat pos/tabungan baru' },
       { command: 'hapusbuku', description: 'Hapus pos tabungan' },
       { command: 'budget', description: 'Atur budget belanja bulanan' },
-      { command: 'badget', description: 'Atur badget belanja bulanan' },
+      { command: 'badgetharian', description: 'Atur budget belanja harian' },
       { command: 'dompet', description: 'Cek saldo Bank, E-Wallet & Cash' },
       { command: 'pindahuang', description: 'Pindah uang antar dompet' },
       { command: 'pindahsaldo', description: 'Pindah saldo antar tabungan' },
@@ -393,7 +394,8 @@ bot.command(['start', 'help'], async (ctx) => {
       `• /tambahbank <Nama> — Tambah bank baru (misal: BCA, Mandiri, Seabank)\n` +
       `• /tambahewalet <Nama> — Tambah e-wallet baru (misal: Dana, GoPay, ShopeePay)\n` +
       `• /pindahuang — Pindah uang antar akun/dompet\n` +
-      `• /budget <Nominal> — Atur batas pengeluaran bulanan\n\n` +
+      `• /budget <Nominal> — Atur batas pengeluaran bulanan\n` +
+      `• /badgetharian <Nominal> — Atur batas pengeluaran harian\n\n` +
       adminMenuText +
       `📚 *Pos Tabungan Tersedia:*\n` +
       `${booksListText}\n` +
@@ -1793,11 +1795,13 @@ bot.callbackQuery(/^set_wallet:(.+):(\d+):(.+)$/, async (ctx) => {
 });
 
 // ============================================================
-// FITUR ANGGARAN & BUDGET BULANAN (/budget)
+// FITUR ANGGARAN & BUDGET BULANAN & HARIAN (/budget & /badgetharian)
 // ============================================================
 
 const setBudgetStates = new Map<number, { book: string; month: string }>();
+const setDailyBudgetStates = new Map<number, { book: string }>();
 
+// 1. HANDLER BUDGET BULANAN (/budget)
 async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
   const chatId = ctx.chat.id;
   const activeBook = await getUserActiveBook(chatId);
@@ -1813,11 +1817,11 @@ async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
     let nominal = parseNominalInput(args);
     if (!nominal || nominal <= 0) {
       await ctx.reply(
-        '⚠️ *Format nominal budget tidak valid.*\n\n' +
+        '⚠️ *Format nominal budget bulanan tidak valid.*\n\n' +
           'Contoh yang bisa dipahami:\n' +
-          '• `/badget 3jt` (Rp 3.000.000)\n' +
-          '• `/badget 500rb` (Rp 500.000)\n' +
-          '• `/badget 2500000`',
+          '• `/budget 3jt` (Rp 3.000.000)\n' +
+          '• `/budget 500rb` (Rp 500.000)\n' +
+          '• `/budget 2500000`',
         { parse_mode: 'Markdown' }
       );
       return;
@@ -1827,9 +1831,9 @@ async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
       await ctx.reply(
         '💡 *Kamu memasukkan angka: ' + nominal + '*\n\n' +
           'Apakah maksudmu:\n' +
-          '• `/badget ' + nominal + 'rb` (Rp ' + formatRupiah(nominal * 1000) + ')\n' +
-          '• `/badget ' + nominal + 'jt` (Rp ' + formatRupiah(nominal * 1000000) + ')\n\n' +
-          'Silakan ketik ulang dengan satuan ya (contoh: `/badget 3jt` atau `/badget 500rb`)',
+          '• `/budget ' + nominal + 'rb` (Rp ' + formatRupiah(nominal * 1000) + ')\n' +
+          '• `/budget ' + nominal + 'jt` (Rp ' + formatRupiah(nominal * 1000000) + ')\n\n' +
+          'Silakan ketik ulang dengan satuan ya (contoh: `/budget 3jt` atau `/budget 500rb`)',
         { parse_mode: 'Markdown' }
       );
       return;
@@ -1848,12 +1852,12 @@ async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
           '📤 *Terpakai:* ' + formatRupiah(budgetInfo.spent) + ' (' + budgetInfo.percentage + '%)\n' +
           '💵 *Sisa Budget:* *' + formatRupiah(budgetInfo.remaining) + '*\n\n' +
           '📊 Progress: `' + renderProgressBar(budgetInfo.percentage) + '` ' + budgetInfo.percentage + '%\n\n' +
-          '🔔 *Notifikasi Otomatis:* Bot akan otomatis mengirim alert jika pengeluaran mencapai 50%, 80%, atau habis! ✨',
+          '🔔 *Notifikasi Otomatis:* Bot akan otomatis mengirim alert jika pengeluaran bulanan mencapai 50%, 80%, atau habis! ✨',
         { parse_mode: 'Markdown' }
       );
       return;
     } catch (err: any) {
-      await ctx.reply('❌ Gagal menyimpan budget: ' + err.message);
+      await ctx.reply('❌ Gagal menyimpan budget bulanan: ' + err.message);
       return;
     }
   }
@@ -1862,17 +1866,18 @@ async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
     const budgetInfo = await getBudgetInfo(activeBook, nowJakarta);
     if (budgetInfo.amount <= 0) {
       const keyboard = new InlineKeyboard()
-        .text('✏️ Atur Budget Sekarang', 'prompt_set_budget:' + activeBook)
+        .text('✏️ Atur Budget Bulanan', 'prompt_set_budget:' + activeBook)
+        .text('☀️ Budget Harian', 'cmd_budget_harian')
         .row()
         .url('🌸 Buka Web Dashboard', 'https://bot-keuangan-ebon.vercel.app?buku=' + encodeURIComponent(activeBook));
 
       await ctx.reply(
-        '🎯 *Budget Belum Diatur [' + activeBook + ']*\n\n' +
+        '🎯 *Budget Bulanan Belum Diatur [' + activeBook + ']*\n\n' +
           '📅 *Periode:* ' + budgetInfo.monthLabel + '\n' +
           'Kamu belum menentukan batas anggaran belanja (budget) untuk pos ini bulan ini.\n\n' +
-          '💡 *Cara Cepat Atur Budget:*\n' +
-          'Ketik langsung: `/badget <nominal>`\n' +
-          '_(Contoh: `/badget 3jt` atau `/badget 2500000`)_\n' +
+          '💡 *Cara Cepat Atur Budget Bulanan:*\n' +
+          'Ketik langsung: `/budget <nominal>`\n' +
+          '_(Contoh: `/budget 3jt` atau `/budget 2500000`)_\n' +
           'Atau klik tombol di bawah:',
         { parse_mode: 'Markdown', reply_markup: keyboard }
       );
@@ -1880,7 +1885,7 @@ async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
     }
 
     let statusEmoji = '🟢';
-    let statusDesc = 'Pengeluaran masih dalam batas aman.';
+    let statusDesc = 'Pengeluaran bulanan masih dalam batas aman.';
     if (budgetInfo.status === 'overbudget') {
       statusEmoji = '🛑';
       statusDesc = '⚠️ *Overbudget!* Pengeluaran melebihi budget sebesar ' + formatRupiah(Math.abs(budgetInfo.remaining)) + '.';
@@ -1893,10 +1898,11 @@ async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
     }
 
     const keyboard = new InlineKeyboard()
-      .text('✏️ Ubah Budget', 'prompt_set_budget:' + activeBook)
-      .text('📊 Rekap Bulan Ini', 'cmd_rekap')
+      .text('✏️ Ubah Bulanan', 'prompt_set_budget:' + activeBook)
+      .text('☀️ Budget Harian', 'cmd_budget_harian')
       .row()
-      .url('🌸 Buka Web Dashboard', 'https://bot-keuangan-ebon.vercel.app?buku=' + encodeURIComponent(activeBook));
+      .text('📊 Rekap Bulan Ini', 'cmd_rekap')
+      .url('🌸 Web Dashboard', 'https://bot-keuangan-ebon.vercel.app?buku=' + encodeURIComponent(activeBook));
 
     await ctx.reply(
       '🎯 *Status Budget Bulanan [' + activeBook + ']*\n\n' +
@@ -1910,16 +1916,154 @@ async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
       { parse_mode: 'Markdown', reply_markup: keyboard }
     );
   } catch (err: any) {
-    await ctx.reply('❌ Gagal memeriksa budget: ' + err.message);
+    await ctx.reply('❌ Gagal memeriksa budget bulanan: ' + err.message);
   }
 }
 
-bot.command(['budget', 'badget', 'bajet', 'anggaran', 'aturbudget', 'aturbadget'], async (ctx) => {
+// 2. HANDLER BUDGET HARIAN (/badgetharian, /badget, /budgetharian)
+async function handleDailyBudgetCommand(ctx: any, rawArgs: string = '') {
+  const chatId = ctx.chat.id;
+  const activeBook = await getUserActiveBook(chatId);
+  const args = rawArgs.trim();
+
+  const nowJakarta = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
+
+  if (args) {
+    let nominal = parseNominalInput(args);
+    if (!nominal || nominal <= 0) {
+      await ctx.reply(
+        '⚠️ *Format nominal budget harian tidak valid.*\n\n' +
+          'Contoh yang bisa dipahami:\n' +
+          '• `/badgetharian 50rb` (Rp 50.000 / hari)\n' +
+          '• `/badgetharian 100rb` (Rp 100.000 / hari)\n' +
+          '• `/badgetharian 75000`',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    if (nominal > 0 && nominal <= 100) {
+      await ctx.reply(
+        '💡 *Kamu memasukkan angka: ' + nominal + '*\n\n' +
+          'Apakah maksudmu:\n' +
+          '• `/badgetharian ' + nominal + 'rb` (Rp ' + formatRupiah(nominal * 1000) + ')\n' +
+          '• `/badgetharian ' + nominal + 'jt` (Rp ' + formatRupiah(nominal * 1000000) + ')\n\n' +
+          'Silakan ketik ulang dengan satuan ya (contoh: `/badgetharian 50rb` atau `/badgetharian 100rb`)',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    try {
+      await ctx.reply('⏳ Menyimpan budget harian...');
+      await setBookDailyBudget(activeBook, nominal);
+      const budgetInfo = await getBudgetInfo(activeBook);
+
+      const dailySpent = budgetInfo.dailySpent ?? 0;
+      const dailyRemaining = budgetInfo.dailyRemaining ?? (nominal - dailySpent);
+      const dailyPct = budgetInfo.dailyPercentage ?? Math.round((dailySpent / nominal) * 100);
+
+      await ctx.reply(
+        '🎯 *Budget Harian Berhasil Diatur!*\n\n' +
+          '📖 *Pos Tabungan:* `' + activeBook + '`\n' +
+          '📅 *Hari Ini:* ' + nowJakarta + '\n' +
+          '💰 *Budget Harian:* *' + formatRupiah(nominal) + '/hari*\n' +
+          '📤 *Belanja Hari Ini:* ' + formatRupiah(dailySpent) + ' (' + dailyPct + '%)\n' +
+          '💵 *Sisa Budget Hari Ini:* *' + formatRupiah(dailyRemaining) + '*\n\n' +
+          '📊 Progress: `' + renderProgressBar(dailyPct) + '` ' + dailyPct + '%\n\n' +
+          '💡 *Info:* Gunakan `/badgetharian` untuk cek sisa kuota hari ini, dan `/budget` untuk target bulanan.',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    } catch (err: any) {
+      await ctx.reply('❌ Gagal menyimpan budget harian: ' + err.message);
+      return;
+    }
+  }
+
+  // Tanpa argumen: tampilkan status budget harian
+  try {
+    const budgetInfo = await getBudgetInfo(activeBook);
+    const dailyAmount = budgetInfo.dailyAmount ?? 0;
+    const dailySpent = budgetInfo.dailySpent ?? 0;
+    const dailyRemaining = budgetInfo.dailyRemaining ?? (dailyAmount - dailySpent);
+    const dailyPct = budgetInfo.dailyPercentage ?? (dailyAmount > 0 ? Math.round((dailySpent / dailyAmount) * 100) : 0);
+
+    if (dailyAmount <= 0) {
+      const keyboard = new InlineKeyboard()
+        .text('✏️ Atur Budget Harian', 'prompt_set_daily_budget:' + activeBook)
+        .text('📅 Budget Bulanan', 'cmd_budget_bulanan')
+        .row()
+        .url('🌸 Buka Web Dashboard', 'https://bot-keuangan-ebon.vercel.app?buku=' + encodeURIComponent(activeBook));
+
+      await ctx.reply(
+        '🎯 *Budget Harian Belum Diatur [' + activeBook + ']*\n\n' +
+          '📅 *Hari Ini:* ' + nowJakarta + '\n' +
+          'Kamu belum menentukan batas belanja harian untuk pos ini.\n\n' +
+          '💡 *Cara Cepat Atur Budget Harian:*\n' +
+          'Ketik langsung: `/badgetharian <nominal>`\n' +
+          '_(Contoh: `/badgetharian 50rb` atau `/badgetharian 100rb`)_\n' +
+          'Atau klik tombol di bawah:',
+        { parse_mode: 'Markdown', reply_markup: keyboard }
+      );
+      return;
+    }
+
+    let statusEmoji = '🟢';
+    let statusDesc = 'Pengeluaran hari ini masih aman di bawah limit harian.';
+    if (dailyPct >= 100) {
+      statusEmoji = '🛑';
+      statusDesc = '⚠️ *Overbudget!* Pengeluaran hari ini melebihi budget harian sebesar ' + formatRupiah(Math.abs(dailyRemaining)) + '.';
+    } else if (dailyPct >= 80) {
+      statusEmoji = '🚨';
+      statusDesc = 'Peringatan: Kuota budget hari ini sudah hampir habis (>80%)! Harap hemat.';
+    } else if (dailyPct >= 50) {
+      statusEmoji = '⚠️';
+      statusDesc = 'Perhatian: Kuota budget hari ini sudah terpakai separuh (>=50%).';
+    }
+
+    const keyboard = new InlineKeyboard()
+      .text('✏️ Ubah Harian', 'prompt_set_daily_budget:' + activeBook)
+      .text('📅 Budget Bulanan', 'cmd_budget_bulanan')
+      .row()
+      .url('🌸 Buka Web Dashboard', 'https://bot-keuangan-ebon.vercel.app?buku=' + encodeURIComponent(activeBook));
+
+    await ctx.reply(
+      '🎯 *Status Budget Harian [' + activeBook + ']*\n\n' +
+        '📅 *Hari Ini:* ' + nowJakarta + '\n' +
+        '━━━━━━━━━━━━━━━━━━━━━\n' +
+        '💰 *Budget Harian:* *' + formatRupiah(dailyAmount) + '/hari*\n' +
+        '📤 *Realisasi Hari Ini:* ' + formatRupiah(dailySpent) + ' (' + dailyPct + '%)\n' +
+        '💵 *Sisa Kuota Hari Ini:* *' + formatRupiah(dailyRemaining) + '*\n\n' +
+        '📊 Progress: `' + renderProgressBar(dailyPct) + '` *' + dailyPct + '%*\n\n' +
+        statusEmoji + ' *Status:* ' + statusDesc,
+      { parse_mode: 'Markdown', reply_markup: keyboard }
+    );
+  } catch (err: any) {
+    await ctx.reply('❌ Gagal memeriksa budget harian: ' + err.message);
+  }
+}
+
+// BINDING COMMANDS
+bot.command(['budget', 'budgetbulanan', 'aturbudget', 'anggaran'], async (ctx) => {
   const text = ctx.message?.text || '';
-  const args = text.replace(/^\/(budget|badget|bajet|anggaran|aturbudget|aturbadget)(?:@\w+)?/i, '').trim();
+  const args = text.replace(/^\/(budget|budgetbulanan|aturbudget|anggaran)(?:@\w+)?/i, '').trim();
   await handleBudgetCommand(ctx, args);
 });
 
+bot.command(['badgetharian', 'budgetharian', 'badget', 'bajetharian', 'aturbadget'], async (ctx) => {
+  const text = ctx.message?.text || '';
+  const args = text.replace(/^\/(badgetharian|budgetharian|badget|bajetharian|aturbadget)(?:@\w+)?/i, '').trim();
+  await handleDailyBudgetCommand(ctx, args);
+});
+
+// CALLBACK QUERIES BUDGET
 bot.callbackQuery(/^prompt_set_budget:(.+)$/, async (ctx) => {
   const targetBook = ctx.match[1];
   const chatId = ctx.chat?.id;
@@ -1936,11 +2080,38 @@ bot.callbackQuery(/^prompt_set_budget:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   await ctx.reply(
     `✏️ *Atur Budget Bulanan [${targetBook}]*\n\n` +
-      `Silakan ketik nominal budget belanja untuk bulan ini:\n` +
+      `Silakan ketik nominal target belanja bulan ini:\n` +
       `_(contoh: \`3jt\`, \`3000000\`, \`4.5jt\`)_\n\n` +
       `Ketik *batal* jika ingin membatalkan.`,
     { parse_mode: 'Markdown' }
   );
+});
+
+bot.callbackQuery(/^prompt_set_daily_budget:(.+)$/, async (ctx) => {
+  const targetBook = ctx.match[1];
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  setDailyBudgetStates.set(chatId, { book: targetBook });
+
+  await ctx.answerCallbackQuery();
+  await ctx.reply(
+    `✏️ *Atur Budget Harian [${targetBook}]*\n\n` +
+      `Silakan ketik batas belanja jajan per hari:\n` +
+      `_(contoh: \`50rb\`, \`100rb\`, \`75000\`)_\n\n` +
+      `Ketik *batal* jika ingin membatalkan.`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+bot.callbackQuery('cmd_budget_bulanan', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleBudgetCommand(ctx, '');
+});
+
+bot.callbackQuery('cmd_budget_harian', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleDailyBudgetCommand(ctx, '');
 });
 
 // Command: /debug
@@ -2997,6 +3168,63 @@ bot.on('message:text', async (ctx) => {
       return;
     } catch (err: any) {
       await ctx.reply('❌ Gagal menyimpan budget: ' + err.message);
+      return;
+    }
+  }
+
+  // === 1d2. Cek apakah pengguna sedang dalam proses input nominal budget harian ===
+  const dailyState = setDailyBudgetStates.get(chatId);
+  if (dailyState) {
+    if (text.toLowerCase() === 'batal' || text === '/batal') {
+      setDailyBudgetStates.delete(chatId);
+      await ctx.reply('❌ Pengaturan budget harian dibatalkan.');
+      return;
+    }
+
+    let nominal = parseNominalInput(text);
+    if (!nominal || nominal <= 0) {
+      await ctx.reply(
+        '⚠️ Format nominal tidak valid. Silakan ketik nominal yang benar (contoh: `50rb` atau `100000`), atau ketik *batal*.',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    if (nominal > 0 && nominal <= 100) {
+      await ctx.reply(
+        '💡 *Kamu memasukkan angka: ' + nominal + '*\n\n' +
+          'Apakah maksudmu:\n' +
+          '• `' + nominal + 'rb` (Rp ' + formatRupiah(nominal * 1000) + ')\n' +
+          '• `' + nominal + 'jt` (Rp ' + formatRupiah(nominal * 1000000) + ')\n\n' +
+          'Silakan sertakan satuannya ya (contoh: `50rb` atau `100rb`), atau ketik *batal*.',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    setDailyBudgetStates.delete(chatId);
+    try {
+      await ctx.reply('⏳ Menyimpan budget harian...');
+      await setBookDailyBudget(dailyState.book, nominal);
+      const budgetInfo = await getBudgetInfo(dailyState.book);
+
+      const dailySpent = budgetInfo.dailySpent ?? 0;
+      const dailyRemaining = budgetInfo.dailyRemaining ?? (nominal - dailySpent);
+      const dailyPct = budgetInfo.dailyPercentage ?? Math.round((dailySpent / nominal) * 100);
+
+      await ctx.reply(
+        '🎯 *Budget Harian Berhasil Diatur!*\n\n' +
+          '📖 *Pos Tabungan:* `' + dailyState.book + '`\n' +
+          '💰 *Budget Harian:* *' + formatRupiah(nominal) + '/hari*\n' +
+          '📤 *Belanja Hari Ini:* ' + formatRupiah(dailySpent) + ' (' + dailyPct + '%)\n' +
+          '💵 *Sisa Budget Hari Ini:* *' + formatRupiah(dailyRemaining) + '*\n\n' +
+          '📊 Progress: `' + renderProgressBar(dailyPct) + '` ' + dailyPct + '%\n\n' +
+          '🔔 *Tips:* Bot akan memantau pengeluaran harian dan memberi alert saat kuota hampir habis!',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    } catch (err: any) {
+      await ctx.reply('❌ Gagal menyimpan budget harian: ' + err.message);
       return;
     }
   }

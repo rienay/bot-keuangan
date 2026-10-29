@@ -142,6 +142,21 @@ function getCategoryConfig(categoryName: string, index: number = 0): CategorySty
   };
 }
 
+const MONTH_NAMES_ID = [
+  { num: '01', short: 'Jan', full: 'Januari' },
+  { num: '02', short: 'Feb', full: 'Februari' },
+  { num: '03', short: 'Mar', full: 'Maret' },
+  { num: '04', short: 'Apr', full: 'April' },
+  { num: '05', short: 'Mei', full: 'Mei' },
+  { num: '06', short: 'Jun', full: 'Juni' },
+  { num: '07', short: 'Jul', full: 'Juli' },
+  { num: '08', short: 'Agu', full: 'Agustus' },
+  { num: '09', short: 'Sep', full: 'September' },
+  { num: '10', short: 'Okt', full: 'Oktober' },
+  { num: '11', short: 'Nov', full: 'November' },
+  { num: '12', short: 'Des', full: 'Desember' },
+];
+
 export default function FinanceDashboardPage() {
   const [data, setData] = useState<WebFinanceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,10 +164,12 @@ export default function FinanceDashboardPage() {
   const [selectedBook, setSelectedBook] = useState<string>('Tabungan');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // State untuk form edit budget bulanan
+  // State untuk form edit budget bulanan & harian
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
   const [isSavingBudget, setIsSavingBudget] = useState(false);
+  const [budgetViewMode, setBudgetViewMode] = useState<'monthly' | 'daily'>('monthly');
+  const [budgetEditType, setBudgetEditType] = useState<'monthly' | 'daily'>('monthly');
 
   // Active hover slice state for interactive Donut Chart
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -163,6 +180,8 @@ export default function FinanceDashboardPage() {
 
   // Filter range bulan untuk Bar Chart (default 6 bulan agar rapi di HP)
   const [barChartRange, setBarChartRange] = useState<'6' | '12' | 'all'>('6');
+  // Filter bulan spesifik 1 - 12 (default 'all')
+  const [selectedMonthPill, setSelectedMonthPill] = useState<string>('all');
   // State untuk expand/collapse kategori (default tampilkan 5 teratas agar tidak memanjang)
   const [showAllCategories, setShowAllCategories] = useState(false);
   // Filter Tahun Transaksi (default tahun aktif 2026 agar tidak menumpuk semua tahun)
@@ -230,7 +249,7 @@ export default function FinanceDashboardPage() {
       const res = await fetch('/api/budget', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book: targetBook, amount: num }),
+        body: JSON.stringify({ book: targetBook, amount: num, type: budgetEditType }),
       });
       const json = await res.json();
       if (json.success) {
@@ -469,7 +488,7 @@ export default function FinanceDashboardPage() {
     return { segments, total, C, R };
   }, [categoryExpensesList]);
 
-  // 3. Rincian Arus Kas Bulanan (Tampilan List Vertikal agar tidak gepeng di HP saat pilih 12 bulan)
+  // 3. Rincian Arus Kas Bulanan (Tampilan List Vertikal dengan Filter Bulan 1 - 12)
   const cashflowBarData = useMemo(() => {
     if (!data?.monthlyComparison?.months || data.monthlyComparison.months.length === 0) {
       return [];
@@ -480,10 +499,14 @@ export default function FinanceDashboardPage() {
       months = months.filter((m) => m.month.startsWith(`${selectedYear}-`));
     }
 
-    if (barChartRange === '6') {
-      months = months.slice(-6);
-    } else if (barChartRange === '12') {
-      months = months.slice(-12);
+    if (selectedMonthPill !== 'all') {
+      months = months.filter((m) => m.month.endsWith(`-${selectedMonthPill}`));
+    } else {
+      if (barChartRange === '6') {
+        months = months.slice(-6);
+      } else if (barChartRange === '12') {
+        months = months.slice(-12);
+      }
     }
 
     if (months.length === 0) {
@@ -492,17 +515,110 @@ export default function FinanceDashboardPage() {
 
     // Urutkan bulan terbaru di paling atas
     return months.slice().reverse();
-  }, [data?.monthlyComparison?.months, selectedYear, barChartRange]);
+  }, [data?.monthlyComparison?.months, selectedYear, selectedMonthPill, barChartRange]);
 
-  // Budget calculations
-  const budgetAmount = data?.budget?.amount || 0;
-  const spentAmount = data?.stats?.totalPengeluaran || 0;
-  const hasBudget = budgetAmount > 0;
-  const budgetPct = hasBudget
-    ? Math.min(100, Math.round((spentAmount / budgetAmount) * 100))
-    : data?.stats?.totalPemasukan && data.stats.totalPemasukan > 0
-    ? Math.min(100, Math.round((spentAmount / data.stats.totalPemasukan) * 100))
-    : 0;
+  // 4. Perbandingan Pengeluaran 12 Bulan (Januari - Desember) untuk Tahun Terpilih
+  const annualMonthlyComparison = useMemo(() => {
+    const targetYr = selectedYear === 'Semua' ? '2026' : selectedYear;
+    const monthsData: {
+      monthKey: string;
+      monthNum: string;
+      monthName: string;
+      expense: number;
+      income: number;
+      txCount: number;
+    }[] = [];
+
+    const txList = (data?.transactions || []).filter((tx) => !isTransferTx(tx));
+
+    for (let i = 1; i <= 12; i++) {
+      const monthNum = String(i).padStart(2, '0');
+      const monthKey = `${targetYr}-${monthNum}`;
+      const monthName = MONTH_NAMES_ID[i - 1].full;
+
+      let expense = 0;
+      let income = 0;
+      let txCount = 0;
+
+      for (const tx of txList) {
+        if (!tx.date) continue;
+        const p = tx.date.trim();
+        let matches = false;
+        if (p.startsWith(monthKey)) {
+          matches = true;
+        } else {
+          const parts = p.split('/');
+          if (parts.length === 3 && parts[1] === monthNum && parts[2] === targetYr) {
+            matches = true;
+          }
+        }
+
+        if (matches) {
+          if (tx.type === 'Pengeluaran') {
+            expense += tx.amount;
+            txCount++;
+          } else if (tx.type === 'Pemasukan') {
+            income += tx.amount;
+          }
+        }
+      }
+
+      monthsData.push({
+        monthKey,
+        monthNum,
+        monthName,
+        expense,
+        income,
+        txCount,
+      });
+    }
+
+    const totalExpenseYear = monthsData.reduce((acc, m) => acc + m.expense, 0);
+    const totalIncomeYear = monthsData.reduce((acc, m) => acc + m.income, 0);
+    const activeMonths = monthsData.filter((m) => m.expense > 0);
+    const maxExpense = Math.max(...monthsData.map((m) => m.expense), 1);
+
+    let highestMonth: (typeof monthsData)[0] | null = null;
+    let lowestMonth: (typeof monthsData)[0] | null = null;
+
+    if (activeMonths.length > 0) {
+      highestMonth = activeMonths.reduce((prev, curr) => (curr.expense > prev.expense ? curr : prev), activeMonths[0]);
+      lowestMonth = activeMonths.reduce((prev, curr) => (curr.expense < prev.expense ? curr : prev), activeMonths[0]);
+    }
+
+    const avgExpense = activeMonths.length > 0 ? Math.round(totalExpenseYear / activeMonths.length) : 0;
+
+    return {
+      targetYear: targetYr,
+      months: monthsData,
+      totalExpenseYear,
+      totalIncomeYear,
+      maxExpense,
+      highestMonth,
+      lowestMonth,
+      avgExpense,
+    };
+  }, [data?.transactions, selectedYear]);
+
+  // Budget calculations (Bulanan & Harian)
+  const monthlyBudgetAmount = data?.budget?.amount || 0;
+  const monthlySpentAmount = data?.budget?.spent || 0;
+  const monthlyRemaining = data?.budget?.remaining ?? (monthlyBudgetAmount - monthlySpentAmount);
+  const monthlyPct = data?.budget?.percentage || 0;
+  const hasMonthlyBudget = monthlyBudgetAmount > 0;
+
+  const dailyBudgetAmount = data?.budget?.dailyAmount || 0;
+  const dailySpentAmount = data?.budget?.dailySpent || 0;
+  const dailyRemaining = data?.budget?.dailyRemaining ?? (dailyBudgetAmount - dailySpentAmount);
+  const dailyPct = data?.budget?.dailyPercentage || 0;
+  const hasDailyBudget = dailyBudgetAmount > 0;
+
+  // Active view values based on budgetViewMode
+  const activeBudgetAmount = budgetViewMode === 'monthly' ? monthlyBudgetAmount : dailyBudgetAmount;
+  const activeBudgetSpent = budgetViewMode === 'monthly' ? monthlySpentAmount : dailySpentAmount;
+  const activeBudgetRemaining = budgetViewMode === 'monthly' ? monthlyRemaining : dailyRemaining;
+  const activeBudgetPct = budgetViewMode === 'monthly' ? monthlyPct : dailyPct;
+  const hasActiveBudget = activeBudgetAmount > 0;
 
   return (
     <div className="crm-dashboard">
@@ -629,13 +745,28 @@ export default function FinanceDashboardPage() {
             </div>
           </div>
 
-          {/* Card 4: Budget Goal Tracker */}
+          {/* Card 4: Budget Goal Tracker (Bulanan & Harian) */}
           <div className="crm-kpi-card">
             <div className="crm-kpi-top">
               <div className="crm-kpi-icon-circle purple">🎯</div>
+              <div className="crm-budget-switcher">
+                <button
+                  className={`crm-budget-tab-btn ${budgetViewMode === 'monthly' ? 'active' : ''}`}
+                  onClick={() => setBudgetViewMode('monthly')}
+                >
+                  Bulan
+                </button>
+                <button
+                  className={`crm-budget-tab-btn ${budgetViewMode === 'daily' ? 'active' : ''}`}
+                  onClick={() => setBudgetViewMode('daily')}
+                >
+                  Hari
+                </button>
+              </div>
               <button
                 onClick={() => {
-                  setBudgetInput(budgetAmount ? String(budgetAmount) : '');
+                  setBudgetEditType(budgetViewMode);
+                  setBudgetInput(activeBudgetAmount ? String(activeBudgetAmount) : '');
                   setIsEditingBudget(!isEditingBudget);
                 }}
                 className="crm-kpi-btn-edit"
@@ -643,32 +774,60 @@ export default function FinanceDashboardPage() {
                 {isEditingBudget ? '✕ Batal' : '✏️ Atur'}
               </button>
             </div>
-            <div className="crm-kpi-label">Batas Budget Bulanan</div>
+            <div className="crm-kpi-label">
+              {budgetViewMode === 'monthly' ? 'Batas Budget Bulanan' : 'Batas Budget Harian'}
+            </div>
             <div className="crm-kpi-val">
-              {hasBudget ? formatRupiah(budgetAmount) : 'Belum Diatur'}
+              {hasActiveBudget
+                ? `${formatRupiah(activeBudgetAmount)}${budgetViewMode === 'daily' ? '/hari' : ''}`
+                : 'Belum Diatur'}
             </div>
             <div className="crm-kpi-footer">
-              {hasBudget ? (
-                <span style={{ color: budgetPct >= 100 ? '#EF4444' : '#6366F1', fontWeight: 600 }}>
-                  {budgetPct}% terpakai • Sisa {formatRupiah(budgetAmount - spentAmount)}
+              {hasActiveBudget ? (
+                <span style={{ color: activeBudgetPct >= 100 ? '#EF4444' : '#6366F1', fontWeight: 600 }}>
+                  {activeBudgetPct}% terpakai • Sisa {formatRupiah(activeBudgetRemaining)}
                 </span>
               ) : (
-                <span>Klik ✏️ Atur untuk pasang target</span>
+                <span>Klik ✏️ Atur untuk pasang target {budgetViewMode === 'monthly' ? 'bulanan' : 'harian'}</span>
               )}
             </div>
 
             {/* Quick Inline Budget Form */}
             {isEditingBudget && (
               <div className="crm-inline-budget">
-                <input
-                  type="number"
-                  placeholder="Target (misal: 3000000)"
-                  value={budgetInput}
-                  onChange={(e) => setBudgetInput(e.target.value)}
-                />
-                <button onClick={handleSaveBudget} disabled={isSavingBudget}>
-                  {isSavingBudget ? '...' : 'Simpan'}
-                </button>
+                <div className="crm-inline-budget-type">
+                  <button
+                    type="button"
+                    className={`crm-budget-type-btn ${budgetEditType === 'monthly' ? 'active' : ''}`}
+                    onClick={() => {
+                      setBudgetEditType('monthly');
+                      setBudgetInput(monthlyBudgetAmount ? String(monthlyBudgetAmount) : '');
+                    }}
+                  >
+                    Bulanan
+                  </button>
+                  <button
+                    type="button"
+                    className={`crm-budget-type-btn ${budgetEditType === 'daily' ? 'active' : ''}`}
+                    onClick={() => {
+                      setBudgetEditType('daily');
+                      setBudgetInput(dailyBudgetAmount ? String(dailyBudgetAmount) : '');
+                    }}
+                  >
+                    Harian
+                  </button>
+                </div>
+                <div className="crm-inline-budget-input-row">
+                  <input
+                    type="number"
+                    placeholder={budgetEditType === 'monthly' ? 'Target bulanan (misal: 3000000)' : 'Limit harian (misal: 50000)'}
+                    value={budgetInput}
+                    onChange={(e) => setBudgetInput(e.target.value)}
+                  />
+                  <button onClick={handleSaveBudget} disabled={isSavingBudget}>
+                    {isSavingBudget ? '...' : 'Simpan'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -696,6 +855,11 @@ export default function FinanceDashboardPage() {
                 {dailyChartMode === 'spent' && activeDayData.expense === 0 && activeDayData.isPastOrToday && (
                   <span className="crm-daily-date-label" style={{ color: '#10B981', fontWeight: 700 }}>
                     ✨ Hemat (Rp 0)
+                  </span>
+                )}
+                {dailyChartMode === 'spent' && hasDailyBudget && activeDayData.isToday && (
+                  <span className="crm-daily-budget-pill">
+                    🎯 Kuota: {formatRupiah(dailyBudgetAmount)} • Sisa {formatRupiah(dailyRemaining)}
                   </span>
                 )}
               </div>
@@ -852,26 +1016,6 @@ export default function FinanceDashboardPage() {
                 <div className="crm-card-subtitle">Perbandingan pemasukan vs pengeluaran per bulan</div>
               </div>
               <div className="crm-chart-header-actions">
-                <div className="crm-pill-toggle">
-                  <button
-                    className={`crm-pill-btn ${barChartRange === '6' ? 'active' : ''}`}
-                    onClick={() => setBarChartRange('6')}
-                  >
-                    6 Bln
-                  </button>
-                  <button
-                    className={`crm-pill-btn ${barChartRange === '12' ? 'active' : ''}`}
-                    onClick={() => setBarChartRange('12')}
-                  >
-                    12 Bln
-                  </button>
-                  <button
-                    className={`crm-pill-btn ${barChartRange === 'all' ? 'active' : ''}`}
-                    onClick={() => setBarChartRange('all')}
-                  >
-                    Semua
-                  </button>
-                </div>
                 <div className="crm-chart-legend">
                   <span className="crm-legend-item">
                     <span className="crm-legend-dot blue" /> Masuk
@@ -883,9 +1027,50 @@ export default function FinanceDashboardPage() {
               </div>
             </div>
 
+            {/* Filter Bulan 1 - 12 (Horizontal Scrollable Pills) */}
+            <div className="crm-month-filter-wrap">
+              <div className="crm-month-filter-scroll">
+                <button
+                  className={`crm-month-filter-pill ${selectedMonthPill === 'all' ? 'active' : ''}`}
+                  onClick={() => setSelectedMonthPill('all')}
+                >
+                  Semua (1-12)
+                </button>
+                {MONTH_NAMES_ID.map((m) => {
+                  const hasData = (data?.monthlyComparison?.months || []).some(
+                    (item) =>
+                      (selectedYear === 'Semua' || item.month.startsWith(`${selectedYear}-`)) &&
+                      item.month.endsWith(`-${m.num}`)
+                  );
+                  return (
+                    <button
+                      key={m.num}
+                      className={`crm-month-filter-pill ${selectedMonthPill === m.num ? 'active' : ''} ${hasData ? 'has-data' : ''}`}
+                      onClick={() => setSelectedMonthPill(m.num)}
+                      title={`${m.full} ${selectedYear}`}
+                    >
+                      <span>{parseInt(m.num, 10)} {m.short}</span>
+                      {hasData && <span className="crm-month-dot" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {cashflowBarData.length === 0 ? (
               <div className="crm-chart-empty">
-                <span>📊 Belum ada riwayat perbandingan bulan pada filter ini.</span>
+                <span>
+                  📅 Belum ada transaksi di bulan{' '}
+                  {selectedMonthPill !== 'all'
+                    ? `${MONTH_NAMES_ID.find((m) => m.num === selectedMonthPill)?.full} ${selectedYear}`
+                    : `tahun ${selectedYear}`}
+                  .
+                </span>
+                {selectedMonthPill !== 'all' && (
+                  <button className="crm-empty-reset-btn" onClick={() => setSelectedMonthPill('all')}>
+                    Tampilkan Semua Bulan
+                  </button>
+                )}
               </div>
             ) : (
               <div className="crm-monthly-list">
@@ -1208,6 +1393,120 @@ export default function FinanceDashboardPage() {
               </div>
             </div>
           )}
+        </section>
+
+        {/* 6. PERBANDINGAN PENGELUARAN BULAN JANUARI - DESEMBER (Bawah Sendiri) */}
+        <section className="crm-card crm-annual-card">
+          <div className="crm-card-header">
+            <div>
+              <div className="crm-annual-header-tag">
+                <span className="crm-year-pill-tag">TAHUN {annualMonthlyComparison.targetYear}</span>
+                <span className="crm-annual-header-hint">12 Bulan Penuh (Jan - Des)</span>
+              </div>
+              <h2 className="crm-card-title">📊 Perbandingan Pengeluaran Antar Bulan</h2>
+              <div className="crm-card-subtitle">
+                Total uang belanja yang terpakai di setiap bulan sepanjang tahun {annualMonthlyComparison.targetYear}
+              </div>
+            </div>
+          </div>
+
+          {/* Highlights KPI Bar */}
+          <div className="crm-annual-highlights">
+            <div className="crm-annual-kpi">
+              <span className="crm-annual-kpi-label">Total Belanja Setahun</span>
+              <span className="crm-annual-kpi-val expense">
+                {formatRupiah(annualMonthlyComparison.totalExpenseYear)}
+              </span>
+            </div>
+            <div className="crm-annual-kpi">
+              <span className="crm-annual-kpi-label">Rata-rata / Bulan</span>
+              <span className="crm-annual-kpi-val">
+                {formatRupiah(annualMonthlyComparison.avgExpense)}
+              </span>
+            </div>
+            {annualMonthlyComparison.highestMonth && (
+              <div className="crm-annual-kpi highlight-high">
+                <span className="crm-annual-kpi-label">🔥 Bulan Pengeluaran Tertinggi</span>
+                <span className="crm-annual-kpi-val">
+                  {annualMonthlyComparison.highestMonth.monthName} ({formatRupiah(annualMonthlyComparison.highestMonth.expense)})
+                </span>
+              </div>
+            )}
+            {annualMonthlyComparison.lowestMonth &&
+              annualMonthlyComparison.lowestMonth.monthKey !== annualMonthlyComparison.highestMonth?.monthKey && (
+                <div className="crm-annual-kpi highlight-low">
+                  <span className="crm-annual-kpi-label">✨ Bulan Paling Hemat</span>
+                  <span className="crm-annual-kpi-val">
+                    {annualMonthlyComparison.lowestMonth.monthName} ({formatRupiah(annualMonthlyComparison.lowestMonth.expense)})
+                  </span>
+                </div>
+              )}
+          </div>
+
+          {/* 12-Month Rows (Januari - Desember) */}
+          <div className="crm-annual-list">
+            {annualMonthlyComparison.months.map((m) => {
+              const isHighest =
+                annualMonthlyComparison.highestMonth &&
+                m.expense > 0 &&
+                m.monthKey === annualMonthlyComparison.highestMonth.monthKey;
+              const isLowest =
+                annualMonthlyComparison.lowestMonth &&
+                m.expense > 0 &&
+                m.monthKey === annualMonthlyComparison.lowestMonth.monthKey &&
+                !isHighest;
+              const pctOfMax =
+                annualMonthlyComparison.maxExpense > 0
+                  ? Math.round((m.expense / annualMonthlyComparison.maxExpense) * 100)
+                  : 0;
+              const pctOfTotal =
+                annualMonthlyComparison.totalExpenseYear > 0
+                  ? Math.round((m.expense / annualMonthlyComparison.totalExpenseYear) * 100)
+                  : 0;
+
+              return (
+                <div
+                  key={m.monthKey}
+                  className={`crm-annual-row ${isHighest ? 'is-highest' : ''} ${m.expense === 0 ? 'is-zero' : ''}`}
+                >
+                  <div className="crm-annual-row-left">
+                    <div className="crm-annual-month-badge">
+                      <span className="crm-annual-month-num">{m.monthNum}</span>
+                      <span className="crm-annual-month-name">{m.monthName}</span>
+                    </div>
+                    {isHighest && <span className="crm-badge-tag tag-high">🔥 Tertinggi</span>}
+                    {isLowest && <span className="crm-badge-tag tag-low">✨ Terhemat</span>}
+                    {m.expense === 0 && <span className="crm-badge-tag tag-zero">Rp 0</span>}
+                  </div>
+
+                  <div className="crm-annual-row-center">
+                    <div className="crm-annual-bar-track">
+                      <div
+                        className={`crm-annual-bar-fill ${isHighest ? 'bar-high' : ''}`}
+                        style={{ width: `${Math.max(m.expense > 0 ? 5 : 0, pctOfMax)}%` }}
+                      />
+                    </div>
+                    <div className="crm-annual-meta-row">
+                      <span className="crm-annual-tx-count">
+                        {m.txCount > 0 ? `${m.txCount} transaksi belanja` : 'Tidak ada transaksi belanja'}
+                      </span>
+                      {m.expense > 0 && (
+                        <span className="crm-annual-pct-share">
+                          {pctOfTotal}% dari total belanja tahun {annualMonthlyComparison.targetYear}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="crm-annual-row-right">
+                    <span className={`crm-annual-amount ${m.expense > 0 ? 'has-expense' : 'zero-expense'}`}>
+                      {formatRupiah(m.expense)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       </main>
     </div>

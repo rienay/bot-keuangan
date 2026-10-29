@@ -1241,6 +1241,356 @@ button:active, a:active {
 }
 
 /* ============================================================
+   BUDGET SWITCHER & INLINE BUDGET FORM
+   ============================================================ */
+.crm-budget-switcher {
+  display: inline-flex;
+  background: var(--crm-subtle);
+  border-radius: var(--radius-pill);
+  padding: 2px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  margin-left: auto;
+  margin-right: 0.35rem;
+}
+.crm-budget-tab-btn {
+  border: none;
+  background: transparent;
+  color: var(--crm-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.crm-budget-tab-btn.active {
+  background: #FFFFFF;
+  color: var(--crm-purple);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.crm-inline-budget-type {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+.crm-budget-type-btn {
+  flex: 1;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: var(--crm-subtle);
+  color: var(--crm-muted);
+  border-radius: var(--radius-pill);
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.crm-budget-type-btn.active {
+  background: var(--crm-purple);
+  color: #FFFFFF;
+  border-color: var(--crm-purple);
+}
+.crm-inline-budget-input-row {
+  display: flex;
+  gap: 0.35rem;
+}
+.crm-inline-budget-input-row input {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  font-size: 0.75rem;
+  font-family: inherit;
+  outline: none;
+}
+.crm-inline-budget-input-row button {
+  padding: 0.35rem 0.75rem;
+  background: var(--crm-purple);
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.crm-daily-budget-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--crm-purple);
+  background: #EEF2FF;
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+/* ============================================================
+   MONTH FILTER SCROLL (Bulan 1 - 12)
+   ============================================================ */
+.crm-month-filter-wrap {
+  margin-bottom: 1rem;
+  padding: 0.25rem 0;
+}
+.crm-month-filter-scroll {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.crm-month-filter-scroll::-webkit-scrollbar {
+  display: none;
+}
+.crm-month-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+  padding: 0.32rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  background: #FFFFFF;
+  color: var(--crm-muted);
+  font-size: 0.73rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+}
+.crm-month-filter-pill:hover {
+  border-color: #CBD5E1;
+  color: var(--crm-text);
+  background: #F8FAFC;
+}
+.crm-month-filter-pill.active {
+  background: var(--crm-purple);
+  color: #FFFFFF;
+  border-color: var(--crm-purple);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+}
+.crm-month-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #10B981;
+}
+.crm-month-filter-pill.active .crm-month-dot {
+  background: #FFFFFF;
+}
+.crm-empty-reset-btn {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  background: #EEF2FF;
+  color: var(--crm-purple);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.crm-empty-reset-btn:hover {
+  background: var(--crm-purple);
+  color: #FFFFFF;
+}
+
+/* ============================================================
+   ANNUAL 12-MONTH COMPARISON (Januari - Desember)
+   ============================================================ */
+.crm-annual-card {
+  margin-top: 1.25rem;
+  background: #FFFFFF;
+  border-radius: var(--radius-xl);
+  padding: 1.5rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: var(--shadow-sm);
+}
+.crm-annual-header-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.crm-year-pill-tag {
+  background: #EEF2FF;
+  color: var(--crm-purple);
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.05em;
+}
+.crm-annual-header-hint {
+  font-size: 0.7rem;
+  color: var(--crm-muted);
+  font-weight: 600;
+}
+.crm-annual-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin: 1.15rem 0 1.25rem;
+}
+.crm-annual-kpi {
+  background: var(--crm-subtle);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+}
+.crm-annual-kpi.highlight-high {
+  background: #FEF2F2;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.crm-annual-kpi.highlight-low {
+  background: #ECFDF5;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+.crm-annual-kpi-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--crm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.crm-annual-kpi-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--crm-text);
+  margin-top: 0.25rem;
+  letter-spacing: -0.02em;
+}
+.crm-annual-kpi-val.expense {
+  color: var(--crm-red);
+}
+
+.crm-annual-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.crm-annual-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--crm-subtle);
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  transition: all 0.15s ease;
+}
+.crm-annual-row:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+}
+.crm-annual-row.is-highest {
+  background: #FFF7ED;
+  border-color: rgba(249, 115, 22, 0.35);
+}
+.crm-annual-row.is-zero {
+  opacity: 0.65;
+}
+.crm-annual-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 160px;
+}
+.crm-annual-month-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.crm-annual-month-num {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--crm-purple);
+  background: #EEF2FF;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+}
+.crm-annual-month-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--crm-text);
+}
+.crm-badge-tag {
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-pill);
+}
+.crm-badge-tag.tag-high {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+.crm-badge-tag.tag-low {
+  background: #D1FAE5;
+  color: #059669;
+}
+.crm-badge-tag.tag-zero {
+  background: #F1F5F9;
+  color: #64748B;
+}
+
+.crm-annual-row-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.crm-annual-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #E2E8F0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.crm-annual-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366F1, #818CF8);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.crm-annual-bar-fill.bar-high {
+  background: linear-gradient(90deg, #F97316, #EF4444);
+}
+.crm-annual-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.68rem;
+  color: var(--crm-muted);
+}
+.crm-annual-tx-count {
+  font-weight: 600;
+}
+.crm-annual-pct-share {
+  font-weight: 700;
+  color: #475569;
+}
+
+.crm-annual-row-right {
+  min-width: 110px;
+  text-align: right;
+}
+.crm-annual-amount {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.crm-annual-amount.has-expense {
+  color: var(--crm-text);
+}
+.crm-annual-amount.zero-expense {
+  color: var(--crm-muted);
+  font-weight: 600;
+}
+
+/* ============================================================
    RESPONSIVE (Mobile & Tablet)
    ============================================================ */
 @media (max-width: 960px) {
@@ -1426,5 +1776,39 @@ button:active, a:active {
   /* 7. Bottom Benchmarks */
   .crm-benchmarks-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* 8. Mobile Annual Comparison Section */
+  .crm-annual-card {
+    padding: 1.15rem 1rem;
+  }
+  .crm-annual-highlights {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .crm-annual-kpi {
+    padding: 0.65rem 0.75rem;
+  }
+  .crm-annual-kpi-val {
+    font-size: 0.95rem;
+  }
+  .crm-annual-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+  }
+  .crm-annual-row-left {
+    justify-content: space-between;
+    min-width: 0;
+  }
+  .crm-annual-row-right {
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .crm-annual-amount {
+    font-size: 0.88rem;
   }
 }

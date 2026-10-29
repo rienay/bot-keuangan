@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getBudgetInfo, setBookBudget, DEFAULT_BOOK_NAME } from '@/lib/googleSheets';
+import { getBudgetInfo, setBookBudget, setBookDailyBudget, DEFAULT_BOOK_NAME } from '@/lib/googleSheets';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const book = body.book || DEFAULT_BOOK_NAME;
+    const type = body.type || body.period || 'monthly'; // 'monthly' | 'daily'
     const month = body.month || new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Jakarta',
       year: 'numeric',
@@ -38,7 +39,12 @@ export async function POST(request: Request) {
       );
     }
 
-    await setBookBudget(book, month, amount);
+    if (type === 'daily') {
+      await setBookDailyBudget(book, amount);
+    } else {
+      await setBookBudget(book, month, amount);
+    }
+
     const updated = await getBudgetInfo(book, month);
 
     return NextResponse.json({ success: true, data: updated });

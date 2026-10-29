@@ -2112,6 +2112,41 @@ export async function setBookBudget(bookName: string, month: string, amount: num
   webFinanceCache.clear();
 }
 
+export async function setBookDailyBudget(bookName: string, amount: number): Promise<void> {
+  return setBookBudget(bookName, 'daily', amount);
+}
+
+export async function getBookDailyBudget(bookName: string): Promise<number | null> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+  await ensureBudgetSheet(sheets, spreadsheetId);
+
+  const cleanBook = sanitizeBookName(bookName) || DEFAULT_BOOK_NAME;
+
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${BUDGET_SHEET_NAME}'!A2:C`,
+    });
+    const rows = res.data.values || [];
+    for (const row of rows) {
+      const [b, m, nominal] = row;
+      const bStr = String(b || '').trim().toLowerCase();
+      const mStr = String(m || '').trim().toLowerCase();
+      const num = parseFloat(String(nominal || '').replace(/[^0-9.-]+/g, '')) || 0;
+
+      if (bStr === cleanBook.toLowerCase() && (mStr === 'daily' || mStr === 'harian')) {
+        return num;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('Gagal getBookDailyBudget:', err);
+    return null;
+  }
+}
+
 export async function getBookBudget(bookName: string, month: string): Promise<number | null> {
   const auth = getGoogleAuth();
   const sheets = google.sheets({ version: 'v4', auth });
@@ -2170,6 +2205,7 @@ export async function getBudgetInfo(bookName: string, targetMonth?: string): Pro
 
   const cleanBook = sanitizeBookName(bookName) || DEFAULT_BOOK_NAME;
   const budgetAmount = (await getBookBudget(cleanBook, month)) || 0;
+  const dailyAmount = (await getBookDailyBudget(cleanBook)) || 0;
 
   const summary = await getMonthSummary(month, monthLabel, cleanBook);
   const spent = summary.totalPengeluaran;
@@ -2189,6 +2225,55 @@ export async function getBudgetInfo(bookName: string, targetMonth?: string): Pro
     }
   }
 
+  // Hitung pengeluaran belanja harian (hari ini)
+  const nowJakartaDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d); // "YYYY-MM-DD"
+  const [nowY, nowM, nowD] = nowJakartaDate.split('-');
+  const todaySlash = `${nowD}/${nowM}/${nowY}`;
+  const todayDash = `${nowY}-${nowM}-${nowD}`;
+
+  let dailySpent = 0;
+  if (month === currentMonthKey) {
+    for (const exp of summary.expenseDetails) {
+      if (exp.isTransfer) continue;
+      const dStr = (exp.date || '').trim();
+      if (dStr.startsWith(todayDash) || dStr.startsWith(todaySlash)) {
+        dailySpent += exp.nominal || exp.amount || 0;
+      }
+    }
+  } else {
+    try {
+      const curSummary = await getMonthSummary(currentMonthKey, undefined, cleanBook);
+      for (const exp of curSummary.expenseDetails) {
+        if (exp.isTransfer) continue;
+        const dStr = (exp.date || '').trim();
+        if (dStr.startsWith(todayDash) || dStr.startsWith(todaySlash)) {
+          dailySpent += exp.nominal || exp.amount || 0;
+        }
+      }
+    } catch {}
+  }
+
+  const dailyRemaining = dailyAmount - dailySpent;
+  const dailyPercentage = dailyAmount > 0 ? Math.round((dailySpent / dailyAmount) * 100) : 0;
+
+  let dailyStatus: BudgetInfo['dailyStatus'] = 'none';
+  if (dailyAmount > 0) {
+    if (dailyPercentage >= 100) {
+      dailyStatus = 'overbudget';
+    } else if (dailyPercentage >= 80) {
+      dailyStatus = 'warning';
+    } else if (dailyPercentage >= 50) {
+      dailyStatus = 'half';
+    } else {
+      dailyStatus = 'safe';
+    }
+  }
+
   return {
     book: cleanBook,
     month,
@@ -2198,6 +2283,11 @@ export async function getBudgetInfo(bookName: string, targetMonth?: string): Pro
     remaining,
     percentage,
     status,
+    dailyAmount,
+    dailySpent,
+    dailyRemaining,
+    dailyPercentage,
+    dailyStatus,
   };
 }
 
@@ -2210,38 +2300,61 @@ export async function checkBudgetThresholdAlert(
   budgetInfo: BudgetInfo;
 }> {
   const budgetInfo = await getBudgetInfo(bookName);
-  if (!budgetInfo || budgetInfo.amount <= 0) {
-    return { alertType: null, alertMessage: null, budgetInfo };
+  if (!budgetInfo) {
+    return { alertType: null, alertMessage: null, budgetInfo: {} as any };
   }
-
-  const previousSpent = budgetInfo.spent - newExpenseAmount;
-  const prevPct = Math.round((previousSpent / budgetInfo.amount) * 100);
-  const currPct = budgetInfo.percentage;
-
-  let alertType: 'half' | 'warning' | 'overbudget' | null = null;
-  let alertMessage: string | null = null;
 
   const formatRp = (num: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
 
-  if (currPct >= 100 && prevPct < 100) {
-    alertType = 'overbudget';
-    alertMessage =
-      `🛑 *PERINGATAN: BUDGET BULAN INI HABIS / OVERBUDGET!*\n` +
-      `Pengeluaran telah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
-      `Total belanja bulan ini: *${formatRp(budgetInfo.spent)}* (Melebihi budget: ${formatRp(Math.abs(budgetInfo.remaining))})!`;
-  } else if (currPct >= 80 && prevPct < 80) {
-    alertType = 'warning';
-    alertMessage =
-      `🚨 *PERINGATAN: BUDGET HAMPIR HABIS (${currPct}%)!*\n` +
-      `Pengeluaran bulan ini sudah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
-      `Sisa budget yang aman digunakan tinggal *${formatRp(budgetInfo.remaining)}* lagi!`;
-  } else if (currPct >= 50 && prevPct < 50) {
-    alertType = 'half';
-    alertMessage =
-      `⚠️ *PERHATIAN: BUDGET SUDAH TERSERAP SETENGAH (50%)!*\n` +
-      `Pengeluaran bulan ini telah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
-      `Sisa budget tersedia: *${formatRp(budgetInfo.remaining)}*.`;
+  let alertType: 'half' | 'warning' | 'overbudget' | null = null;
+  let alertMessage: string | null = null;
+
+  // 1. Cek alert Budget Harian
+  if (budgetInfo.dailyAmount && budgetInfo.dailyAmount > 0) {
+    const prevDaily = (budgetInfo.dailySpent || 0) - newExpenseAmount;
+    const prevDailyPct = Math.round((prevDaily / budgetInfo.dailyAmount) * 100);
+    const currDailyPct = budgetInfo.dailyPercentage || 0;
+
+    if (currDailyPct >= 100 && prevDailyPct < 100) {
+      alertType = 'overbudget';
+      alertMessage =
+        `🛑 *PERINGATAN: BUDGET HARIAN HARI INI HABIS!*\n` +
+        `Pengeluaran hari ini telah mencapai *${currDailyPct}%* dari budget harian ${formatRp(budgetInfo.dailyAmount)}.\n` +
+        `Total belanja hari ini: *${formatRp(budgetInfo.dailySpent || 0)}* (Lebih: ${formatRp(Math.abs(budgetInfo.dailyRemaining || 0))})!`;
+    } else if (currDailyPct >= 80 && prevDailyPct < 80) {
+      alertType = 'warning';
+      alertMessage =
+        `🚨 *PERINGATAN: BUDGET HARIAN HAMPIR HABIS (${currDailyPct}%)!*\n` +
+        `Sisa kuota belanja hari ini tinggal *${formatRp(budgetInfo.dailyRemaining || 0)}* lagi dari limit ${formatRp(budgetInfo.dailyAmount)}.`;
+    }
+  }
+
+  // 2. Cek alert Budget Bulanan
+  if (!alertMessage && budgetInfo.amount > 0) {
+    const previousSpent = budgetInfo.spent - newExpenseAmount;
+    const prevPct = Math.round((previousSpent / budgetInfo.amount) * 100);
+    const currPct = budgetInfo.percentage;
+
+    if (currPct >= 100 && prevPct < 100) {
+      alertType = 'overbudget';
+      alertMessage =
+        `🛑 *PERINGATAN: BUDGET BULAN INI HABIS / OVERBUDGET!*\n` +
+        `Pengeluaran telah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
+        `Total belanja bulan ini: *${formatRp(budgetInfo.spent)}* (Melebihi budget: ${formatRp(Math.abs(budgetInfo.remaining))})!`;
+    } else if (currPct >= 80 && prevPct < 80) {
+      alertType = 'warning';
+      alertMessage =
+        `🚨 *PERINGATAN: BUDGET BULANAN HAMPIR HABIS (${currPct}%)!*\n` +
+        `Pengeluaran bulan ini sudah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
+        `Sisa budget yang aman digunakan tinggal *${formatRp(budgetInfo.remaining)}* lagi!`;
+    } else if (currPct >= 50 && prevPct < 50) {
+      alertType = 'half';
+      alertMessage =
+        `⚠️ *PERHATIAN: BUDGET BULANAN SUDAH TERSERAP SETENGAH (50%)!*\n` +
+        `Pengeluaran bulan ini telah mencapai *${currPct}%* dari budget ${formatRp(budgetInfo.amount)}.\n` +
+        `Sisa budget tersedia: *${formatRp(budgetInfo.remaining)}*.`;
+    }
   }
 
   return { alertType, alertMessage, budgetInfo };
