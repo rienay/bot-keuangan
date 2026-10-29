@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { WebFinanceData } from '@/lib/types';
+import { WebFinanceData, WebTransactionItem } from '@/lib/types';
 
 function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -9,6 +9,33 @@ function formatRupiah(amount: number): string {
     currency: 'IDR',
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function formatRupiahShort(val: number): string {
+  const abs = Math.abs(val);
+  const sign = val < 0 ? '-' : '';
+  if (abs >= 1000000) {
+    const jt = (abs / 1000000).toFixed(1).replace('.0', '');
+    return `${sign}${jt}jt`;
+  }
+  if (abs >= 1000) {
+    const rb = (abs / 1000).toFixed(0);
+    return `${sign}${rb}rb`;
+  }
+  return `${sign}Rp ${abs}`;
+}
+
+function isTransferTx(tx: WebTransactionItem): boolean {
+  if (tx.isTransfer) return true;
+  const cat = (tx.category || '').toLowerCase();
+  const desc = (tx.description || '').toLowerCase();
+  return (
+    cat.includes('pindah uang') ||
+    cat.includes('pindah saldo') ||
+    cat.includes('transfer saldo') ||
+    desc.includes('pindah uang') ||
+    desc.includes('terima pindah uang')
+  );
 }
 
 function parseTxDate(dateStr: string): Date | null {
@@ -130,8 +157,8 @@ export default function FinanceDashboardPage() {
   // Active hover slice state for interactive Donut Chart
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  // State untuk Treking Harian (Daily Line Chart ala Image Referensi)
-  const [dailyChartMode, setDailyChartMode] = useState<'balance' | 'spent'>('balance');
+  // State untuk Treking Harian (Default ke Pengeluaran Harian)
+  const [dailyChartMode, setDailyChartMode] = useState<'balance' | 'spent'>('spent');
   const [hoveredDayIdx, setHoveredDayIdx] = useState<number | null>(null);
 
   // Filter range bulan untuk Bar Chart (default 6 bulan agar rapi di HP)
@@ -256,6 +283,7 @@ export default function FinanceDashboardPage() {
     let inc = 0;
     let exp = 0;
     filteredTransactions.forEach((tx) => {
+      if (isTransferTx(tx)) return;
       if (tx.type === 'Pemasukan') inc += tx.amount;
       else exp += tx.amount;
     });
@@ -280,7 +308,7 @@ export default function FinanceDashboardPage() {
     const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const DAY_LABELS_ID = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
-    const allTx = data?.transactions || [];
+    const allTx = (data?.transactions || []).filter((tx) => !isTransferTx(tx));
 
     // Hitung saldo awal sebelum Senin minggu ini
     let baselineBalance = 0;
@@ -341,8 +369,8 @@ export default function FinanceDashboardPage() {
 
     const values = days.map((d) => (dailyChartMode === 'balance' ? d.balance : d.expense));
     const activeValues = days.filter((d) => d.isPastOrToday).map((d) => (dailyChartMode === 'balance' ? d.balance : d.expense));
-    const minVal = Math.min(...(activeValues.length > 0 ? activeValues : [0]));
-    const maxVal = Math.max(...(activeValues.length > 0 ? activeValues : [100000]));
+    const minVal = dailyChartMode === 'spent' ? 0 : Math.min(...(activeValues.length > 0 ? activeValues : [0]));
+    const maxVal = Math.max(dailyChartMode === 'spent' ? 40000 : 100000, ...(activeValues.length > 0 ? activeValues : [40000]));
     const range = maxVal - minVal || 1;
 
     const points = days.map((d, i) => {
@@ -352,14 +380,15 @@ export default function FinanceDashboardPage() {
         const val = dailyChartMode === 'balance' ? d.balance : d.expense;
         y = (SVG_H - PAD_Y_BOTTOM) - ((val - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
       } else {
-        // Future projected day (sedikit landai melengkung seperti di referensi)
-        const lastKnownY = (SVG_H - PAD_Y_BOTTOM) - ((days[currentDayOfWeek].balance - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
-        y = lastKnownY + (i - currentDayOfWeek) * 4;
+        // Future projected day (melandai turun perlahan seperti di referensi)
+        const lastKnownVal = dailyChartMode === 'balance' ? days[currentDayOfWeek].balance : days[currentDayOfWeek].expense;
+        const lastKnownY = (SVG_H - PAD_Y_BOTTOM) - ((lastKnownVal - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+        y = lastKnownY + (i - currentDayOfWeek) * 6;
       }
       return { x, y: Math.max(PAD_Y_TOP, Math.min(SVG_H - PAD_Y_BOTTOM, y)) };
     });
 
-    // Spline curve up to today (Hijau tebal & area fill)
+    // Spline curve up to today (Hijau/Indigo tebal & area fill)
     const pointsUpToToday = points.slice(0, currentDayOfWeek + 1);
     const curvePast = generateSmoothCurve(pointsUpToToday);
 
@@ -395,6 +424,7 @@ export default function FinanceDashboardPage() {
     const catMap: Record<string, number> = {};
     let totalExp = 0;
     filteredTransactions.forEach((tx) => {
+      if (isTransferTx(tx)) return;
       if (tx.type === 'Pengeluaran') {
         catMap[tx.category] = (catMap[tx.category] || 0) + tx.amount;
         totalExp += tx.amount;
@@ -644,39 +674,46 @@ export default function FinanceDashboardPage() {
           </div>
         </section>
 
-        {/* 3. DAILY TRACKING HERO CARD (Sesuai Referensi Gambar Net Worth & Weekly Curve) */}
+        {/* 3. DAILY TRACKING HERO CARD (Treking Pengeluaran Harian) */}
         <section className="crm-card crm-daily-card">
           <div className="crm-daily-header">
             <div>
               <div className="crm-daily-title">
-                {dailyChartMode === 'balance' ? 'Net Worth • Treking Harian' : 'Pengeluaran Harian'}
+                {dailyChartMode === 'spent' ? '📉 Treking Pengeluaran Harian' : '💰 Saldo Kas • Treking Harian'}
               </div>
               <div className="crm-daily-amount">
-                {formatRupiah(dailyChartMode === 'balance' ? activeDayData.balance : activeDayData.expense)}
+                {formatRupiah(dailyChartMode === 'spent' ? activeDayData.expense : activeDayData.balance)}
               </div>
               <div className="crm-daily-subrow">
-                <span className="crm-daily-growth-badge">
-                  {dailyChartMode === 'balance' ? '🟢 Akumulasi Real-Time' : '📤 Pengeluaran Hari Ini'}
+                <span className={`crm-daily-growth-badge ${dailyChartMode === 'spent' ? 'expense' : 'balance'}`}>
+                  {dailyChartMode === 'spent'
+                    ? (activeDayData.isToday ? '🔴 Belanja Hari Ini' : activeDayData.isPastOrToday ? '📅 Belanja' : '⏳ Estimasi')
+                    : '🟢 Akumulasi Real-Time'}
                 </span>
                 <span className="crm-daily-date-label">
                   {activeDayData.dayNameId}, {activeDayData.dateFormatted}
                 </span>
+                {dailyChartMode === 'spent' && activeDayData.expense === 0 && activeDayData.isPastOrToday && (
+                  <span className="crm-daily-date-label" style={{ color: '#10B981', fontWeight: 700 }}>
+                    ✨ Hemat (Rp 0)
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Mode Switcher (Saldo vs Belanja) */}
+            {/* Mode Switcher (Pengeluaran vs Saldo) */}
             <div className="crm-daily-mode-tabs">
-              <button
-                className={`crm-mode-tab ${dailyChartMode === 'balance' ? 'active' : ''}`}
-                onClick={() => setDailyChartMode('balance')}
-              >
-                Saldo Bersih
-              </button>
               <button
                 className={`crm-mode-tab ${dailyChartMode === 'spent' ? 'active' : ''}`}
                 onClick={() => setDailyChartMode('spent')}
               >
-                Pengeluaran
+                Pengeluaran Harian
+              </button>
+              <button
+                className={`crm-mode-tab ${dailyChartMode === 'balance' ? 'active' : ''}`}
+                onClick={() => setDailyChartMode('balance')}
+              >
+                Saldo Kas
               </button>
             </div>
           </div>
@@ -686,8 +723,8 @@ export default function FinanceDashboardPage() {
             <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="dailyAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10B981" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'} stopOpacity="0.25" />
+                  <stop offset="100%" stopColor={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'} stopOpacity="0.0" />
                 </linearGradient>
                 <filter id="badgeGlow" x="-20%" y="-20%" width="140%" height="140%">
                   <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
@@ -699,12 +736,12 @@ export default function FinanceDashboardPage() {
                 <path d={dailyTracking.areaPath} fill="url(#dailyAreaGrad)" />
               )}
 
-              {/* Solid Green Curved Line for Past & Today */}
+              {/* Solid Curved Line for Past & Today */}
               {dailyTracking.curvePast && (
                 <path
                   d={dailyTracking.curvePast}
                   fill="none"
-                  stroke="#10B981"
+                  stroke={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -740,17 +777,17 @@ export default function FinanceDashboardPage() {
                 cy={activeDayPoint.y}
                 r="7"
                 fill="#FFFFFF"
-                stroke="#10B981"
+                stroke={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'}
                 strokeWidth="3.5"
               />
               <circle
                 cx={activeDayPoint.x}
                 cy={activeDayPoint.y}
                 r="2.5"
-                fill="#10B981"
+                fill={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'}
               />
 
-              {/* Floating Tooltip Pill (Mirip persis contoh: $ 26,210) */}
+              {/* Floating Tooltip Pill */}
               <g transform={`translate(${activeDayPoint.x}, ${Math.max(20, activeDayPoint.y - 26)})`}>
                 <rect
                   x="-46"
@@ -770,23 +807,37 @@ export default function FinanceDashboardPage() {
                   fill="#0F172A"
                   letterSpacing="-0.02em"
                 >
-                  {formatRupiah(dailyChartMode === 'balance' ? activeDayData.balance : activeDayData.expense)}
+                  {formatRupiah(dailyChartMode === 'spent' ? activeDayData.expense : activeDayData.balance)}
                 </text>
               </g>
             </svg>
 
             {/* X-Axis Days Labels (Mon, Tue, Wed, Thu, Fri, Sat, Sun) */}
             <div className="crm-daily-days-row">
-              {dailyTracking.days.map((d) => (
-                <button
-                  key={d.dayName}
-                  className={`crm-day-pill ${activeDayIdx === d.idx ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
-                  onClick={() => setHoveredDayIdx(d.idx)}
-                  onMouseEnter={() => setHoveredDayIdx(d.idx)}
-                >
-                  <span className="crm-day-abbr">{d.dayName}</span>
-                </button>
-              ))}
+              {dailyTracking.days.map((d) => {
+                const isSelected = activeDayIdx === d.idx;
+                const displayVal = dailyChartMode === 'spent'
+                  ? d.isPastOrToday
+                    ? d.expense > 0
+                      ? formatRupiahShort(d.expense)
+                      : 'Rp 0'
+                    : '-'
+                  : d.isPastOrToday
+                  ? formatRupiahShort(d.balance)
+                  : '-';
+
+                return (
+                  <button
+                    key={d.dayName}
+                    className={`crm-day-pill ${isSelected ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
+                    onClick={() => setHoveredDayIdx(d.idx)}
+                    onMouseEnter={() => setHoveredDayIdx(d.idx)}
+                  >
+                    <span className="crm-day-abbr">{d.dayName}</span>
+                    <span className="crm-day-val">{displayVal}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>

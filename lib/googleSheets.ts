@@ -734,6 +734,13 @@ export async function getYearSummary(
     const isPengeluaran = jenis?.toLowerCase().includes('pengeluaran');
     const isPemasukan = jenis?.toLowerCase().includes('pemasukan');
     const kategori = katRaw?.trim() || 'Lain-lain';
+    const keterangan = row[4] ? String(row[4]).trim() : '';
+
+    const isTransfer =
+      kategori.toLowerCase().includes('pindah') ||
+      kategori.toLowerCase().includes('transfer') ||
+      keterangan.toLowerCase().includes('pindah');
+    if (isTransfer) continue;
 
     if (!monthMap[ym]) {
       monthMap[ym] = { pemasukan: 0, pengeluaran: 0, count: 0 };
@@ -848,32 +855,43 @@ export async function getMonthSummary(
       }
     }
 
+    const isTransfer =
+      kategori.toLowerCase().includes('pindah') ||
+      kategori.toLowerCase().includes('transfer') ||
+      keterangan.toLowerCase().includes('pindah');
+
     if (isPengeluaran) {
-      totalPengeluaran += cleanNominal;
-      categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
       walletBalances[walletKey] -= cleanNominal;
-      count++;
-      expenseDetails.push({
-        date: cleanDate,
-        category: kategori,
-        nominal: cleanNominal,
-        description: keterangan,
-        noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
-        wallet,
-      });
+      if (!isTransfer) {
+        totalPengeluaran += cleanNominal;
+        categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
+        count++;
+        expenseDetails.push({
+          date: cleanDate,
+          category: kategori,
+          nominal: cleanNominal,
+          description: keterangan,
+          noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
+          wallet,
+          isTransfer: false,
+        });
+      }
     } else if (isPemasukan) {
-      totalPemasukan += cleanNominal;
-      categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
       walletBalances[walletKey] += cleanNominal;
-      count++;
-      incomeDetails.push({
-        date: cleanDate,
-        category: kategori,
-        nominal: cleanNominal,
-        description: keterangan,
-        noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
-        wallet,
-      });
+      if (!isTransfer) {
+        totalPemasukan += cleanNominal;
+        categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
+        count++;
+        incomeDetails.push({
+          date: cleanDate,
+          category: kategori,
+          nominal: cleanNominal,
+          description: keterangan,
+          noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
+          wallet,
+          isTransfer: false,
+        });
+      }
     }
   }
 
@@ -1188,14 +1206,23 @@ export async function getAllTransactionsForWeb(
         pic = picMatch[1].trim();
       }
 
+      const isTransfer =
+        kategori.toLowerCase().includes('pindah') ||
+        kategori.toLowerCase().includes('transfer') ||
+        keterangan.toLowerCase().includes('pindah');
+
       if (jenis === 'Pemasukan') {
-        totalPemasukan += cleanNominal;
-        categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
         walletBalances[walletKey] += cleanNominal;
+        if (!isTransfer) {
+          totalPemasukan += cleanNominal;
+          categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
+        }
       } else {
-        totalPengeluaran += cleanNominal;
-        categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
         walletBalances[walletKey] -= cleanNominal;
+        if (!isTransfer) {
+          totalPengeluaran += cleanNominal;
+          categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
+        }
       }
 
       allItems.push({
@@ -1210,6 +1237,7 @@ export async function getAllTransactionsForWeb(
         pic,
         inputTime,
         wallet,
+        isTransfer,
       });
     }
   }
@@ -1908,6 +1936,7 @@ function buildMonthlyComparison(items: WebTransactionItem[]): MonthlyComparisonR
   const monthMap = new Map<string, { label: string; income: number; expense: number }>();
 
   for (const item of items) {
+    if (item.isTransfer) continue;
     const parsed = parseYearMonth(item.date);
     if (!parsed) continue;
     const existing = monthMap.get(parsed.key) || { label: parsed.label, income: 0, expense: 0 };

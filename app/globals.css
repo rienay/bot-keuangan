@@ -607,13 +607,15 @@ button:active, a:active {
 .crm-day-pill {
   border: none;
   background: transparent;
-  padding: 0.3rem 0.5rem;
-  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.15rem;
 }
 
 .crm-day-pill:hover {
@@ -622,15 +624,27 @@ button:active, a:active {
 
 .crm-day-abbr {
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #94A3B8;
   letter-spacing: -0.01em;
   transition: color 0.15s ease;
 }
 
+.crm-day-val {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #94A3B8;
+  white-space: nowrap;
+}
+
 .crm-day-pill.active .crm-day-abbr {
   color: var(--crm-text);
   font-weight: 800;
+}
+
+.crm-day-pill.active .crm-day-val {
+  color: #4F46E5;
+  font-weight: 700;
 }
 
 .crm-day-pill.is-today .crm-day-abbr {
@@ -639,7 +653,13 @@ button:active, a:active {
 }
 
 .crm-day-pill.active {
-  background: #F1F5F9;
+  background: #EEF2FF;
+}
+
+.crm-daily-growth-badge.expense {
+  color: #DC2626;
+  background: #FEF2F2;
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 /* ============================================================
@@ -1344,8 +1364,11 @@ button:active, a:active {
   .crm-day-abbr {
     font-size: 0.7rem;
   }
+  .crm-day-val {
+    font-size: 0.55rem;
+  }
   .crm-day-pill {
-    padding: 0.2rem 0.35rem;
+    padding: 0.2rem 0.25rem;
   }
 
   /* 5. Chart Cards & Monthly Cards */

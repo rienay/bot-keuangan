@@ -31,6 +31,7 @@ export interface ParsedTransaction {
   date: string;
   noteLink?: string;
   wallet?: string;
+  isTransfer?: boolean;
 }
 
 export interface ExpenseDetail {
@@ -41,6 +42,7 @@ export interface ExpenseDetail {
   description: string;
   noteLink?: string;
   wallet?: string;
+  isTransfer?: boolean;
 }
 
 export interface SummaryReport {
@@ -143,6 +145,7 @@ export interface WebTransactionItem {
   pic?: string;
   inputTime?: string;
   wallet?: string;
+  isTransfer?: boolean;
 }
 
 export interface BudgetInfo {
