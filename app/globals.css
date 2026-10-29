@@ -194,6 +194,10 @@ button:active, a:active {
   box-shadow: 0 1px 2px rgba(99, 102, 241, 0.08);
 }
 
+.crm-btn-text-mobile {
+  display: none;
+}
+
 /* ============================================================
    CONTAINER (Full Width Modern Dashboard)
    ============================================================ */
@@ -607,9 +611,43 @@ button:active, a:active {
   margin-top: 0.15rem;
 }
 
+.crm-chart-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.crm-pill-toggle {
+  display: inline-flex;
+  background: var(--crm-subtle);
+  padding: 0.2rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--crm-border);
+}
+
+.crm-pill-btn {
+  border: none;
+  background: transparent;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--crm-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.crm-pill-btn.active {
+  background: #FFFFFF;
+  color: var(--crm-text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
 .crm-chart-legend {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.65rem;
   align-items: center;
 }
 
@@ -641,13 +679,17 @@ button:active, a:active {
   font-size: 0.82rem;
 }
 
-/* Dual Bar Chart */
+/* Dual Bar Chart with Smooth Horizontal Scroll */
 .crm-bar-container {
   height: 220px;
   display: flex;
   align-items: flex-end;
   padding-bottom: 0.5rem;
   border-bottom: 1px dashed #E2E8F0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 .crm-bar-chart {
@@ -657,6 +699,7 @@ button:active, a:active {
   width: 100%;
   height: 100%;
   gap: 0.5rem;
+  padding: 0 0.25rem;
 }
 
 .crm-bar-group {
@@ -664,6 +707,7 @@ button:active, a:active {
   flex-direction: column;
   align-items: center;
   flex: 1;
+  min-width: 44px;
   max-width: 70px;
 }
 
@@ -725,6 +769,7 @@ button:active, a:active {
   font-weight: 600;
   color: var(--crm-muted);
   margin-top: 0.65rem;
+  white-space: nowrap;
 }
 
 /* Donut Chart (Product Statistic Style) */
@@ -759,7 +804,7 @@ button:active, a:active {
   transform: translate(-50%, -50%);
   text-align: center;
   pointer-events: none;
-  max-width: 100px;
+  width: 120px;
 }
 
 .crm-donut-center-label {
@@ -776,56 +821,68 @@ button:active, a:active {
 
 .crm-donut-center-val {
   display: block;
-  font-size: 1.05rem;
   font-weight: 800;
   color: var(--crm-text);
   letter-spacing: -0.02em;
   margin-top: 0.15rem;
-  line-height: 1.1;
+  line-height: 1.15;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .crm-donut-legend-list {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.55rem;
   min-width: 0;
 }
 
 .crm-donut-legend-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.35rem 0.5rem;
-  border-radius: 8px;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
   transition: background-color 0.15s ease;
   cursor: pointer;
+  background: #FAFAFA;
+  border: 1px solid rgba(226, 232, 240, 0.7);
 }
 
 .crm-donut-legend-row:hover,
 .crm-donut-legend-row.highlighted {
-  background: var(--crm-subtle);
+  background: #EEF2FF;
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.crm-legend-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .crm-legend-left {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   min-width: 0;
 }
 
 .crm-donut-color-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
+.crm-legend-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
 .crm-legend-name {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--crm-text);
   white-space: nowrap;
@@ -841,18 +898,52 @@ button:active, a:active {
 }
 
 .crm-legend-amount {
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 600;
   color: var(--crm-muted);
 }
 
 .crm-legend-pct {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem 0.35rem;
   border-radius: var(--radius-pill);
   background: #F1F5F9;
   color: var(--crm-text);
+}
+
+.crm-legend-bar-track {
+  width: 100%;
+  height: 4px;
+  background: #E2E8F0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.crm-legend-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.crm-toggle-categories-btn {
+  width: 100%;
+  padding: 0.6rem;
+  background: var(--crm-subtle);
+  border: 1px dashed var(--crm-border);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--crm-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 0.4rem;
+  text-align: center;
+}
+
+.crm-toggle-categories-btn:hover {
+  background: #EEF2FF;
+  border-color: rgba(99, 102, 241, 0.4);
 }
 
 .crm-badge-count {
@@ -862,6 +953,22 @@ button:active, a:active {
   background: #EEF2FF;
   padding: 0.2rem 0.6rem;
   border-radius: var(--radius-pill);
+}
+
+.crm-badge-count-btn {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--crm-primary);
+  background: #EEF2FF;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 0.25rem 0.7rem;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.crm-badge-count-btn:hover {
+  background: #E0E7FF;
 }
 
 /* ============================================================
@@ -994,37 +1101,142 @@ button:active, a:active {
 }
 
 @media (max-width: 640px) {
+  /* 1. Mobile Navbar */
   .crm-navbar {
-    padding: 0.75rem 1rem;
+    padding: 0.65rem 0.85rem;
   }
+  .crm-brand {
+    gap: 0.5rem;
+  }
+  .crm-brand-title {
+    font-size: 0.95rem;
+  }
+  .crm-brand-logo {
+    width: 34px;
+    height: 34px;
+    font-size: 1.1rem;
+    border-radius: 10px;
+  }
+  .crm-badge-book {
+    font-size: 0.68rem;
+    margin-top: 0;
+  }
+  .crm-btn-text {
+    display: none;
+  }
+  .crm-btn-text-mobile {
+    display: inline;
+  }
+  .crm-refresh-btn,
+  .crm-bot-btn {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.72rem;
+  }
+
+  /* 2. Container */
   .crm-container {
-    padding: 1rem 0.85rem 3rem;
+    padding: 0.85rem 0.75rem 3.5rem;
+  }
+
+  /* 3. 2x2 Clean Compact Grid for Top KPI Cards */
+  .crm-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+  }
+  .crm-kpi-card {
+    padding: 0.8rem;
+    border-radius: var(--radius-lg);
+  }
+  .crm-kpi-icon-circle {
+    width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
+  }
+  .crm-kpi-label {
+    font-size: 0.65rem;
+    margin-top: 0.35rem;
+  }
+  .crm-kpi-val {
+    font-size: 1.05rem;
+    letter-spacing: -0.02em;
+    margin-top: 0.15rem;
+  }
+  .crm-kpi-footer {
+    font-size: 0.62rem;
+    margin-top: 0.35rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .crm-kpi-chip,
+  .crm-kpi-badge {
+    font-size: 0.62rem;
+    padding: 0.1rem 0.4rem;
+  }
+
+  /* 4. Daily Tracking Card */
+  .crm-daily-card {
+    padding: 1.15rem 1rem 1rem;
+    border-radius: var(--radius-lg);
+    margin-bottom: 1rem;
   }
   .crm-daily-amount {
-    font-size: 1.6rem;
-  }
-  .crm-daily-days-row {
-    padding: 0 15px;
+    font-size: 1.55rem;
   }
   .crm-daily-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-  .crm-kpi-grid {
-    grid-template-columns: 1fr;
     gap: 0.75rem;
   }
-  .crm-kpi-val {
-    font-size: 1.35rem;
+  .crm-daily-days-row {
+    padding: 0 10px;
   }
+  .crm-day-abbr {
+    font-size: 0.7rem;
+  }
+  .crm-day-pill {
+    padding: 0.2rem 0.35rem;
+  }
+
+  /* 5. Chart Cards */
+  .crm-card {
+    padding: 1.15rem 1rem;
+    border-radius: var(--radius-lg);
+    margin-bottom: 1rem;
+  }
+  .crm-card-title {
+    font-size: 0.95rem;
+  }
+  .crm-card-subtitle {
+    font-size: 0.68rem;
+  }
+  .crm-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.65rem;
+    margin-bottom: 0.85rem;
+  }
+  .crm-chart-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* 6. Donut Content */
   .crm-donut-content {
     flex-direction: column;
     align-items: center;
-    gap: 1.25rem;
+    gap: 1.15rem;
+  }
+  .crm-donut-svg-wrap {
+    width: 150px;
+    height: 150px;
   }
   .crm-donut-legend-list {
     width: 100%;
   }
+
+  /* 7. Bottom Benchmarks */
   .crm-benchmarks-grid {
     grid-template-columns: 1fr;
   }

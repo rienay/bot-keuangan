@@ -134,6 +134,11 @@ export default function FinanceDashboardPage() {
   const [dailyChartMode, setDailyChartMode] = useState<'balance' | 'spent'>('balance');
   const [hoveredDayIdx, setHoveredDayIdx] = useState<number | null>(null);
 
+  // Filter range bulan untuk Bar Chart (default 6 bulan agar rapi di HP)
+  const [barChartRange, setBarChartRange] = useState<'6' | '12' | 'all'>('6');
+  // State untuk expand/collapse kategori (default tampilkan 5 teratas agar tidak memanjang)
+  const [showAllCategories, setShowAllCategories] = useState(false);
+
   const fetchData = async (book: string = 'Tabungan', showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
     else setLoading(true);
@@ -382,7 +387,13 @@ export default function FinanceDashboardPage() {
       return [];
     }
 
-    const months = data.monthlyComparison.months;
+    let months = data.monthlyComparison.months;
+    if (barChartRange === '6') {
+      months = months.slice(-6);
+    } else if (barChartRange === '12') {
+      months = months.slice(-12);
+    }
+
     const maxVal = Math.max(
       ...months.map((m) => Math.max(m.income, m.expense)),
       1
@@ -397,7 +408,7 @@ export default function FinanceDashboardPage() {
         expenseHeight,
       };
     });
-  }, [data?.monthlyComparison?.months]);
+  }, [data?.monthlyComparison?.months, barChartRange]);
 
   // Budget calculations
   const budgetAmount = data?.budget?.amount || 0;
@@ -420,7 +431,7 @@ export default function FinanceDashboardPage() {
               <h1 className="crm-brand-title">Tabungan Kita</h1>
               <div className="crm-badge-book">
                 <span className="crm-status-dot" />
-                <span>Pos Aktif: <b>{selectedBook}</b></span>
+                <span className="crm-book-name">Pos: <b>{selectedBook}</b></span>
               </div>
             </div>
           </div>
@@ -433,7 +444,7 @@ export default function FinanceDashboardPage() {
               title="Sinkronisasi Data Langsung dari Google Sheets"
             >
               <span>{isRefreshing ? '⏳' : '🔄'}</span>
-              <span>{isRefreshing ? 'Syncing...' : 'Sync Data'}</span>
+              <span className="crm-btn-text">{isRefreshing ? 'Syncing...' : 'Sync Data'}</span>
             </button>
             <a
               href="https://t.me/nabung_date_bot"
@@ -442,7 +453,8 @@ export default function FinanceDashboardPage() {
               className="crm-bot-btn"
             >
               <span>🤖</span>
-              <span>@nabung_date_bot</span>
+              <span className="crm-btn-text">@nabung_date_bot</span>
+              <span className="crm-btn-text-mobile">Bot</span>
             </a>
           </div>
         </div>
@@ -707,13 +719,35 @@ export default function FinanceDashboardPage() {
                 <h2 className="crm-card-title">Arus Kas & Tren Bulanan</h2>
                 <div className="crm-card-subtitle">Perbandingan pemasukan vs pengeluaran antar bulan</div>
               </div>
-              <div className="crm-chart-legend">
-                <span className="crm-legend-item">
-                  <span className="crm-legend-dot blue" /> Masuk
-                </span>
-                <span className="crm-legend-item">
-                  <span className="crm-legend-dot indigo" /> Keluar
-                </span>
+              <div className="crm-chart-header-actions">
+                <div className="crm-pill-toggle">
+                  <button
+                    className={`crm-pill-btn ${barChartRange === '6' ? 'active' : ''}`}
+                    onClick={() => setBarChartRange('6')}
+                  >
+                    6 Bln
+                  </button>
+                  <button
+                    className={`crm-pill-btn ${barChartRange === '12' ? 'active' : ''}`}
+                    onClick={() => setBarChartRange('12')}
+                  >
+                    12 Bln
+                  </button>
+                  <button
+                    className={`crm-pill-btn ${barChartRange === 'all' ? 'active' : ''}`}
+                    onClick={() => setBarChartRange('all')}
+                  >
+                    Semua
+                  </button>
+                </div>
+                <div className="crm-chart-legend">
+                  <span className="crm-legend-item">
+                    <span className="crm-legend-dot blue" /> Masuk
+                  </span>
+                  <span className="crm-legend-item">
+                    <span className="crm-legend-dot indigo" /> Keluar
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -723,7 +757,12 @@ export default function FinanceDashboardPage() {
               </div>
             ) : (
               <div className="crm-bar-container">
-                <div className="crm-bar-chart">
+                <div
+                  className="crm-bar-chart"
+                  style={{
+                    minWidth: cashflowBarData.length > 8 ? `${cashflowBarData.length * 48}px` : '100%',
+                  }}
+                >
                   {cashflowBarData.map((m) => (
                     <div key={m.month} className="crm-bar-group">
                       <div className="crm-bars-pair">
@@ -733,7 +772,7 @@ export default function FinanceDashboardPage() {
                           style={{ height: `${m.incomeHeight}px` }}
                           title={`Masuk: +${formatRupiah(m.income)}`}
                         >
-                          <span className="crm-bar-tooltip">+${formatRupiah(m.income)}</span>
+                          <span className="crm-bar-tooltip">+{formatRupiah(m.income)}</span>
                         </div>
 
                         {/* Bar Keluar */}
@@ -742,7 +781,7 @@ export default function FinanceDashboardPage() {
                           style={{ height: `${m.expenseHeight}px` }}
                           title={`Keluar: -${formatRupiah(m.expense)}`}
                         >
-                          <span className="crm-bar-tooltip">-${formatRupiah(m.expense)}</span>
+                          <span className="crm-bar-tooltip">-{formatRupiah(m.expense)}</span>
                         </div>
                       </div>
                       <span className="crm-bar-label">{m.monthLabel.split(' ')[0]}</span>
@@ -760,9 +799,14 @@ export default function FinanceDashboardPage() {
                 <h2 className="crm-card-title">Distribusi Kategori</h2>
                 <div className="crm-card-subtitle">Proporsi pengeluaran berdasarkan kategori</div>
               </div>
-              <span className="crm-badge-count">
-                {categoryExpensesList.length} Kategori
-              </span>
+              {categoryExpensesList.length > 5 && (
+                <button
+                  className="crm-badge-count-btn"
+                  onClick={() => setShowAllCategories(!showAllCategories)}
+                >
+                  {showAllCategories ? 'Ringkas' : `Lihat Semua (${categoryExpensesList.length})`}
+                </button>
+              )}
             </div>
 
             {categoryExpensesList.length === 0 ? (
@@ -812,7 +856,14 @@ export default function FinanceDashboardPage() {
                     <span className="crm-donut-center-label">
                       {activeCategory || 'Total Belanja'}
                     </span>
-                    <span className="crm-donut-center-val">
+                    <span
+                      className="crm-donut-center-val"
+                      style={{
+                        fontSize: (activeCategory
+                          ? categoryExpensesList.find((c) => c.name === activeCategory)?.amount || 0
+                          : donutData.total) >= 10_000_000 ? '0.86rem' : '1.02rem',
+                      }}
+                    >
                       {formatRupiah(
                         activeCategory
                           ? categoryExpensesList.find((c) => c.name === activeCategory)?.amount || 0
@@ -824,27 +875,50 @@ export default function FinanceDashboardPage() {
 
                 {/* Donut Legend List */}
                 <div className="crm-donut-legend-list">
-                  {categoryExpensesList.map((c) => (
+                  {(showAllCategories ? categoryExpensesList : categoryExpensesList.slice(0, 5)).map((c) => (
                     <div
                       key={c.name}
                       className={`crm-donut-legend-row ${activeCategory === c.name ? 'highlighted' : ''}`}
                       onMouseEnter={() => setActiveCategory(c.name)}
                       onMouseLeave={() => setActiveCategory(null)}
                     >
-                      <div className="crm-legend-left">
-                        <span
-                          className="crm-donut-color-dot"
-                          style={{ background: c.config.barColor }}
-                        />
-                        <span className="crm-legend-name">{c.name}</span>
-                      </div>
+                      <div className="crm-legend-row-top">
+                        <div className="crm-legend-left">
+                          <span
+                            className="crm-donut-color-dot"
+                            style={{ background: c.config.barColor }}
+                          />
+                          <span className="crm-legend-icon">{c.config.icon}</span>
+                          <span className="crm-legend-name">{c.name}</span>
+                        </div>
 
-                      <div className="crm-legend-right">
-                        <span className="crm-legend-amount">{formatRupiah(c.amount)}</span>
-                        <span className="crm-legend-pct">{c.percentage}%</span>
+                        <div className="crm-legend-right">
+                          <span className="crm-legend-amount">{formatRupiah(c.amount)}</span>
+                          <span className="crm-legend-pct">{c.percentage}%</span>
+                        </div>
+                      </div>
+                      <div className="crm-legend-bar-track">
+                        <div
+                          className="crm-legend-bar-fill"
+                          style={{
+                            width: `${Math.min(100, Math.max(3, c.percentage))}%`,
+                            background: c.config.barColor,
+                          }}
+                        />
                       </div>
                     </div>
                   ))}
+
+                  {categoryExpensesList.length > 5 && (
+                    <button
+                      className="crm-toggle-categories-btn"
+                      onClick={() => setShowAllCategories(!showAllCategories)}
+                    >
+                      {showAllCategories
+                        ? '▲ Tampilkan 5 Teratas Saja'
+                        : `▼ Lihat Semua (${categoryExpensesList.length} Kategori)`}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
