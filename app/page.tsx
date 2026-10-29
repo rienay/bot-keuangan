@@ -138,6 +138,8 @@ export default function FinanceDashboardPage() {
   const [barChartRange, setBarChartRange] = useState<'6' | '12' | 'all'>('6');
   // State untuk expand/collapse kategori (default tampilkan 5 teratas agar tidak memanjang)
   const [showAllCategories, setShowAllCategories] = useState(false);
+  // Filter Tahun Transaksi (default tahun aktif 2026 agar tidak menumpuk semua tahun)
+  const [selectedYear, setSelectedYear] = useState<string>('2026');
 
   const fetchData = async (book: string = 'Tabungan', showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
@@ -216,6 +218,54 @@ export default function FinanceDashboardPage() {
       setIsSavingBudget(false);
     }
   };
+
+  // Daftar tahun yang tersedia dari data transaksi
+  const availableYears = useMemo(() => {
+    if (!data?.transactions || data.transactions.length === 0) {
+      return ['2026', '2025', '2024'];
+    }
+    const set = new Set<string>();
+    data.transactions.forEach((tx) => {
+      const d = parseTxDate(tx.date);
+      if (d) set.add(d.getFullYear().toString());
+    });
+    const list = Array.from(set).sort((a, b) => b.localeCompare(a));
+    return list.length > 0 ? list : ['2026'];
+  }, [data?.transactions]);
+
+  // Transaksi yang difilter berdasarkan tahun
+  const filteredTransactions = useMemo(() => {
+    if (!data?.transactions) return [];
+    if (selectedYear === 'Semua') return data.transactions;
+    return data.transactions.filter((tx) => {
+      const d = parseTxDate(tx.date);
+      return d && d.getFullYear().toString() === selectedYear;
+    });
+  }, [data?.transactions, selectedYear]);
+
+  // Statistik KPI berdasarkan tahun yang dipilih
+  const yearStats = useMemo(() => {
+    if (selectedYear === 'Semua') {
+      return {
+        totalPemasukan: data?.stats?.totalPemasukan || 0,
+        totalPengeluaran: data?.stats?.totalPengeluaran || 0,
+        saldo: data?.stats?.saldo || 0,
+        count: data?.stats?.count || 0,
+      };
+    }
+    let inc = 0;
+    let exp = 0;
+    filteredTransactions.forEach((tx) => {
+      if (tx.type === 'Pemasukan') inc += tx.amount;
+      else exp += tx.amount;
+    });
+    return {
+      totalPemasukan: inc,
+      totalPengeluaran: exp,
+      saldo: inc - exp,
+      count: filteredTransactions.length,
+    };
+  }, [filteredTransactions, data?.stats, selectedYear]);
 
   // 1. DATA TREKING HARIAN (Senin s/d Minggu, mencocokkan referensi Net Worth)
   const dailyTracking = useMemo(() => {
@@ -339,13 +389,21 @@ export default function FinanceDashboardPage() {
   const activeDayData = dailyTracking.days[activeDayIdx] || dailyTracking.days[0];
   const activeDayPoint = dailyTracking.points[activeDayIdx] || { x: 40, y: 70 };
 
-  // 2. Kategori pengeluaran sorted descending untuk Donut Chart
+  // 2. Kategori pengeluaran sorted descending untuk Donut Chart (sesuai tahun aktif)
   const categoryExpensesList = useMemo(() => {
-    if (!data?.stats?.categoryExpenses) return [];
-    const totalExp = data.stats.totalPengeluaran || 1;
-    return Object.entries(data.stats.categoryExpenses)
+    if (filteredTransactions.length === 0) return [];
+    const catMap: Record<string, number> = {};
+    let totalExp = 0;
+    filteredTransactions.forEach((tx) => {
+      if (tx.type === 'Pengeluaran') {
+        catMap[tx.category] = (catMap[tx.category] || 0) + tx.amount;
+        totalExp += tx.amount;
+      }
+    });
+    const expTotal = totalExp || 1;
+    return Object.entries(catMap)
       .map(([name, amount], idx) => {
-        const pct = Math.min(100, Math.round((amount / totalExp) * 100));
+        const pct = Math.min(100, Math.round((amount / expTotal) * 100));
         return {
           name,
           amount,
@@ -354,13 +412,13 @@ export default function FinanceDashboardPage() {
         };
       })
       .sort((a, b) => b.amount - a.amount);
-  }, [data?.stats?.categoryExpenses, data?.stats?.totalPengeluaran]);
+  }, [filteredTransactions]);
 
   // Kalkulasi data SVG Donut Chart (Radius = 65, Circumference ~ 408.4)
   const donutData = useMemo(() => {
     const R = 65;
     const C = 2 * Math.PI * R;
-    const total = data?.stats?.totalPengeluaran || 0;
+    const total = categoryExpensesList.reduce((acc, c) => acc + c.amount, 0);
 
     if (total <= 0 || categoryExpensesList.length === 0) {
       return { segments: [], total, C, R };
@@ -379,7 +437,7 @@ export default function FinanceDashboardPage() {
     });
 
     return { segments, total, C, R };
-  }, [categoryExpensesList, data?.stats?.totalPengeluaran]);
+  }, [categoryExpensesList]);
 
   // 3. Kalkulasi Bar Chart Arus Kas Bulanan
   const cashflowBarData = useMemo(() => {
@@ -388,10 +446,18 @@ export default function FinanceDashboardPage() {
     }
 
     let months = data.monthlyComparison.months;
-    if (barChartRange === '6') {
-      months = months.slice(-6);
-    } else if (barChartRange === '12') {
-      months = months.slice(-12);
+    if (selectedYear !== 'Semua') {
+      months = months.filter((m) => m.month.startsWith(`${selectedYear}-`));
+    } else {
+      if (barChartRange === '6') {
+        months = months.slice(-6);
+      } else if (barChartRange === '12') {
+        months = months.slice(-12);
+      }
+    }
+
+    if (months.length === 0) {
+      return [];
     }
 
     const maxVal = Math.max(
@@ -408,7 +474,7 @@ export default function FinanceDashboardPage() {
         expenseHeight,
       };
     });
-  }, [data?.monthlyComparison?.months, barChartRange]);
+  }, [data?.monthlyComparison?.months, selectedYear, barChartRange]);
 
   // Budget calculations
   const budgetAmount = data?.budget?.amount || 0;
@@ -469,6 +535,31 @@ export default function FinanceDashboardPage() {
           </div>
         )}
 
+        {/* YEAR FILTER BAR */}
+        <section className="crm-year-bar">
+          <div className="crm-year-left">
+            <span className="crm-year-icon">📅</span>
+            <span className="crm-year-label">Filter Tahun:</span>
+          </div>
+          <div className="crm-year-pills">
+            {availableYears.map((yr) => (
+              <button
+                key={yr}
+                className={`crm-year-pill ${selectedYear === yr ? 'active' : ''}`}
+                onClick={() => setSelectedYear(yr)}
+              >
+                {yr} {yr === '2026' ? '• Kini' : ''}
+              </button>
+            ))}
+            <button
+              className={`crm-year-pill ${selectedYear === 'Semua' ? 'active' : ''}`}
+              onClick={() => setSelectedYear('Semua')}
+            >
+              Semua Tahun
+            </button>
+          </div>
+        </section>
+
         {/* 2. TOP KPI METRIC CARDS */}
         <section className="crm-kpi-grid">
           {/* Card 1: Net Balance */}
@@ -476,15 +567,17 @@ export default function FinanceDashboardPage() {
             <div className="crm-kpi-top">
               <span className="crm-kpi-icon">💰</span>
               <span className="crm-kpi-chip">
-                {(data?.stats.saldo || 0) >= 0 ? '+Surplus' : '-Defisit'}
+                {yearStats.saldo >= 0 ? '+Surplus' : '-Defisit'}
               </span>
             </div>
-            <div className="crm-kpi-label">Total Saldo Bersih</div>
+            <div className="crm-kpi-label">
+              Saldo {selectedYear === 'Semua' ? 'Semua' : selectedYear}
+            </div>
             <div className="crm-kpi-val">
-              {loading && !data ? '...' : formatRupiah(data?.stats.saldo || 0)}
+              {loading && !data ? '...' : formatRupiah(yearStats.saldo)}
             </div>
             <div className="crm-kpi-footer">
-              <span>{data?.stats.count || 0} Total Transaksi di pos {selectedBook}</span>
+              <span>{yearStats.count} Transaksi ({selectedYear})</span>
             </div>
           </div>
 
@@ -494,9 +587,9 @@ export default function FinanceDashboardPage() {
               <div className="crm-kpi-icon-circle green">📥</div>
               <span className="crm-kpi-badge green">Pemasukan</span>
             </div>
-            <div className="crm-kpi-label">Total Pemasukan</div>
+            <div className="crm-kpi-label">Pemasukan {selectedYear === 'Semua' ? '' : selectedYear}</div>
             <div className="crm-kpi-val green">
-              +{formatRupiah(data?.stats.totalPemasukan || 0)}
+              +{formatRupiah(yearStats.totalPemasukan)}
             </div>
             <div className="crm-kpi-footer">
               <span>Arus dana kas masuk</span>
@@ -509,12 +602,12 @@ export default function FinanceDashboardPage() {
               <div className="crm-kpi-icon-circle orange">📤</div>
               <span className="crm-kpi-badge orange">Pengeluaran</span>
             </div>
-            <div className="crm-kpi-label">Total Pengeluaran</div>
+            <div className="crm-kpi-label">Pengeluaran {selectedYear === 'Semua' ? '' : selectedYear}</div>
             <div className="crm-kpi-val orange">
-              -{formatRupiah(data?.stats.totalPengeluaran || 0)}
+              -{formatRupiah(yearStats.totalPengeluaran)}
             </div>
             <div className="crm-kpi-footer">
-              <span>Realisasi belanja & kas keluar</span>
+              <span>Realisasi belanja kas</span>
             </div>
           </div>
 
