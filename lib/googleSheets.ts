@@ -10,6 +10,7 @@ import {
   TransferBalanceResult,
   WebFinanceData,
   WebTransactionItem,
+  WalletBalances,
 } from './types';
 
 export const DEFAULT_BOOK_NAME = 'Tabungan';
@@ -22,6 +23,7 @@ const SHEET_COLUMNS = [
   'Keterangan',
   'Link Nota',
   'Waktu Input',
+  'Dompet',
 ];
 
 const SESSION_SHEET_NAME = '_Sessions';
@@ -96,17 +98,27 @@ export async function ensureHeaderRow(sheetName: string = DEFAULT_BOOK_NAME): Pr
   try {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${sheetName}'!A1:G1`,
+      range: `'${sheetName}'!A1:H1`,
     });
 
     const values = res.data.values;
     if (!values || values.length === 0 || values[0].length === 0) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `'${sheetName}'!A1:G1`,
+        range: `'${sheetName}'!A1:H1`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [SHEET_COLUMNS],
+        },
+      });
+    } else if (values[0].length < 8) {
+      // Header belum ada kolom Dompet (H1), tambahkan H1 = 'Dompet'
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetName}'!H1`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [['Dompet']],
         },
       });
     }
@@ -132,7 +144,7 @@ export async function ensureHeaderRow(sheetName: string = DEFAULT_BOOK_NAME): Pr
         // Tulis header
         await sheets.spreadsheets.values.update({
           spreadsheetId,
-          range: `'${sheetName}'!A1:G1`,
+          range: `'${sheetName}'!A1:H1`,
           valueInputOption: 'USER_ENTERED',
           requestBody: {
             values: [SHEET_COLUMNS],
@@ -414,6 +426,8 @@ export async function appendTransaction(
 
   const formattedDate = tx.date.startsWith("'") ? tx.date : `'${tx.date}`;
 
+  const defaultWallet = tx.wallet || (tx.type === 'Pemasukan' ? 'Bank' : 'Cash');
+
   const rowValues = [
     formattedDate,
     tx.type,
@@ -422,11 +436,12 @@ export async function appendTransaction(
     tx.description,
     tx.noteLink || '-',
     nowJakarta,
+    defaultWallet,
   ];
 
   const res = await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `'${sheetName}'!A:G`,
+    range: `'${sheetName}'!A:H`,
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
     requestBody: {
@@ -510,7 +525,7 @@ export async function getMonthSummary(
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${sheetName}'!A2:G`,
+    range: `'${sheetName}'!A2:H`,
   });
 
   const rows = res.data.values || [];
@@ -521,11 +536,17 @@ export async function getMonthSummary(
   const categoryIncome: Record<string, number> = {};
   const expenseDetails: ExpenseDetail[] = [];
   const incomeDetails: ExpenseDetail[] = [];
+  const walletBalances: WalletBalances = {
+    Bank: 0,
+    'E-Wallet': 0,
+    Cash: 0,
+    total: 0,
+  };
 
   const isAllTime = !yearMonthPrefix;
 
   for (const row of rows) {
-    const [tglRaw, jenis, katRaw, nominalRaw, keteranganRaw, noteLinkRaw] = row;
+    const [tglRaw, jenis, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, , dompetRaw] = row;
     if (!tglRaw || !nominalRaw) continue;
 
     const cleanNominal =
@@ -538,6 +559,11 @@ export async function getMonthSummary(
     const kategori = katRaw?.trim() || 'Lain-lain';
     const keterangan = keteranganRaw ? String(keteranganRaw).trim() : '';
     const noteLink = noteLinkRaw ? String(noteLinkRaw).trim() : '';
+    let wallet = dompetRaw ? String(dompetRaw).trim() : (isPemasukan ? 'Bank' : 'Cash');
+    if (!['Bank', 'E-Wallet', 'Cash'].includes(wallet)) {
+      wallet = 'Bank';
+    }
+    const walletKey = wallet as 'Bank' | 'E-Wallet' | 'Cash';
 
     const cleanDate = String(tglRaw).trim().replace(/^'/, '');
 
@@ -551,6 +577,7 @@ export async function getMonthSummary(
     if (isPengeluaran) {
       totalPengeluaran += cleanNominal;
       categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
+      walletBalances[walletKey] -= cleanNominal;
       count++;
       expenseDetails.push({
         date: cleanDate,
@@ -558,10 +585,12 @@ export async function getMonthSummary(
         nominal: cleanNominal,
         description: keterangan,
         noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
+        wallet,
       });
     } else if (isPemasukan) {
       totalPemasukan += cleanNominal;
       categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
+      walletBalances[walletKey] += cleanNominal;
       count++;
       incomeDetails.push({
         date: cleanDate,
@@ -569,9 +598,12 @@ export async function getMonthSummary(
         nominal: cleanNominal,
         description: keterangan,
         noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
+        wallet,
       });
     }
   }
+
+  walletBalances.total = walletBalances.Bank + walletBalances['E-Wallet'] + walletBalances.Cash;
 
   const periodeLabel = isAllTime
     ? 'Semua Transaksi (Keseluruhan)'
@@ -589,6 +621,7 @@ export async function getMonthSummary(
     expenseDetails,
     incomeDetails,
     bookName: sheetName,
+    walletBalances,
   };
 }
 
@@ -781,7 +814,7 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
     try {
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${book}'!A2:G`,
+        range: `'${book}'!A2:H`,
       });
       return { book, rows: res.data.values || [] };
     } catch (e) {
@@ -797,13 +830,19 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
   let totalPengeluaran = 0;
   const categoryExpenses: Record<string, number> = {};
   const categoryIncome: Record<string, number> = {};
+  const walletBalances: WalletBalances = {
+    Bank: 0,
+    'E-Wallet': 0,
+    Cash: 0,
+    total: 0,
+  };
 
   let globalId = 1;
 
   for (const { book, rows } of results) {
     for (let rIdx = 0; rIdx < rows.length; rIdx++) {
       const row = rows[rIdx];
-      const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw] = row;
+      const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw, dompetRaw] = row;
       if (!tglRaw || !nominalRaw) continue;
 
       const cleanNominal =
@@ -822,6 +861,11 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
       const cleanDate = String(tglRaw).trim().replace(/^'/, '');
       const noteLink = noteLinkRaw && String(noteLinkRaw).startsWith('http') ? String(noteLinkRaw).trim() : undefined;
       const inputTime = waktuRaw ? String(waktuRaw).trim() : undefined;
+      let wallet = dompetRaw ? String(dompetRaw).trim() : (jenis === 'Pemasukan' ? 'Bank' : 'Cash');
+      if (!['Bank', 'E-Wallet', 'Cash'].includes(wallet)) {
+        wallet = 'Bank';
+      }
+      const walletKey = wallet as 'Bank' | 'E-Wallet' | 'Cash';
 
       // Ekstrak PIC jika ada di keterangan, e.g. (PIC: @username) atau (PIC: nama)
       let pic: string | undefined;
@@ -833,9 +877,11 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
       if (jenis === 'Pemasukan') {
         totalPemasukan += cleanNominal;
         categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
+        walletBalances[walletKey] += cleanNominal;
       } else {
         totalPengeluaran += cleanNominal;
         categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
+        walletBalances[walletKey] -= cleanNominal;
       }
 
       allItems.push({
@@ -849,9 +895,12 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
         noteLink,
         pic,
         inputTime,
+        wallet,
       });
     }
   }
+
+  walletBalances.total = walletBalances.Bank + walletBalances['E-Wallet'] + walletBalances.Cash;
 
   // Urutkan transaksi dari tanggal terbaru ke terlama
   allItems.sort((a, b) => {
@@ -875,6 +924,7 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
       count: allItems.length,
       categoryExpenses,
       categoryIncome,
+      walletBalances,
     },
     lastUpdated: nowJakarta,
   };
@@ -1110,6 +1160,151 @@ export async function findMatchingTransactionRowAcrossBooks(
   }
 
   return null;
+}
+
+/**
+ * Memperbarui sumber dompet (Bank / E-Wallet / Cash) pada baris tertentu di Google Sheets
+ */
+export async function updateTransactionWallet(
+  sheetName: string,
+  rowIndex: number,
+  wallet: string
+): Promise<boolean> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${sheetName}'!H${rowIndex}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[wallet]],
+    },
+  });
+
+  return true;
+}
+
+/**
+ * Mengambil ringkasan saldo per dompet (Bank, E-Wallet, Cash)
+ */
+export async function getWalletBalances(sheetName: string = DEFAULT_BOOK_NAME): Promise<WalletBalances> {
+  await ensureHeaderRow(sheetName);
+
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${sheetName}'!A2:H`,
+  });
+
+  const rows = res.data.values || [];
+  const balances: WalletBalances = {
+    Bank: 0,
+    'E-Wallet': 0,
+    Cash: 0,
+    total: 0,
+  };
+
+  for (const row of rows) {
+    const [, jenisRaw, , nominalRaw, , , , dompetRaw] = row;
+    if (!nominalRaw) continue;
+
+    const nominal =
+      typeof nominalRaw === 'number'
+        ? nominalRaw
+        : parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
+
+    const isPengeluaran = jenisRaw?.toLowerCase().includes('pengeluaran');
+    const isPemasukan = jenisRaw?.toLowerCase().includes('pemasukan');
+    let wallet = dompetRaw ? String(dompetRaw).trim() : (isPemasukan ? 'Bank' : 'Cash');
+    if (!['Bank', 'E-Wallet', 'Cash'].includes(wallet)) {
+      wallet = 'Bank';
+    }
+
+    const key = wallet as 'Bank' | 'E-Wallet' | 'Cash';
+    if (isPemasukan) {
+      balances[key] += nominal;
+    } else if (isPengeluaran) {
+      balances[key] -= nominal;
+    }
+  }
+
+  balances.total = balances.Bank + balances['E-Wallet'] + balances.Cash;
+  return balances;
+}
+
+/**
+ * Memindahkan uang antar dompet (Bank <-> E-Wallet <-> Cash)
+ * Mencatat 1 Pengeluaran di dompet asal dan 1 Pemasukan di dompet tujuan.
+ */
+export async function transferWalletMoney(params: {
+  bookName?: string;
+  fromWallet: string;
+  toWallet: string;
+  amount: number;
+  senderName: string;
+}): Promise<{
+  success: boolean;
+  fromWallet: string;
+  toWallet: string;
+  amount: number;
+  balances: WalletBalances;
+}> {
+  const sheetName = params.bookName || DEFAULT_BOOK_NAME;
+  await ensureHeaderRow(sheetName);
+
+  const cleanFrom = params.fromWallet.trim();
+  const cleanTo = params.toWallet.trim();
+
+  if (cleanFrom.toLowerCase() === cleanTo.toLowerCase()) {
+    throw new Error('Dompet asal dan tujuan tidak boleh sama.');
+  }
+  if (params.amount <= 0) {
+    throw new Error('Nominal pindah uang harus lebih dari Rp 0.');
+  }
+
+  const todayStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+  // 1. Catat Pengeluaran dari Dompet Asal
+  const outTx: ParsedTransaction = {
+    type: 'Pengeluaran',
+    amount: params.amount,
+    category: 'Pindah Uang',
+    description: `Pindah uang ke ${cleanTo} (PIC: ${params.senderName})`,
+    date: todayStr,
+    wallet: cleanFrom,
+  };
+  await appendTransaction(outTx, sheetName);
+
+  // 2. Catat Pemasukan ke Dompet Tujuan
+  const inTx: ParsedTransaction = {
+    type: 'Pemasukan',
+    amount: params.amount,
+    category: 'Pindah Uang',
+    description: `Terima pindah uang dari ${cleanFrom} (PIC: ${params.senderName})`,
+    date: todayStr,
+    wallet: cleanTo,
+  };
+  await appendTransaction(inTx, sheetName);
+
+  const balances = await getWalletBalances(sheetName);
+
+  return {
+    success: true,
+    fromWallet: cleanFrom,
+    toWallet: cleanTo,
+    amount: params.amount,
+    balances,
+  };
 }
 
 

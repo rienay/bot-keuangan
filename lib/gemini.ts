@@ -101,6 +101,11 @@ Aturan Penting:
    - "Piutang": untuk uang yang kita pinjamkan/kasbon ke orang lain, atau penerimaan uang saat orang melunasi utangnya ke kita.
    - "Lain-lain": hanya jika benar-benar tidak cocok dengan kategori di atas.
 5. Keterangan: Deskripsi singkat dan jelas tentang transaksi tersebut (sertakan nama orang yang berutang/piutang jika ada di pesan).
+6. Dompet (wallet): Deteksi metode atau penyimpanan saldo:
+   - "Bank": jika ada kata transfer, rekening, bank, bca, mandiri, bri, bni, jago, seabank, m-banking, qris.
+   - "E-Wallet": jika ada kata gopay, ovo, dana, shopeepay, linkaja, e-wallet.
+   - "Cash": jika ada kata tunai, cash, uang fisik.
+   - Jika tidak disebut secara eksplisit: "Bank" jika Pemasukan (misal gaji/transfer), atau "Cash" jika belanja kasir warung/makan.
 
 Pesan pengguna: "${text}"
 
@@ -110,7 +115,8 @@ Kembalikan respon JSON persis dengan struktur berikut:
   "amount": number,
   "category": string,
   "description": string,
-  "date": "YYYY-MM-DD"
+  "date": "YYYY-MM-DD",
+  "wallet": "Bank" | "E-Wallet" | "Cash"
 }
 
 Jika pesan tersebut bukan catatan keuangan (misal cuma menyapa "halo"), kembalikan JSON: null.`;
@@ -177,6 +183,10 @@ Tugas Analisis:
    - "Utang": pinjaman yang kita terima atau pembayaran cicilan/pelunasan utang ke orang lain.
    - "Piutang": pinjaman yang kita berikan ke orang lain (kasbon) atau orang melunasi utangnya ke kita.
    - "Lain-lain": jika tidak ada yang cocok.
+6. DOMPET (wallet):
+   - "Bank": bukti m-banking / transfer bank (BCA, Mandiri, BRI, BNI, Seabank, Jago, dll).
+   - "E-Wallet": bukti pembayaran / transfer GoPay, OVO, DANA, ShopeePay, dll.
+   - "Cash": struk belanja fisik kasir toko/minimarket/tunai.
 
 Kembalikan respon JSON persis dengan struktur berikut:
 {
@@ -184,7 +194,8 @@ Kembalikan respon JSON persis dengan struktur berikut:
   "amount": number,
   "category": string,
   "description": string,
-  "date": "YYYY-MM-DD"
+  "date": "YYYY-MM-DD",
+  "wallet": "Bank" | "E-Wallet" | "Cash"
 }
 
 Jika gambar sama sekali bukan bukti transfer, bukan struk/nota, dan tidak ada nominal transaksi finansial, kembalikan JSON: null.`;

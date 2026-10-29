@@ -1,4 +1,12 @@
 export type TransactionType = 'Pengeluaran' | 'Pemasukan';
+export type WalletType = 'Bank' | 'E-Wallet' | 'Cash';
+
+export interface WalletBalances {
+  Bank: number;
+  'E-Wallet': number;
+  Cash: number;
+  total: number;
+}
 
 export interface ParsedTransaction {
   type: TransactionType;
@@ -8,6 +16,7 @@ export interface ParsedTransaction {
   date: string; // Format: YYYY-MM-DD
   noteLink?: string;
   rawMerchantOrItem?: string;
+  wallet?: string;
 }
 
 export interface ExpenseDetail {
@@ -16,6 +25,7 @@ export interface ExpenseDetail {
   nominal: number;
   description: string;
   noteLink?: string;
+  wallet?: string;
 }
 
 export interface SummaryReport {
@@ -29,6 +39,7 @@ export interface SummaryReport {
   categoryIncome: Record<string, number>;
   expenseDetails: ExpenseDetail[];
   incomeDetails: ExpenseDetail[];
+  walletBalances?: WalletBalances;
 }
 
 export interface BookSummary {
@@ -93,6 +104,7 @@ export interface WebTransactionItem {
   noteLink?: string;
   pic?: string;
   inputTime?: string;
+  wallet?: string;
 }
 
 export interface WebFinanceData {
@@ -106,6 +118,7 @@ export interface WebFinanceData {
     count: number;
     categoryExpenses: Record<string, number>;
     categoryIncome: Record<string, number>;
+    walletBalances?: WalletBalances;
   };
   lastUpdated: string;
 }

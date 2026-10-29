@@ -18,6 +18,9 @@ import {
   getTransactionByRow,
   findMatchingTransactionRow,
   findMatchingTransactionRowAcrossBooks,
+  updateTransactionWallet,
+  transferWalletMoney,
+  getWalletBalances,
 } from './googleSheets';
 import { uploadReceiptToDrive, getDriveConfigStatus, testDriveUpload } from './googleDrive';
 import { formatPrivateKey, getGoogleAuth } from './googleAuth';
@@ -69,6 +72,38 @@ interface TransferState {
   amount?: number;
 }
 const transferStates = new Map<number, TransferState>();
+
+// ============================================================
+// STATE MACHINE: Percakapan multi-step untuk /pindahuang antar dompet
+// ============================================================
+type WalletChoice = 'Bank' | 'E-Wallet' | 'Cash';
+interface WalletTransferState {
+  step: 'select_from' | 'select_to' | 'input_amount';
+  fromWallet?: WalletChoice;
+  toWallet?: WalletChoice;
+  sourceBalance?: number;
+}
+const walletTransferStates = new Map<number, WalletTransferState>();
+
+function getWalletEmoji(wallet?: string): string {
+  switch (wallet) {
+    case 'Bank':
+      return '🏦';
+    case 'E-Wallet':
+      return '📱';
+    case 'Cash':
+      return '💵';
+    default:
+      return '💳';
+  }
+}
+
+function buildWalletKeyboard(bookName: string, rowNumber: number, selectedWallet?: string) {
+  return new InlineKeyboard()
+    .text(selectedWallet === 'Bank' ? '✅ 🏦 Bank' : '🏦 Bank', `set_wallet:${bookName}:${rowNumber}:Bank`)
+    .text(selectedWallet === 'E-Wallet' ? '✅ 📱 E-Wallet' : '📱 E-Wallet', `set_wallet:${bookName}:${rowNumber}:E-Wallet`)
+    .text(selectedWallet === 'Cash' ? '✅ 💵 Cash' : '💵 Cash', `set_wallet:${bookName}:${rowNumber}:Cash`);
+}
 
 // ============================================================
 // STATE MACHINE: Percakapan multi-step untuk /nota
@@ -1143,6 +1178,247 @@ bot.callbackQuery('ps_exec', async (ctx) => {
     } catch {
       await ctx.reply(`❌ *Gagal memindahkan saldo:* ${err.message}`, { parse_mode: 'Markdown' });
     }
+  }
+});
+
+// ============================================================
+// FITUR DOMPET & PINDAH UANG (Bank, E-Wallet, Cash)
+// ============================================================
+
+// Command: /dompet /saldo
+bot.command(['dompet', 'saldo', 'saldodompet'], async (ctx) => {
+  const chatId = ctx.chat.id;
+  const activeBook = await getUserActiveBook(chatId);
+  const balances = await getWalletBalances(activeBook);
+
+  const keyboard = new InlineKeyboard()
+    .text('💸 Pindah Uang', 'cmd_pindahuang')
+    .text('🔄 Refresh Saldo', 'refresh_dompet');
+
+  await ctx.reply(
+    `💳 *Status Saldo Dompet [${activeBook}]*\n\n` +
+      `🏦 *Bank:* ${formatRupiah(balances.Bank)}\n` +
+      `📱 *E-Wallet:* ${formatRupiah(balances['E-Wallet'])}\n` +
+      `💵 *Cash:* ${formatRupiah(balances.Cash)}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 *Total Saldo:* *${formatRupiah(balances.total)}*\n\n` +
+      `💡 *Panduan Pindah Uang:*\n` +
+      `• Klik tombol *💸 Pindah Uang* di bawah, atau ketik /pindahuang\n` +
+      `• Bisa juga ketik langsung: \`tarik tunai 100rb\`, \`setor tunai 200rb\`, \`top up dana 50rb\``,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    }
+  );
+});
+
+// Callback refresh dompet
+bot.callbackQuery('refresh_dompet', async (ctx) => {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+  const activeBook = await getUserActiveBook(chatId);
+  const balances = await getWalletBalances(activeBook);
+
+  const keyboard = new InlineKeyboard()
+    .text('💸 Pindah Uang', 'cmd_pindahuang')
+    .text('🔄 Refresh Saldo', 'refresh_dompet');
+
+  await ctx.answerCallbackQuery({ text: 'Saldo dompet diperbarui!' });
+  try {
+    await ctx.editMessageText(
+      `💳 *Status Saldo Dompet [${activeBook}]*\n\n` +
+        `🏦 *Bank:* ${formatRupiah(balances.Bank)}\n` +
+        `📱 *E-Wallet:* ${formatRupiah(balances['E-Wallet'])}\n` +
+        `💵 *Cash:* ${formatRupiah(balances.Cash)}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💰 *Total Saldo:* *${formatRupiah(balances.total)}*\n\n` +
+        `💡 *Panduan Pindah Uang:*\n` +
+        `• Klik tombol *💸 Pindah Uang* di bawah, atau ketik /pindahuang\n` +
+        `• Bisa juga ketik langsung: \`tarik tunai 100rb\`, \`setor tunai 200rb\`, \`top up dana 50rb\``,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      }
+    );
+  } catch {}
+});
+
+// Helper memulai pemilihan dompet asal untuk transfer
+async function startPindahUang(ctx: any) {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+  const activeBook = await getUserActiveBook(chatId);
+  const balances = await getWalletBalances(activeBook);
+
+  walletTransferStates.set(chatId, { step: 'select_from' });
+
+  const keyboard = new InlineKeyboard()
+    .text(`🏦 Bank (${formatRupiah(balances.Bank)})`, 'w_from:Bank')
+    .row()
+    .text(`📱 E-Wallet (${formatRupiah(balances['E-Wallet'])})`, 'w_from:E-Wallet')
+    .row()
+    .text(`💵 Cash (${formatRupiah(balances.Cash)})`, 'w_from:Cash')
+    .row()
+    .text('❌ Batal', 'w_cancel');
+
+  const text =
+    `💸 *Pindah Uang Antar Dompet*\n\n` +
+    `📖 *Buku:* \`${activeBook}\`\n\n` +
+    `Pilih *dompet asal* (sumber uang yang ingin dipindahkan):`;
+
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+  } else {
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+  }
+}
+
+// Command: /pindahuang /transferuang /tariktunai /setortunai
+bot.command(['pindahuang', 'transferuang', 'tariktunai', 'setortunai'], async (ctx) => {
+  await startPindahUang(ctx);
+});
+
+bot.callbackQuery('cmd_pindahuang', async (ctx) => {
+  await startPindahUang(ctx);
+});
+
+// Callback: Memilih dompet asal
+bot.callbackQuery(/^w_from:(Bank|E-Wallet|Cash)$/, async (ctx) => {
+  const fromWallet = ctx.match[1] as WalletChoice;
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  const activeBook = await getUserActiveBook(chatId);
+  const balances = await getWalletBalances(activeBook);
+  const fromBalance = balances[fromWallet] || 0;
+
+  walletTransferStates.set(chatId, {
+    step: 'select_to',
+    fromWallet,
+    sourceBalance: fromBalance,
+  });
+
+  await ctx.answerCallbackQuery();
+
+  const keyboard = new InlineKeyboard();
+  const allWallets: WalletChoice[] = ['Bank', 'E-Wallet', 'Cash'];
+  for (const w of allWallets) {
+    if (w !== fromWallet) {
+      keyboard.text(`${getWalletEmoji(w)} ${w} (${formatRupiah(balances[w] || 0)})`, `w_to:${fromWallet}:${w}`).row();
+    }
+  }
+  keyboard.text('❌ Batal', 'w_cancel');
+
+  await ctx.editMessageText(
+    `💸 *Pindah Uang: Pilih Dompet Tujuan*\n\n` +
+      `📤 *Dari:* ${getWalletEmoji(fromWallet)} *${fromWallet}* (Saldo: ${formatRupiah(fromBalance)})\n\n` +
+      `Pilih *dompet tujuan* penerima dana:`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    }
+  );
+});
+
+// Callback: Memilih dompet tujuan
+bot.callbackQuery(/^w_to:(Bank|E-Wallet|Cash):(Bank|E-Wallet|Cash)$/, async (ctx) => {
+  const fromWallet = ctx.match[1] as WalletChoice;
+  const toWallet = ctx.match[2] as WalletChoice;
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  const activeBook = await getUserActiveBook(chatId);
+  const balances = await getWalletBalances(activeBook);
+  const fromBalance = balances[fromWallet] || 0;
+
+  walletTransferStates.set(chatId, {
+    step: 'input_amount',
+    fromWallet,
+    toWallet,
+    sourceBalance: fromBalance,
+  });
+
+  await ctx.answerCallbackQuery();
+
+  await ctx.editMessageText(
+    `💸 *Pindah Uang Antar Dompet*\n\n` +
+      `📤 *Dari:* ${getWalletEmoji(fromWallet)} *${fromWallet}* (Saldo: ${formatRupiah(fromBalance)})\n` +
+      `📥 *Ke:* ${getWalletEmoji(toWallet)} *${toWallet}*\n\n` +
+      `Silakan *ketik nominal* yang ingin dipindahkan:\n` +
+      `_(contoh: \`100000\`, \`50rb\`, atau \`1.5jt\`)_\n\n` +
+      `_(Ketik *batal* jika ingin membatalkan)_`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// Callback: Batal pindah uang
+bot.callbackQuery('w_cancel', async (ctx) => {
+  const chatId = ctx.chat?.id;
+  if (chatId) walletTransferStates.delete(chatId);
+  await ctx.answerCallbackQuery({ text: 'Dibatalkan' });
+  try {
+    await ctx.editMessageText('❌ Pemindahan uang antar dompet dibatalkan.');
+  } catch {}
+});
+
+// Callback: Mengubah / memilih dompet untuk transaksi tertentu (set_wallet)
+bot.callbackQuery(/^set_wallet:(.+):(\d+):(.+)$/, async (ctx) => {
+  const targetBook = ctx.match[1];
+  const rowNumber = parseInt(ctx.match[2], 10);
+  const wallet = ctx.match[3] as WalletChoice;
+
+  try {
+    await updateTransactionWallet(targetBook, rowNumber, wallet);
+    const emoji = getWalletEmoji(wallet);
+    await ctx.answerCallbackQuery({
+      text: `✅ Tersimpan ke ${emoji} ${wallet}`,
+    });
+
+    // Rebuild keyboard with checkmark
+    const currentKeyboard = ctx.callbackQuery.message?.reply_markup?.inline_keyboard;
+    const keyboard = new InlineKeyboard()
+      .text(wallet === 'Bank' ? '✅ 🏦 Bank' : '🏦 Bank', `set_wallet:${targetBook}:${rowNumber}:Bank`)
+      .text(wallet === 'E-Wallet' ? '✅ 📱 E-Wallet' : '📱 E-Wallet', `set_wallet:${targetBook}:${rowNumber}:E-Wallet`)
+      .text(wallet === 'Cash' ? '✅ 💵 Cash' : '💵 Cash', `set_wallet:${targetBook}:${rowNumber}:Cash`);
+
+    if (currentKeyboard && currentKeyboard.length > 1) {
+      keyboard.row();
+      for (const btn of currentKeyboard[1]) {
+        if ('url' in btn) {
+          keyboard.url(btn.text, btn.url);
+        } else if ('callback_data' in btn) {
+          keyboard.text(btn.text, btn.callback_data);
+        }
+      }
+    }
+
+    const currentText = ctx.callbackQuery.message?.text || '';
+    let updatedText = currentText;
+    if (currentText.includes('💳 Saldo Berasal / Masuk Ke:')) {
+      updatedText = currentText.replace(
+        /💳\s*Saldo Berasal \/ Masuk Ke:\s*.*$/m,
+        `💳 *Saldo Berasal / Masuk Ke:* ${emoji} *${wallet}*`
+      );
+    } else if (currentText.includes('💳 Dibayar Dari:')) {
+      updatedText = currentText.replace(
+        /💳\s*Dibayar Dari:\s*.*$/m,
+        `💳 *Dibayar Dari:* ${emoji} *${wallet}*`
+      );
+    } else if (currentText.includes('💳 Dompet:')) {
+      updatedText = currentText.replace(
+        /💳\s*Dompet:\s*.*$/m,
+        `💳 *Dompet:* ${emoji} *${wallet}*`
+      );
+    }
+
+    await ctx.editMessageText(updatedText, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  } catch (err: any) {
+    console.error('Error updating wallet:', err);
+    await ctx.answerCallbackQuery({ text: 'Gagal mengubah dompet', show_alert: true });
   }
 });
 

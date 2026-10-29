@@ -58,6 +58,7 @@ export default function FinanceDashboardPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedWallet, setSelectedWallet] = useState<string>('all');
   const [visibleCount, setVisibleCount] = useState(25);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -122,6 +123,9 @@ export default function FinanceDashboardPage() {
       // Filter Kategori
       if (selectedCategory !== 'all' && tx.category !== selectedCategory) return false;
 
+      // Filter Dompet
+      if (selectedWallet !== 'all' && (tx.wallet || 'Bank') !== selectedWallet) return false;
+
       // Filter Bulan & Tahun
       if (selectedYear !== 'all' || selectedMonth !== 'all') {
         const { year, month } = parseDateParts(tx.date);
@@ -144,7 +148,7 @@ export default function FinanceDashboardPage() {
 
       return true;
     });
-  }, [data?.transactions, typeFilter, selectedCategory, selectedMonth, selectedYear, searchQuery]);
+  }, [data?.transactions, typeFilter, selectedCategory, selectedMonth, selectedYear, selectedWallet, searchQuery]);
 
   // Ringkasan metrik dari transaksi yang sedang difilter
   const filteredSummary = useMemo(() => {
@@ -167,6 +171,7 @@ export default function FinanceDashboardPage() {
     selectedCategory !== 'all' ||
     selectedMonth !== 'all' ||
     selectedYear !== 'all' ||
+    selectedWallet !== 'all' ||
     searchQuery.trim() !== '';
 
   const handleResetFilters = () => {
@@ -174,6 +179,7 @@ export default function FinanceDashboardPage() {
     setSelectedCategory('all');
     setSelectedMonth('all');
     setSelectedYear('all');
+    setSelectedWallet('all');
     setSearchQuery('');
   };
 
@@ -303,6 +309,126 @@ export default function FinanceDashboardPage() {
             <div className="stat-subtext">Data tercatat lengkap</div>
           </div>
         </section>
+
+        {/* Status Saldo Per Dompet (Bank, E-Wallet, Cash) */}
+        {data?.stats?.walletBalances && (
+          <section
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '1rem',
+              marginBottom: '1.5rem',
+            }}
+          >
+            <div
+              style={{
+                background: '#FFFFFF',
+                borderRadius: '16px',
+                padding: '1.1rem 1.25rem',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                boxShadow: '0 2px 8px rgba(59, 130, 246, 0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.85rem',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: '#EFF6FF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.35rem',
+                }}
+              >
+                🏦
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Saldo Bank
+                </div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1E3A8A' }}>
+                  {formatRupiah(data.stats.walletBalances.Bank)}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#FFFFFF',
+                borderRadius: '16px',
+                padding: '1.1rem 1.25rem',
+                border: '1px solid rgba(139, 92, 246, 0.25)',
+                boxShadow: '0 2px 8px rgba(139, 92, 246, 0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.85rem',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: '#F5F3FF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.35rem',
+                }}
+              >
+                📱
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Saldo E-Wallet
+                </div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#5B21B6' }}>
+                  {formatRupiah(data.stats.walletBalances['E-Wallet'])}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#FFFFFF',
+                borderRadius: '16px',
+                padding: '1.1rem 1.25rem',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.85rem',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: '#ECFDF5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.35rem',
+                }}
+              >
+                💵
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Saldo Tunai (Cash)
+                </div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#065F46' }}>
+                  {formatRupiah(data.stats.walletBalances.Cash)}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Category Breakdown (Top Kategori Belanja) */}
         {categoryStats.length > 0 && (
@@ -434,6 +560,21 @@ export default function FinanceDashboardPage() {
               </select>
             </div>
 
+            {/* Filter Dompet Dropdown */}
+            <div className="filter-select-wrapper">
+              <select
+                value={selectedWallet}
+                onChange={(e) => setSelectedWallet(e.target.value)}
+                className={`filter-select ${selectedWallet !== 'all' ? 'active' : ''}`}
+                title="Filter berdasarkan Dompet"
+              >
+                <option value="all">💳 Semua Dompet</option>
+                <option value="Bank">🏦 Bank</option>
+                <option value="E-Wallet">📱 E-Wallet</option>
+                <option value="Cash">💵 Cash</option>
+              </select>
+            </div>
+
             {/* Tombol Reset Filter */}
             {isAnyFilterActive && (
               <button
@@ -543,6 +684,7 @@ export default function FinanceDashboardPage() {
                         <th className="col-date desktop-only">Tanggal</th>
                         <th>Keterangan</th>
                         <th className="desktop-only">Pos Tabungan</th>
+                        <th className="desktop-only">Dompet</th>
                         <th className="desktop-only">Kategori</th>
                         <th className="desktop-only">Jenis</th>
                         <th style={{ textAlign: 'right' }}>Nominal</th>
@@ -569,6 +711,8 @@ export default function FinanceDashboardPage() {
                                 <span>•</span>
                                 <span className="book-badge">📖 {tx.book}</span>
                                 <span>•</span>
+                                <span>{tx.wallet === 'Cash' ? '💵' : tx.wallet === 'E-Wallet' ? '📱' : '🏦'} {tx.wallet || 'Bank'}</span>
+                                <span>•</span>
                                 <span className="cat-badge">{tx.category}</span>
                                 {tx.pic && (
                                   <span className="tx-table-pic">
@@ -582,6 +726,41 @@ export default function FinanceDashboardPage() {
                               <span className="book-badge">
                                 <span>📖</span>
                                 <span>{tx.book}</span>
+                              </span>
+                            </td>
+                            <td className="desktop-only">
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.2rem 0.55rem',
+                                  borderRadius: '9999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  background:
+                                    tx.wallet === 'Cash'
+                                      ? '#ECFDF5'
+                                      : tx.wallet === 'E-Wallet'
+                                      ? '#F5F3FF'
+                                      : '#EFF6FF',
+                                  color:
+                                    tx.wallet === 'Cash'
+                                      ? '#065F46'
+                                      : tx.wallet === 'E-Wallet'
+                                      ? '#5B21B6'
+                                      : '#1E3A8A',
+                                  border: `1px solid ${
+                                    tx.wallet === 'Cash'
+                                      ? 'rgba(16, 185, 129, 0.25)'
+                                      : tx.wallet === 'E-Wallet'
+                                      ? 'rgba(139, 92, 246, 0.25)'
+                                      : 'rgba(59, 130, 246, 0.25)'
+                                  }`,
+                                }}
+                              >
+                                <span>{tx.wallet === 'Cash' ? '💵' : tx.wallet === 'E-Wallet' ? '📱' : '🏦'}</span>
+                                <span>{tx.wallet || 'Bank'}</span>
                               </span>
                             </td>
                             <td className="desktop-only">
