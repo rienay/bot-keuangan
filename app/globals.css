@@ -412,6 +412,163 @@ button:active, a:active {
 }
 
 /* ============================================================
+   DAILY TRACKING HERO CARD (Net Worth / Daily Line Curve)
+   ============================================================ */
+.crm-daily-card {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem 1.6rem 1.25rem;
+  background: var(--crm-card);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--crm-border);
+  box-shadow: var(--crm-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.crm-daily-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.crm-daily-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--crm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.crm-daily-amount {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--crm-text);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-top: 0.25rem;
+}
+
+.crm-daily-subrow {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.crm-daily-growth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #059669;
+  background: #ECFDF5;
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.crm-daily-date-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--crm-muted);
+}
+
+.crm-daily-mode-tabs {
+  display: inline-flex;
+  background: var(--crm-subtle);
+  padding: 0.25rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--crm-border);
+}
+
+.crm-mode-tab {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--crm-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.crm-mode-tab.active {
+  background: #FFFFFF;
+  color: var(--crm-text);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.crm-daily-chart-wrap {
+  position: relative;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.crm-daily-svg {
+  width: 100%;
+  height: 150px;
+  overflow: visible;
+  display: block;
+}
+
+.crm-daily-days-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 40px;
+  margin-top: 0.5rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  padding-top: 0.75rem;
+}
+
+.crm-day-pill {
+  border: none;
+  background: transparent;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crm-day-pill:hover {
+  background: var(--crm-subtle);
+}
+
+.crm-day-abbr {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #94A3B8;
+  letter-spacing: -0.01em;
+  transition: color 0.15s ease;
+}
+
+.crm-day-pill.active .crm-day-abbr {
+  color: var(--crm-text);
+  font-weight: 800;
+}
+
+.crm-day-pill.is-today .crm-day-abbr {
+  color: var(--crm-text);
+  font-weight: 800;
+}
+
+.crm-day-pill.active {
+  background: #F1F5F9;
+}
+
+/* ============================================================
    3. CHARTS ROW: DUAL BAR CHART + DONUT CHART
    ============================================================ */
 .crm-charts-grid {
@@ -842,6 +999,16 @@ button:active, a:active {
   }
   .crm-container {
     padding: 1rem 0.85rem 3rem;
+  }
+  .crm-daily-amount {
+    font-size: 1.6rem;
+  }
+  .crm-daily-days-row {
+    padding: 0 15px;
+  }
+  .crm-daily-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .crm-kpi-grid {
     grid-template-columns: 1fr;

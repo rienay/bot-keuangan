@@ -11,6 +11,56 @@ function formatRupiah(amount: number): string {
   }).format(amount);
 }
 
+function parseTxDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const cleaned = String(dateStr).trim().replace(/^'/, '');
+  // Match YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD or YYYY MM DD
+  const ymdMatch = cleaned.match(/^(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})/);
+  if (ymdMatch) {
+    return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10));
+  }
+  // Match DD-MM-YYYY or DD/MM/YYYY
+  const dmyMatch = cleaned.match(/^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{4})/);
+  if (dmyMatch) {
+    return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10));
+  }
+  const d = new Date(cleaned);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Generate smooth cubic Bézier SVG path from point array
+function generateSmoothCurve(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return '';
+  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? i : i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+interface DayItem {
+  idx: number;
+  dayName: string;
+  dayNameId: string;
+  dateFormatted: string;
+  isToday: boolean;
+  isPastOrToday: boolean;
+  income: number;
+  expense: number;
+  balance: number;
+}
+
 interface CategoryStyle {
   label: string;
   icon: string;
@@ -22,7 +72,6 @@ interface CategoryStyle {
 function getCategoryConfig(categoryName: string, index: number = 0): CategoryStyle {
   const c = (categoryName || '').toLowerCase();
   
-  // Vibrant CRM chart palette
   const PALETTE = [
     { barColor: '#6366F1', bgColor: '#EEF2FF', textColor: '#4F46E5', icon: '🛍️' },
     { barColor: '#F97316', bgColor: '#FFF7ED', textColor: '#EA580C', icon: '🍽️' },
@@ -80,6 +129,10 @@ export default function FinanceDashboardPage() {
 
   // Active hover slice state for interactive Donut Chart
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  // State untuk Treking Harian (Daily Line Chart ala Image Referensi)
+  const [dailyChartMode, setDailyChartMode] = useState<'balance' | 'spent'>('balance');
+  const [hoveredDayIdx, setHoveredDayIdx] = useState<number | null>(null);
 
   const fetchData = async (book: string = 'Tabungan', showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
@@ -159,7 +212,129 @@ export default function FinanceDashboardPage() {
     }
   };
 
-  // Kategori pengeluaran sorted descending untuk Donut Chart & Progress Bars
+  // 1. DATA TREKING HARIAN (Senin s/d Minggu, mencocokkan referensi Net Worth)
+  const dailyTracking = useMemo(() => {
+    const now = new Date();
+    const currentDayOfWeek = (now.getDay() + 6) % 7; // 0 = Mon, 1 = Tue, ..., 3 = Thu, ..., 6 = Sun
+
+    // Tentukan hari Senin di minggu berjalan
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - currentDayOfWeek);
+    monday.setHours(0, 0, 0, 0);
+
+    const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const DAY_LABELS_ID = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+
+    const allTx = data?.transactions || [];
+
+    // Hitung saldo awal sebelum Senin minggu ini
+    let baselineBalance = 0;
+    allTx.forEach((tx) => {
+      const d = parseTxDate(tx.date);
+      if (d && d < monday) {
+        if (tx.type === 'Pemasukan') baselineBalance += tx.amount;
+        else baselineBalance -= tx.amount;
+      }
+    });
+
+    let runningBal = baselineBalance;
+    const days: DayItem[] = [];
+
+    for (let i = 0; i < 7; i++) {
+      const dayDate = new Date(monday);
+      dayDate.setDate(monday.getDate() + i);
+
+      let income = 0;
+      let expense = 0;
+
+      allTx.forEach((tx) => {
+        const d = parseTxDate(tx.date);
+        if (
+          d &&
+          d.getFullYear() === dayDate.getFullYear() &&
+          d.getMonth() === dayDate.getMonth() &&
+          d.getDate() === dayDate.getDate()
+        ) {
+          if (tx.type === 'Pemasukan') income += tx.amount;
+          else expense += tx.amount;
+        }
+      });
+
+      if (i <= currentDayOfWeek) {
+        runningBal += (income - expense);
+      }
+
+      days.push({
+        idx: i,
+        dayName: DAY_LABELS[i],
+        dayNameId: DAY_LABELS_ID[i],
+        dateFormatted: `${dayDate.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][dayDate.getMonth()]}`,
+        isToday: i === currentDayOfWeek,
+        isPastOrToday: i <= currentDayOfWeek,
+        income,
+        expense,
+        balance: runningBal,
+      });
+    }
+
+    // Hitung koordinat SVG untuk 7 titik (ViewBox: 540 x 140)
+    const SVG_W = 540;
+    const SVG_H = 140;
+    const PAD_X = 40;
+    const PAD_Y_TOP = 30;
+    const PAD_Y_BOTTOM = 25;
+
+    const values = days.map((d) => (dailyChartMode === 'balance' ? d.balance : d.expense));
+    const activeValues = days.filter((d) => d.isPastOrToday).map((d) => (dailyChartMode === 'balance' ? d.balance : d.expense));
+    const minVal = Math.min(...(activeValues.length > 0 ? activeValues : [0]));
+    const maxVal = Math.max(...(activeValues.length > 0 ? activeValues : [100000]));
+    const range = maxVal - minVal || 1;
+
+    const points = days.map((d, i) => {
+      const x = PAD_X + i * ((SVG_W - PAD_X * 2) / 6);
+      let y: number;
+      if (d.isPastOrToday) {
+        const val = dailyChartMode === 'balance' ? d.balance : d.expense;
+        y = (SVG_H - PAD_Y_BOTTOM) - ((val - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+      } else {
+        // Future projected day (sedikit landai melengkung seperti di referensi)
+        const lastKnownY = (SVG_H - PAD_Y_BOTTOM) - ((days[currentDayOfWeek].balance - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+        y = lastKnownY + (i - currentDayOfWeek) * 4;
+      }
+      return { x, y: Math.max(PAD_Y_TOP, Math.min(SVG_H - PAD_Y_BOTTOM, y)) };
+    });
+
+    // Spline curve up to today (Hijau tebal & area fill)
+    const pointsUpToToday = points.slice(0, currentDayOfWeek + 1);
+    const curvePast = generateSmoothCurve(pointsUpToToday);
+
+    // Spline curve after today (Garis abu-abu projected)
+    const pointsFuture = points.slice(currentDayOfWeek);
+    const curveFuture = generateSmoothCurve(pointsFuture);
+
+    // Area fill path up to today
+    const areaPath = pointsUpToToday.length > 1
+      ? `${curvePast} L ${pointsUpToToday[pointsUpToToday.length - 1].x} ${SVG_H} L ${pointsUpToToday[0].x} ${SVG_H} Z`
+      : '';
+
+    return {
+      days,
+      currentDayOfWeek,
+      points,
+      curvePast,
+      curveFuture,
+      areaPath,
+      currentBalance: runningBal,
+      totalSpentThisWeek: days.filter((d) => d.isPastOrToday).reduce((acc, d) => acc + d.expense, 0),
+    };
+  }, [data?.transactions, dailyChartMode]);
+
+  // Active highlighted day
+  const activeDayIdx = hoveredDayIdx !== null ? hoveredDayIdx : dailyTracking.currentDayOfWeek;
+  const activeDayData = dailyTracking.days[activeDayIdx] || dailyTracking.days[0];
+  const activeDayPoint = dailyTracking.points[activeDayIdx] || { x: 40, y: 70 };
+
+  // 2. Kategori pengeluaran sorted descending untuk Donut Chart
   const categoryExpensesList = useMemo(() => {
     if (!data?.stats?.categoryExpenses) return [];
     const totalExp = data.stats.totalPengeluaran || 1;
@@ -183,12 +358,7 @@ export default function FinanceDashboardPage() {
     const total = data?.stats?.totalPengeluaran || 0;
 
     if (total <= 0 || categoryExpensesList.length === 0) {
-      return {
-        segments: [],
-        total,
-        C,
-        R,
-      };
+      return { segments: [], total, C, R };
     }
 
     let accumulatedPct = 0;
@@ -206,7 +376,7 @@ export default function FinanceDashboardPage() {
     return { segments, total, C, R };
   }, [categoryExpensesList, data?.stats?.totalPengeluaran]);
 
-  // Kalkulasi Bar Chart Arus Kas Bulanan (Dual Bar Pemasukan vs Pengeluaran)
+  // 3. Kalkulasi Bar Chart Arus Kas Bulanan
   const cashflowBarData = useMemo(() => {
     if (!data?.monthlyComparison?.months || data.monthlyComparison.months.length === 0) {
       return [];
@@ -287,9 +457,9 @@ export default function FinanceDashboardPage() {
           </div>
         )}
 
-        {/* 2. TOP KPI METRIC CARDS (Style ala CRM Image 3) */}
+        {/* 2. TOP KPI METRIC CARDS */}
         <section className="crm-kpi-grid">
-          {/* Card 1: Net Balance (Primary Indigo Gradient Card) */}
+          {/* Card 1: Net Balance */}
           <div className="crm-kpi-card crm-kpi-primary">
             <div className="crm-kpi-top">
               <span className="crm-kpi-icon">💰</span>
@@ -381,7 +551,154 @@ export default function FinanceDashboardPage() {
           </div>
         </section>
 
-        {/* 3. CHARTS ROW: DUAL BAR CHART + DONUT CHART (Replicating Image 3 CRM Charts) */}
+        {/* 3. DAILY TRACKING HERO CARD (Sesuai Referensi Gambar Net Worth & Weekly Curve) */}
+        <section className="crm-card crm-daily-card">
+          <div className="crm-daily-header">
+            <div>
+              <div className="crm-daily-title">
+                {dailyChartMode === 'balance' ? 'Net Worth • Treking Harian' : 'Pengeluaran Harian'}
+              </div>
+              <div className="crm-daily-amount">
+                {formatRupiah(dailyChartMode === 'balance' ? activeDayData.balance : activeDayData.expense)}
+              </div>
+              <div className="crm-daily-subrow">
+                <span className="crm-daily-growth-badge">
+                  {dailyChartMode === 'balance' ? '🟢 Akumulasi Real-Time' : '📤 Pengeluaran Hari Ini'}
+                </span>
+                <span className="crm-daily-date-label">
+                  {activeDayData.dayNameId}, {activeDayData.dateFormatted}
+                </span>
+              </div>
+            </div>
+
+            {/* Mode Switcher (Saldo vs Belanja) */}
+            <div className="crm-daily-mode-tabs">
+              <button
+                className={`crm-mode-tab ${dailyChartMode === 'balance' ? 'active' : ''}`}
+                onClick={() => setDailyChartMode('balance')}
+              >
+                Saldo Bersih
+              </button>
+              <button
+                className={`crm-mode-tab ${dailyChartMode === 'spent' ? 'active' : ''}`}
+                onClick={() => setDailyChartMode('spent')}
+              >
+                Pengeluaran
+              </button>
+            </div>
+          </div>
+
+          {/* SVG Smooth Curve Area Chart */}
+          <div className="crm-daily-chart-wrap">
+            <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="dailyAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10B981" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
+                </linearGradient>
+                <filter id="badgeGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
+                </filter>
+              </defs>
+
+              {/* Area Fill Gradient under curve up to active day */}
+              {dailyTracking.areaPath && (
+                <path d={dailyTracking.areaPath} fill="url(#dailyAreaGrad)" />
+              )}
+
+              {/* Solid Green Curved Line for Past & Today */}
+              {dailyTracking.curvePast && (
+                <path
+                  d={dailyTracking.curvePast}
+                  fill="none"
+                  stroke="#10B981"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+
+              {/* Light Gray Dashed Curved Line for Future Days */}
+              {dailyTracking.curveFuture && (
+                <path
+                  d={dailyTracking.curveFuture}
+                  fill="none"
+                  stroke="#CBD5E1"
+                  strokeWidth="2"
+                  strokeDasharray="4,4"
+                  strokeLinecap="round"
+                />
+              )}
+
+              {/* Vertical Guide Line down from active point */}
+              <line
+                x1={activeDayPoint.x}
+                y1={activeDayPoint.y}
+                x2={activeDayPoint.x}
+                y2="135"
+                stroke="#94A3B8"
+                strokeDasharray="3,3"
+                strokeWidth="1.5"
+              />
+
+              {/* Outer halo circle & inner dot at active point */}
+              <circle
+                cx={activeDayPoint.x}
+                cy={activeDayPoint.y}
+                r="7"
+                fill="#FFFFFF"
+                stroke="#10B981"
+                strokeWidth="3.5"
+              />
+              <circle
+                cx={activeDayPoint.x}
+                cy={activeDayPoint.y}
+                r="2.5"
+                fill="#10B981"
+              />
+
+              {/* Floating Tooltip Pill (Mirip persis contoh: $ 26,210) */}
+              <g transform={`translate(${activeDayPoint.x}, ${Math.max(20, activeDayPoint.y - 26)})`}>
+                <rect
+                  x="-46"
+                  y="-14"
+                  width="92"
+                  height="26"
+                  rx="8"
+                  fill="#FFFFFF"
+                  stroke="#E2E8F0"
+                  filter="url(#badgeGlow)"
+                />
+                <text
+                  textAnchor="middle"
+                  y="4"
+                  fontSize="11"
+                  fontWeight="800"
+                  fill="#0F172A"
+                  letterSpacing="-0.02em"
+                >
+                  {formatRupiah(dailyChartMode === 'balance' ? activeDayData.balance : activeDayData.expense)}
+                </text>
+              </g>
+            </svg>
+
+            {/* X-Axis Days Labels (Mon, Tue, Wed, Thu, Fri, Sat, Sun) */}
+            <div className="crm-daily-days-row">
+              {dailyTracking.days.map((d) => (
+                <button
+                  key={d.dayName}
+                  className={`crm-day-pill ${activeDayIdx === d.idx ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
+                  onClick={() => setHoveredDayIdx(d.idx)}
+                  onMouseEnter={() => setHoveredDayIdx(d.idx)}
+                >
+                  <span className="crm-day-abbr">{d.dayName}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 4. CHARTS ROW: DUAL BAR CHART + DONUT CHART */}
         <section className="crm-charts-grid">
           {/* A. DUAL BAR CHART (Arus Kas Bulanan) */}
           <div className="crm-card crm-chart-card">
@@ -534,7 +851,7 @@ export default function FinanceDashboardPage() {
           </div>
         </section>
 
-        {/* 4. CRM BOTTOM ROW: DOMPET ALLOCATION + PERFORMANCE BENCHMARKS */}
+        {/* 5. CRM BOTTOM ROW: DOMPET ALLOCATION + PERFORMANCE BENCHMARKS */}
         <section className="crm-bottom-grid">
           {/* Card Dompet & Saldo Aktif */}
           {data?.stats?.walletBalances && (
