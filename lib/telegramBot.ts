@@ -915,8 +915,7 @@ bot.command(['linkuang', 'linkweb', 'dashboard', 'website'], async (ctx) => {
   for (const b of otherBooks) {
     keyboard.url(`🌸 Buka Pos [${b}]`, `${baseWebUrl}/?buku=${encodeURIComponent(b)}`).row();
   }
-  keyboard.url('📊 Buka Total Gabungan (Semua Pos)', `${baseWebUrl}/?buku=Semua`);
-
+  
   await ctx.reply(
     `🌸 *Website Dashboard Keuangan Kita 💕*\n\n` +
       `Setiap pos tabungan memiliki laporan tersendiri dan tidak saling tercampur:\n\n` +

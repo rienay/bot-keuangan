@@ -338,37 +338,6 @@ export default function FinanceDashboardPage() {
 
       {/* Main Container */}
       <main className="main-content">
-        {/* iOS Segmented Book Selector */}
-        <section className="book-nav-wrapper">
-          <div className="book-nav-track">
-            {data?.books && data.books.length > 0 ? (
-              data.books.map((b) => {
-                const isSelected = selectedBook === b;
-                const balance = data?.bookBalances?.[b];
-                const emoji = getBookEmoji(b);
-
-                return (
-                  <button
-                    key={b}
-                    className={`book-tab-btn ${isSelected ? 'active' : ''}`}
-                    onClick={() => handleSelectBook(b)}
-                  >
-                    <span>{emoji}</span>
-                    <span>{b === 'Semua' ? 'Total Gabungan (Semua)' : b}</span>
-                    {balance !== undefined && (
-                      <span className="book-tab-badge">
-                        {formatRupiah(balance)}
-                      </span>
-                    )}
-                  </button>
-                );
-              })
-            ) : (
-              <button className="book-tab-btn active">Memuat Pos Tabungan...</button>
-            )}
-          </div>
-        </section>
-
         {/* Error Alert Box */}
         {error && (
           <div

@@ -1044,8 +1044,8 @@ export async function getAllTransactionsForWeb(targetBook: string = 'Semua'): Pr
   const budget = await getBudgetInfo(activeBookForBudget);
 
   const data: WebFinanceData = {
-    books: ['Semua', ...books],
-    activeBook: isAll ? 'Semua' : (books.find((b) => b.toLowerCase() === normalizedTarget) || 'Semua'),
+    books,
+    activeBook: books.find((b) => b.toLowerCase() === normalizedTarget) || books[0] || DEFAULT_BOOK_NAME,
     bookBalances,
     transactions: allItems,
     stats: {
