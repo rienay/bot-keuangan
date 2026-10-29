@@ -185,6 +185,10 @@ async function syncBotCommands(api: any) {
     const baseCommands = [
       { command: 'start', description: 'Panduan & menu utama' },
       { command: 'buat', description: 'Buat pos/tabungan baru' },
+      { command: 'budget', description: 'Atur budget belanja bulanan' },
+      { command: 'badget', description: 'Atur badget belanja bulanan' },
+      { command: 'dompet', description: 'Cek saldo Bank, E-Wallet & Cash' },
+      { command: 'pindahuang', description: 'Pindah uang antar dompet' },
       { command: 'pindahsaldo', description: 'Pindah saldo antar tabungan' },
       { command: 'rekap', description: 'Rekap tabungan yang aktif' },
       { command: 'rekapkas', description: 'Rekap total seluruh tabungan' },
@@ -1650,11 +1654,10 @@ bot.callbackQuery(/^set_wallet:(.+):(\d+):(.+)$/, async (ctx) => {
 
 const setBudgetStates = new Map<number, { book: string; month: string }>();
 
-bot.command(['budget', 'anggaran'], async (ctx) => {
+async function handleBudgetCommand(ctx: any, rawArgs: string = '') {
   const chatId = ctx.chat.id;
   const activeBook = await getUserActiveBook(chatId);
-  const text = ctx.message?.text || '';
-  const args = text.replace(/^\/(budget|anggaran)(?:@\w+)?/i, '').trim();
+  const args = rawArgs.trim();
 
   const nowJakarta = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Jakarta',
@@ -1663,10 +1666,26 @@ bot.command(['budget', 'anggaran'], async (ctx) => {
   }).format(new Date()).slice(0, 7);
 
   if (args) {
-    const nominal = parseNominalInput(args);
-    if (!nominal || nominal < 0) {
+    let nominal = parseNominalInput(args);
+    if (!nominal || nominal <= 0) {
       await ctx.reply(
-        `⚠️ Format nominal budget tidak valid.\nContoh: \`/budget 3jt\` atau \`/budget 3000000\``,
+        '⚠️ *Format nominal budget tidak valid.*\n\n' +
+          'Contoh yang bisa dipahami:\n' +
+          '• `/badget 3jt` (Rp 3.000.000)\n' +
+          '• `/badget 500rb` (Rp 500.000)\n' +
+          '• `/badget 2500000`',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    if (nominal > 0 && nominal <= 100) {
+      await ctx.reply(
+        '💡 *Kamu memasukkan angka: ' + nominal + '*\n\n' +
+          'Apakah maksudmu:\n' +
+          '• `/badget ' + nominal + 'rb` (Rp ' + formatRupiah(nominal * 1000) + ')\n' +
+          '• `/badget ' + nominal + 'jt` (Rp ' + formatRupiah(nominal * 1000000) + ')\n\n' +
+          'Silakan ketik ulang dengan satuan ya (contoh: `/badget 3jt` atau `/badget 500rb`)',
         { parse_mode: 'Markdown' }
       );
       return;
@@ -1678,19 +1697,19 @@ bot.command(['budget', 'anggaran'], async (ctx) => {
       const budgetInfo = await getBudgetInfo(activeBook, nowJakarta);
 
       await ctx.reply(
-        `🎯 *Budget Bulanan Berhasil Diatur!*\n\n` +
-          `📖 *Pos Tabungan:* \`${activeBook}\`\n` +
-          `📅 *Periode:* ${budgetInfo.monthLabel}\n` +
-          `💰 *Budget Bulanan:* *${formatRupiah(budgetInfo.amount)}*\n` +
-          `📤 *Terpakai:* ${formatRupiah(budgetInfo.spent)} (${budgetInfo.percentage}%)\n` +
-          `💵 *Sisa Budget:* *${formatRupiah(budgetInfo.remaining)}*\n\n` +
-          `📊 Progress: \`${renderProgressBar(budgetInfo.percentage)}\` ${budgetInfo.percentage}%\n\n` +
-          `🔔 *Notifikasi Otomatis:* Bot akan otomatis mengirim alert jika pengeluaran mencapai 50%, 80%, atau habis! ✨`,
+        '🎯 *Budget Bulanan Berhasil Diatur!*\n\n' +
+          '📖 *Pos Tabungan:* `' + activeBook + '`\n' +
+          '📅 *Periode:* ' + budgetInfo.monthLabel + '\n' +
+          '💰 *Budget Bulanan:* *' + formatRupiah(budgetInfo.amount) + '*\n' +
+          '📤 *Terpakai:* ' + formatRupiah(budgetInfo.spent) + ' (' + budgetInfo.percentage + '%)\n' +
+          '💵 *Sisa Budget:* *' + formatRupiah(budgetInfo.remaining) + '*\n\n' +
+          '📊 Progress: `' + renderProgressBar(budgetInfo.percentage) + '` ' + budgetInfo.percentage + '%\n\n' +
+          '🔔 *Notifikasi Otomatis:* Bot akan otomatis mengirim alert jika pengeluaran mencapai 50%, 80%, atau habis! ✨',
         { parse_mode: 'Markdown' }
       );
       return;
     } catch (err: any) {
-      await ctx.reply(`❌ Gagal menyimpan budget: ${err.message}`);
+      await ctx.reply('❌ Gagal menyimpan budget: ' + err.message);
       return;
     }
   }
@@ -1699,18 +1718,18 @@ bot.command(['budget', 'anggaran'], async (ctx) => {
     const budgetInfo = await getBudgetInfo(activeBook, nowJakarta);
     if (budgetInfo.amount <= 0) {
       const keyboard = new InlineKeyboard()
-        .text('✏️ Atur Budget Sekarang', `prompt_set_budget:${activeBook}`)
+        .text('✏️ Atur Budget Sekarang', 'prompt_set_budget:' + activeBook)
         .row()
-        .url('🌸 Buka Web Dashboard', 'https://bot-keuangan-ebon.vercel.app');
+        .url('🌸 Buka Web Dashboard', 'https://bot-keuangan-ebon.vercel.app?buku=' + encodeURIComponent(activeBook));
 
       await ctx.reply(
-        `🎯 *Budget Belum Diatur [${activeBook}]*\n\n` +
-          `📅 *Periode:* ${budgetInfo.monthLabel}\n` +
-          `Kamu belum menentukan batas anggaran belanja (budget) untuk bulan ini.\n\n` +
-          `💡 *Cara Cepat Atur Budget:*\n` +
-          `Ketik langsung: \`/budget <nominal>\`\n` +
-          `_(Contoh: \`/budget 3jt\` atau \`/budget 2500000\`)_\n` +
-          `Atau klik tombol di bawah:`,
+        '🎯 *Budget Belum Diatur [' + activeBook + ']*\n\n' +
+          '📅 *Periode:* ' + budgetInfo.monthLabel + '\n' +
+          'Kamu belum menentukan batas anggaran belanja (budget) untuk pos ini bulan ini.\n\n' +
+          '💡 *Cara Cepat Atur Budget:*\n' +
+          'Ketik langsung: `/badget <nominal>`\n' +
+          '_(Contoh: `/badget 3jt` atau `/badget 2500000`)_\n' +
+          'Atau klik tombol di bawah:',
         { parse_mode: 'Markdown', reply_markup: keyboard }
       );
       return;
@@ -1720,7 +1739,7 @@ bot.command(['budget', 'anggaran'], async (ctx) => {
     let statusDesc = 'Pengeluaran masih dalam batas aman.';
     if (budgetInfo.status === 'overbudget') {
       statusEmoji = '🛑';
-      statusDesc = `⚠️ *Overbudget!* Pengeluaran melebihi budget sebesar ${formatRupiah(Math.abs(budgetInfo.remaining))}.`;
+      statusDesc = '⚠️ *Overbudget!* Pengeluaran melebihi budget sebesar ' + formatRupiah(Math.abs(budgetInfo.remaining)) + '.';
     } else if (budgetInfo.status === 'warning') {
       statusEmoji = '🚨';
       statusDesc = 'Peringatan: Budget hampir habis (>80%)! Harap lebih hemat.';
@@ -1730,25 +1749,31 @@ bot.command(['budget', 'anggaran'], async (ctx) => {
     }
 
     const keyboard = new InlineKeyboard()
-      .text('✏️ Ubah Budget', `prompt_set_budget:${activeBook}`)
+      .text('✏️ Ubah Budget', 'prompt_set_budget:' + activeBook)
       .text('📊 Rekap Bulan Ini', 'cmd_rekap')
       .row()
-      .url('🌸 Buka Web Dashboard', `https://bot-keuangan-ebon.vercel.app?book=${encodeURIComponent(activeBook)}`);
+      .url('🌸 Buka Web Dashboard', 'https://bot-keuangan-ebon.vercel.app?buku=' + encodeURIComponent(activeBook));
 
     await ctx.reply(
-      `🎯 *Status Budget Bulanan [${activeBook}]*\n\n` +
-        `📅 *Periode:* ${budgetInfo.monthLabel}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━\n` +
-        `💰 *Budget Bulanan:* *${formatRupiah(budgetInfo.amount)}*\n` +
-        `📤 *Realisasi Belanja:* ${formatRupiah(budgetInfo.spent)} (${budgetInfo.percentage}%)\n` +
-        `💵 *Sisa Budget:* *${formatRupiah(budgetInfo.remaining)}*\n\n` +
-        `📊 Progress: \`${renderProgressBar(budgetInfo.percentage)}\` *${budgetInfo.percentage}%*\n\n` +
-        `${statusEmoji} *Status:* ${statusDesc}`,
+      '🎯 *Status Budget Bulanan [' + activeBook + ']*\n\n' +
+        '📅 *Periode:* ' + budgetInfo.monthLabel + '\n' +
+        '━━━━━━━━━━━━━━━━━━━━━\n' +
+        '💰 *Budget Bulanan:* *' + formatRupiah(budgetInfo.amount) + '*\n' +
+        '📤 *Realisasi Belanja:* ' + formatRupiah(budgetInfo.spent) + ' (' + budgetInfo.percentage + '%)\n' +
+        '💵 *Sisa Budget:* *' + formatRupiah(budgetInfo.remaining) + '*\n\n' +
+        '📊 Progress: `' + renderProgressBar(budgetInfo.percentage) + '` *' + budgetInfo.percentage + '%*\n\n' +
+        statusEmoji + ' *Status:* ' + statusDesc,
       { parse_mode: 'Markdown', reply_markup: keyboard }
     );
   } catch (err: any) {
-    await ctx.reply(`❌ Gagal memeriksa budget: ${err.message}`);
+    await ctx.reply('❌ Gagal memeriksa budget: ' + err.message);
   }
+}
+
+bot.command(['budget', 'badget', 'bajet', 'anggaran', 'aturbudget', 'aturbadget'], async (ctx) => {
+  const text = ctx.message?.text || '';
+  const args = text.replace(/^\/(budget|badget|bajet|anggaran|aturbudget|aturbadget)(?:@\w+)?/i, '').trim();
+  await handleBudgetCommand(ctx, args);
 });
 
 bot.callbackQuery(/^prompt_set_budget:(.+)$/, async (ctx) => {
@@ -2648,6 +2673,60 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
+  // === 1d. Cek apakah pengguna sedang dalam proses input nominal budget ===
+  const bState = setBudgetStates.get(chatId);
+  if (bState) {
+    if (text.toLowerCase() === 'batal' || text === '/batal') {
+      setBudgetStates.delete(chatId);
+      await ctx.reply('❌ Pengaturan budget dibatalkan.');
+      return;
+    }
+
+    let nominal = parseNominalInput(text);
+    if (!nominal || nominal <= 0) {
+      await ctx.reply(
+        '⚠️ Format nominal tidak valid. Silakan ketik nominal yang benar (contoh: `3jt` atau `3000000`), atau ketik *batal*.',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    if (nominal > 0 && nominal <= 100) {
+      await ctx.reply(
+        '💡 *Kamu memasukkan angka: ' + nominal + '*\n\n' +
+          'Apakah maksudmu:\n' +
+          '• `' + nominal + 'rb` (Rp ' + formatRupiah(nominal * 1000) + ')\n' +
+          '• `' + nominal + 'jt` (Rp ' + formatRupiah(nominal * 1000000) + ')\n\n' +
+          'Silakan sertakan satuannya ya (contoh: `3jt` atau `500rb`), atau ketik *batal*.',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    setBudgetStates.delete(chatId);
+    try {
+      await ctx.reply('⏳ Menyimpan budget bulanan...');
+      await setBookBudget(bState.book, bState.month, nominal);
+      const budgetInfo = await getBudgetInfo(bState.book, bState.month);
+
+      await ctx.reply(
+        '🎯 *Budget Bulanan Berhasil Diatur!*\n\n' +
+          '📖 *Pos Tabungan:* `' + bState.book + '`\n' +
+          '📅 *Periode:* ' + budgetInfo.monthLabel + '\n' +
+          '💰 *Budget Bulanan:* *' + formatRupiah(budgetInfo.amount) + '*\n' +
+          '📤 *Terpakai:* ' + formatRupiah(budgetInfo.spent) + ' (' + budgetInfo.percentage + '%)\n' +
+          '💵 *Sisa Budget:* *' + formatRupiah(budgetInfo.remaining) + '*\n\n' +
+          '📊 Progress: `' + renderProgressBar(budgetInfo.percentage) + '` ' + budgetInfo.percentage + '%\n\n' +
+          '🔔 *Notifikasi Otomatis:* Bot akan otomatis mengirim alert jika pengeluaran mencapai 50%, 80%, atau habis! ✨',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    } catch (err: any) {
+      await ctx.reply('❌ Gagal menyimpan budget: ' + err.message);
+      return;
+    }
+  }
+
   // === 1c. Cek apakah pengguna sedang dalam proses input nominal /pindahuang antar dompet ===
   const wtState = walletTransferStates.get(chatId);
   if (wtState && wtState.step === 'input_amount') {
@@ -2833,6 +2912,10 @@ bot.on('message:text', async (ctx) => {
       'dashboard',
       'website',
       'budget',
+      'badget',
+      'bajet',
+      'aturbudget',
+      'aturbadget',
       'anggaran',
       'dompet',
       'saldo',
@@ -2862,6 +2945,13 @@ bot.on('message:text', async (ctx) => {
   }
 
   
+
+  // Jika pengguna mengetik 'budget' atau 'badget' tanpa slash
+  if (/^(budget|badget|bajet|anggaran)\b/i.test(text.trim())) {
+    const parts = text.trim().split(/\s+/).slice(1).join(' ').trim();
+    await handleBudgetCommand(ctx, parts);
+    return;
+  }
 
   // Jika pengguna mengetik 'rekapkas' tanpa slash
   if (text.toLowerCase().startsWith('rekapkas') || text.toLowerCase().startsWith('recapkas')) {
