@@ -14,7 +14,6 @@ function formatRupiah(amount: number): string {
 function parseDateParts(dateStr: string): { year?: string; month?: string } {
   if (!dateStr) return {};
   const cleaned = String(dateStr).trim().replace(/^'/, '');
-  // Format YYYY-MM-DD or YYYY/MM/DD
   const ymdMatch = cleaned.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
   if (ymdMatch) {
     return {
@@ -22,7 +21,6 @@ function parseDateParts(dateStr: string): { year?: string; month?: string } {
       month: ymdMatch[2].padStart(2, '0'),
     };
   }
-  // Format DD-MM-YYYY or DD/MM/YYYY
   const dmyMatch = cleaned.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
   if (dmyMatch) {
     return {
@@ -31,6 +29,22 @@ function parseDateParts(dateStr: string): { year?: string; month?: string } {
     };
   }
   return {};
+}
+
+function formatDateDisplay(dateStr: string): string {
+  if (!dateStr) return '-';
+  const cleaned = String(dateStr).trim().replace(/^'/, '');
+  const { year, month } = parseDateParts(cleaned);
+  const dayMatch = cleaned.match(/(?:[-/.]|^)(\d{1,2})(?:[-/.]|$)/);
+  const day = dayMatch ? dayMatch[1].padStart(2, '0') : '';
+  const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const mIdx = month ? parseInt(month, 10) : 0;
+  const mName = monthNames[mIdx] || month || '';
+
+  if (day && mName && year) {
+    return `${day} ${mName} ${year}`;
+  }
+  return cleaned;
 }
 
 const MONTH_OPTIONS = [
@@ -48,6 +62,37 @@ const MONTH_OPTIONS = [
   { value: '12', label: 'Desember' },
 ];
 
+function getCategoryEmoji(cat?: string, wallet?: string, type?: string): string {
+  if (!cat) return type === 'Pemasukan' ? '📥' : '📤';
+  const c = cat.toLowerCase();
+  if (c.includes('makan') || c.includes('minum') || c.includes('resto') || c.includes('cafe') || c.includes('kopi')) return '☕';
+  if (c.includes('kencan') || c.includes('hiburan') || c.includes('nonton') || c.includes('bioskop') || c.includes('date')) return '🍿';
+  if (c.includes('belanja') || c.includes('kebutuhan') || c.includes('pasar') || c.includes('supermarket')) return '🛍️';
+  if (c.includes('transport') || c.includes('bensin') || c.includes('parkir') || c.includes('ojek') || c.includes('grab') || c.includes('gojek')) return '🚗';
+  if (c.includes('tagihan') || c.includes('langganan') || c.includes('wifi') || c.includes('listrik') || c.includes('pulsa')) return '📱';
+  if (c.includes('sehat') || c.includes('obat') || c.includes('dokter') || c.includes('apotek') || c.includes('rawat')) return '💊';
+  if (c.includes('hadiah') || c.includes('donasi') || c.includes('kado') || c.includes('sedekah')) return '🎁';
+  if (c.includes('didik') || c.includes('buku') || c.includes('kursus')) return '📚';
+  if (c.includes('gaji') || c.includes('upah')) return '💼';
+  if (c.includes('bonus') || c.includes('thr')) return '🎉';
+  if (c.includes('tabung') || c.includes('simpan')) return '💰';
+  if (c.includes('invest')) return '📈';
+  if (c.includes('pindah')) return '🔄';
+  return type === 'Pemasukan' ? '📥' : '📤';
+}
+
+function getBookEmoji(name: string): string {
+  const b = name.toLowerCase();
+  if (b === 'semua') return '🌟';
+  if (b.includes('tabung') || b.includes('kas')) return '📌';
+  if (b.includes('libur') || b.includes('trip') || b.includes('wisata')) return '✈️';
+  if (b.includes('date') || b.includes('ngedate') || b.includes('kencan')) return '🍕';
+  if (b.includes('nikah') || b.includes('kawin')) return '💍';
+  if (b.includes('rumah')) return '🏡';
+  if (b.includes('mobil') || b.includes('motor')) return '🛵';
+  return '📖';
+}
+
 export default function FinanceDashboardPage() {
   const [data, setData] = useState<WebFinanceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,10 +107,13 @@ export default function FinanceDashboardPage() {
   const [visibleCount, setVisibleCount] = useState(25);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // State untuk form edit budget bulanan di web
+  // State untuk form edit budget bulanan
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
   const [isSavingBudget, setIsSavingBudget] = useState(false);
+
+  // State toggle accordion perbandingan bulanan
+  const [showComparison, setShowComparison] = useState(false);
 
   const fetchData = async (book: string = 'Semua', showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
@@ -89,7 +137,6 @@ export default function FinanceDashboardPage() {
     }
   };
 
-  // Baca URL query parameter saat pertama kali buka web (misal: ?book=Liburan)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -105,7 +152,6 @@ export default function FinanceDashboardPage() {
     setVisibleCount(25);
   }, [selectedBook]);
 
-  // Handler pindah buku & update URL agar 1 buku = 1 web URL
   const handleSelectBook = (book: string) => {
     setSelectedBook(book);
     if (typeof window !== 'undefined') {
@@ -144,7 +190,6 @@ export default function FinanceDashboardPage() {
     }
   };
 
-  // Daftar tahun unik dari data
   const availableYears = useMemo(() => {
     if (!data?.transactions) return [];
     const years = new Set<string>();
@@ -152,30 +197,37 @@ export default function FinanceDashboardPage() {
       const { year } = parseDateParts(tx.date);
       if (year) years.add(year);
     });
-    return Array.from(years).sort((a, b) => b.localeCompare(a));
+    return Array.from(years).sort().reverse();
   }, [data?.transactions]);
 
-  // Daftar kategori unik dari data
   const availableCategories = useMemo(() => {
     if (!data?.transactions) return [];
     const cats = new Set<string>();
     data.transactions.forEach((tx) => {
-      if (tx.category && tx.category.trim()) cats.add(tx.category.trim());
+      if (tx.category && tx.category !== '-') {
+        cats.add(tx.category);
+      }
     });
-    return Array.from(cats).sort((a, b) => a.localeCompare(b));
+    return Array.from(cats).sort();
   }, [data?.transactions]);
 
-  // Filter transaksi berdasarkan search, jenis, kategori, bulan, dan tahun
+  const availableWallets = useMemo(() => {
+    if (!data?.transactions) return [];
+    const wallets = new Set<string>();
+    data.transactions.forEach((tx) => {
+      if (tx.wallet) wallets.add(tx.wallet);
+    });
+    return Array.from(wallets).sort();
+  }, [data?.transactions]);
+
   const filteredTransactions = useMemo(() => {
     if (!data?.transactions) return [];
 
     return data.transactions.filter((tx) => {
-      // Filter Jenis
       if (typeFilter === 'Pemasukan' && tx.type !== 'Pemasukan') return false;
       if (typeFilter === 'Pengeluaran' && tx.type !== 'Pengeluaran') return false;
       if (typeFilter === 'with_receipt' && !tx.noteLink) return false;
 
-      // Filter Kategori
       if (selectedCategory !== 'all' && tx.category !== selectedCategory) return false;
 
       // Filter Dompet
@@ -192,14 +244,12 @@ export default function FinanceDashboardPage() {
         }
       }
 
-      // Filter Bulan & Tahun
       if (selectedYear !== 'all' || selectedMonth !== 'all') {
         const { year, month } = parseDateParts(tx.date);
         if (selectedYear !== 'all' && year !== selectedYear) return false;
         if (selectedMonth !== 'all' && month !== selectedMonth) return false;
       }
 
-      // Filter Search (keterangan, kategori, PIC, tanggal, buku)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchDesc = tx.description.toLowerCase().includes(q);
@@ -216,23 +266,7 @@ export default function FinanceDashboardPage() {
     });
   }, [data?.transactions, typeFilter, selectedCategory, selectedMonth, selectedYear, selectedWallet, searchQuery]);
 
-  // Ringkasan metrik dari transaksi yang sedang difilter
-  const filteredSummary = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    for (const tx of filteredTransactions) {
-      if (tx.type === 'Pemasukan') income += tx.amount;
-      else expense += tx.amount;
-    }
-    return {
-      income,
-      expense,
-      balance: income - expense,
-      count: filteredTransactions.length,
-    };
-  }, [filteredTransactions]);
-
-  const isAnyFilterActive =
+  const hasActiveFilters =
     typeFilter !== 'all' ||
     selectedCategory !== 'all' ||
     selectedMonth !== 'all' ||
@@ -249,100 +283,78 @@ export default function FinanceDashboardPage() {
     setSearchQuery('');
   };
 
-  // Hitung kategori unik untuk chip breakdown
   const categoryStats = useMemo(() => {
-    if (!data?.stats?.categoryExpenses) return [];
-    return Object.entries(data.stats.categoryExpenses)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8); // Top 8 kategori
-  }, [data?.stats?.categoryExpenses]);
+    const expensesByCategory: Record<string, number> = {};
+    filteredTransactions.forEach((tx) => {
+      if (tx.type === 'Pengeluaran') {
+        const cat = tx.category || 'Lain-lain';
+        expensesByCategory[cat] = (expensesByCategory[cat] || 0) + tx.amount;
+      }
+    });
+
+    return Object.entries(expensesByCategory).sort((a, b) => b[1] - a[1]);
+  }, [filteredTransactions]);
 
   return (
-    <div>
-      {/* Top Glass Navbar */}
-      <nav className="navbar">
+    <>
+      {/* iOS Frosted Glass Navbar */}
+      <header className="navbar">
         <div className="nav-container">
-          <a href="#" className="brand">
+          <div className="brand">
             <div className="brand-icon">💕</div>
-            <div>
-              <div className="brand-title">Tabungan & Keuangan Kita</div>
-              <div className="brand-subtitle">Catatan Pengeluaran & Tabungan Bersama</div>
+            <div className="brand-text">
+              <div className="brand-title">Tabungan Kita</div>
+              <div className="brand-subtitle">
+                {selectedBook === 'Semua' ? 'Seluruh Pos Tabungan' : `Pos: ${selectedBook}`}
+              </div>
             </div>
-          </a>
+          </div>
 
-          <a
-            href="https://t.me/nabung_date_bot"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bot-badge"
-            title="Catat pengeluaran lewat Telegram"
-          >
-            <span>🤖</span>
-            <span>@nabung_date_bot</span>
-          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              className="refresh-btn"
+              onClick={() => fetchData(selectedBook, true)}
+              disabled={isRefreshing}
+              title="Perbarui data dari spreadsheet"
+            >
+              <span>{isRefreshing ? '⏳' : '🔄'}</span>
+              <span className="desktop-only">{isRefreshing ? 'Memperbarui...' : 'Refresh'}</span>
+            </button>
+            <a
+              href="https://t.me/nabung_date_bot"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bot-badge"
+              title="Buka Bot Telegram"
+            >
+              <span>🤖</span>
+              <span>@nabung_date_bot</span>
+            </a>
+          </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="main-wrapper">
-        {/* Hero Section */}
-        <header className="hero-banner">
-          <div className="hero-tag">💕 Tabungan & Keuangan Bersama</div>
-          <h1 className="hero-title">Nabung & Catat Pengeluaran Bareng Jadi Makin Teratur</h1>
-          <p className="hero-desc">
-            Pantau seluruh saldo tabungan bersama, pengeluaran harian & date, serta bukti struk nota secara rapi & transparan.
-          </p>
-        </header>
-
-        {/* Tab Pilihan Pos / Buku ("1 Buku 1 Tampilan") */}
-        <div className="book-tabs-container">
-          <div className="book-tabs" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+      {/* Main Container */}
+      <main className="main-content">
+        {/* iOS Segmented Book Selector */}
+        <section className="book-nav-wrapper">
+          <div className="book-nav-track">
             {data?.books && data.books.length > 0 ? (
               data.books.map((b) => {
                 const isSelected = selectedBook === b;
                 const balance = data?.bookBalances?.[b];
-                const emoji =
-                  b === 'Semua'
-                    ? '🌟'
-                    : b.toLowerCase() === 'tabungan' || b.toLowerCase() === 'kas'
-                    ? '📌'
-                    : b.toLowerCase().includes('libur')
-                    ? '✈️'
-                    : b.toLowerCase().includes('date') || b.toLowerCase().includes('ngedate')
-                    ? '🍕'
-                    : b.toLowerCase().includes('nikah')
-                    ? '💍'
-                    : '📖';
+                const emoji = getBookEmoji(b);
 
                 return (
                   <button
                     key={b}
                     className={`book-tab-btn ${isSelected ? 'active' : ''}`}
                     onClick={() => handleSelectBook(b)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.45rem',
-                      padding: '0.55rem 1rem',
-                      borderRadius: '9999px',
-                      fontSize: '0.88rem',
-                      fontWeight: isSelected ? 800 : 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
                   >
                     <span>{emoji}</span>
                     <span>{b === 'Semua' ? 'Semua Pos' : b}</span>
                     {balance !== undefined && (
-                      <span
-                        style={{
-                          fontSize: '0.72rem',
-                          padding: '0.15rem 0.45rem',
-                          borderRadius: '9999px',
-                          background: isSelected ? '#FFFFFF' : 'rgba(244, 63, 94, 0.1)',
-                          color: isSelected ? '#BE123C' : '#9F1239',
-                          fontWeight: 700,
-                        }}
-                      >
+                      <span className="book-tab-badge">
                         {formatRupiah(balance)}
                       </span>
                     )}
@@ -350,295 +362,212 @@ export default function FinanceDashboardPage() {
                 );
               })
             ) : (
-              <button className="book-tab-btn active">Memuat Pos...</button>
+              <button className="book-tab-btn active">Memuat Pos Tabungan...</button>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Status Error atau Loading */}
+        {/* Error Alert Box */}
         {error && (
-          <div style={{ background: '#FFF1F2', border: '1px solid #FECDD3', padding: '1rem', borderRadius: '12px', color: '#BE123C', marginBottom: '1.5rem', fontWeight: 600 }}>
-            ⚠️ {error}
-            <button onClick={() => fetchData(selectedBook)} style={{ marginLeft: '1rem', textDecoration: 'underline', background: 'none', border: 'none', color: '#BE123C', cursor: 'pointer', fontWeight: 700 }}>
+          <div
+            style={{
+              background: '#FFF1F2',
+              border: '0.5px solid rgba(255, 59, 48, 0.2)',
+              borderRadius: '16px',
+              padding: '0.85rem 1rem',
+              color: '#FF3B30',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>⚠️ {error}</div>
+            <button
+              onClick={() => fetchData(selectedBook)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#FF3B30',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
               Coba lagi
             </button>
           </div>
         )}
 
-        {/* Stat Cards Grid */}
-        <section className="stats-grid">
-          {/* Card Saldo */}
-          <div className="stat-card hero-stat">
-            <div className="stat-header">
-              <span className="stat-label">Sisa Saldo Bersih</span>
-              <div className="stat-icon" style={{ background: '#FCE7F3', color: '#BE123C' }}>💰</div>
-            </div>
-            <div className="stat-value" style={{ color: (data?.stats.saldo || 0) >= 0 ? '#047857' : '#BE123C' }}>
-              {loading && !data ? '...' : formatRupiah(data?.stats.saldo || 0)}
-            </div>
-            <div className="stat-subtext">
-              {(data?.stats.saldo || 0) >= 0 ? '🟢 Tabungan aman & surplus' : '🔻 Pengeluaran melebihi tabungan'}
-            </div>
+        {/* Hero Balance Card (Apple Wallet Style) */}
+        <section className="hero-balance-card">
+          <div className="hero-balance-label">
+            Sisa Saldo Bersih • {selectedBook === 'Semua' ? 'Semua Pos' : selectedBook}
+          </div>
+          <div
+            className="hero-balance-amount"
+            style={{ color: (data?.stats.saldo || 0) >= 0 ? '#1C1C1E' : '#FF3B30' }}
+          >
+            {loading && !data ? '...' : formatRupiah(data?.stats.saldo || 0)}
+          </div>
+          <div className="hero-balance-status">
+            {(data?.stats.saldo || 0) >= 0 ? (
+              <span style={{ color: '#34C759' }}>🟢 Tabungan aman & surplus</span>
+            ) : (
+              <span style={{ color: '#FF3B30' }}>🔻 Pengeluaran melebihi tabungan</span>
+            )}
+            <span style={{ color: '#8E8E93', fontWeight: 400 }}>•</span>
+            <span style={{ color: '#8E8E93' }}>{data?.stats.count || 0} Transaksi</span>
           </div>
 
-          {/* Card Pemasukan */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <span className="stat-label">Total Pemasukan</span>
-              <div className="stat-icon" style={{ background: '#ECFDF5', color: '#047857' }}>📥</div>
+          <div className="balance-submetrics">
+            <div className="submetric-item">
+              <div className="submetric-label">
+                <span>📥</span>
+                <span>Total Pemasukan</span>
+              </div>
+              <div className="submetric-value" style={{ color: '#34C759' }}>
+                +{formatRupiah(data?.stats.totalPemasukan || 0)}
+              </div>
             </div>
-            <div className="stat-value" style={{ color: '#047857' }}>
-              {loading && !data ? '...' : formatRupiah(data?.stats.totalPemasukan || 0)}
-            </div>
-            <div className="stat-subtext">Akumulasi dana masuk</div>
-          </div>
 
-          {/* Card Pengeluaran */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <span className="stat-label">Total Pengeluaran</span>
-              <div className="stat-icon" style={{ background: '#FFF1F2', color: '#BE123C' }}>📤</div>
+            <div className="submetric-item">
+              <div className="submetric-label">
+                <span>📤</span>
+                <span>Total Pengeluaran</span>
+              </div>
+              <div className="submetric-value" style={{ color: '#1C1C1E' }}>
+                -{formatRupiah(data?.stats.totalPengeluaran || 0)}
+              </div>
             </div>
-            <div className="stat-value" style={{ color: '#BE123C' }}>
-              {loading && !data ? '...' : formatRupiah(data?.stats.totalPengeluaran || 0)}
-            </div>
-            <div className="stat-subtext">Total realisasi belanja</div>
-          </div>
-
-          {/* Card Jumlah Transaksi */}
-          <div className="stat-card">
-            <div className="stat-header">
-              <span className="stat-label">Total Transaksi</span>
-              <div className="stat-icon" style={{ background: '#FAF5FF', color: '#7E22CE' }}>🧾</div>
-            </div>
-            <div className="stat-value">
-              {loading && !data ? '...' : `${data?.stats.count || 0} Kali`}
-            </div>
-            <div className="stat-subtext">Data tercatat lengkap</div>
           </div>
         </section>
 
-        {/* Status Saldo Per Dompet (Bank, E-Wallet, Cash) */}
+        {/* Saldo Dompet Tiles (Bank, E-Wallet, Cash) */}
         {data?.stats?.walletBalances && (
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '1rem',
-              marginBottom: '1.5rem',
-            }}
-          >
-            <div
-              style={{
-                background: '#FFFFFF',
-                borderRadius: '16px',
-                padding: '1.1rem 1.25rem',
-                border: '1px solid rgba(59, 130, 246, 0.25)',
-                boxShadow: '0 2px 8px rgba(59, 130, 246, 0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.85rem',
-              }}
-            >
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: '#EFF6FF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.35rem',
-                }}
-              >
-                🏦
-              </div>
+          <section className="wallets-container">
+            {/* Tile Bank */}
+            <div className="wallet-tile">
               <div>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Saldo Bank
+                <div className="wallet-tile-header">
+                  <span className="wallet-tile-icon">🏦</span>
+                  <span className="wallet-tile-name">Bank</span>
                 </div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1E3A8A' }}>
+                <div className="wallet-tile-amount">
                   {formatRupiah(data.stats.walletBalances.Bank)}
                 </div>
-                {data.stats.walletBalances.details && Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('Bank')) && (
-                  <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                    {Object.entries(data.stats.walletBalances.details)
-                      .filter(([k]) => k.startsWith('Bank'))
-                      .map(([k, val]) => (
-                        <span key={k} style={{ fontSize: '0.68rem', background: '#DBEAFE', color: '#1E40AF', padding: '0.1rem 0.4rem', borderRadius: '6px', fontWeight: 600 }}>
-                          {k.replace(/^Bank - /, '')}: {formatRupiah(val)}
-                        </span>
-                      ))}
-                  </div>
-                )}
               </div>
+              {data.stats.walletBalances.details && Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('Bank')) && (
+                <div className="wallet-details-chips">
+                  {Object.entries(data.stats.walletBalances.details)
+                    .filter(([k]) => k.startsWith('Bank'))
+                    .map(([k, val]) => (
+                      <span key={k} className="wallet-chip">
+                        {k.replace(/^Bank - /, '')}: {formatRupiah(val)}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
 
-            <div
-              style={{
-                background: '#FFFFFF',
-                borderRadius: '16px',
-                padding: '1.1rem 1.25rem',
-                border: '1px solid rgba(139, 92, 246, 0.25)',
-                boxShadow: '0 2px 8px rgba(139, 92, 246, 0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.85rem',
-              }}
-            >
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: '#F5F3FF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.35rem',
-                }}
-              >
-                📱
-              </div>
+            {/* Tile E-Wallet */}
+            <div className="wallet-tile">
               <div>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Saldo E-Wallet
+                <div className="wallet-tile-header">
+                  <span className="wallet-tile-icon">📱</span>
+                  <span className="wallet-tile-name">E-Wallet</span>
                 </div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#5B21B6' }}>
+                <div className="wallet-tile-amount">
                   {formatRupiah(data.stats.walletBalances['E-Wallet'])}
                 </div>
-                {data.stats.walletBalances.details && Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('E-Wallet')) && (
-                  <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                    {Object.entries(data.stats.walletBalances.details)
-                      .filter(([k]) => k.startsWith('E-Wallet'))
-                      .map(([k, val]) => (
-                        <span key={k} style={{ fontSize: '0.68rem', background: '#EDE9FE', color: '#6D28D9', padding: '0.1rem 0.4rem', borderRadius: '6px', fontWeight: 600 }}>
-                          {k.replace(/^E-Wallet - /, '')}: {formatRupiah(val)}
-                        </span>
-                      ))}
-                  </div>
-                )}
               </div>
+              {data.stats.walletBalances.details && Object.keys(data.stats.walletBalances.details).some((k) => k.startsWith('E-Wallet')) && (
+                <div className="wallet-details-chips">
+                  {Object.entries(data.stats.walletBalances.details)
+                    .filter(([k]) => k.startsWith('E-Wallet'))
+                    .map(([k, val]) => (
+                      <span key={k} className="wallet-chip">
+                        {k.replace(/^E-Wallet - /, '')}: {formatRupiah(val)}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
 
-            <div
-              style={{
-                background: '#FFFFFF',
-                borderRadius: '16px',
-                padding: '1.1rem 1.25rem',
-                border: '1px solid rgba(16, 185, 129, 0.25)',
-                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.85rem',
-              }}
-            >
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: '#ECFDF5',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.35rem',
-                }}
-              >
-                💵
-              </div>
+            {/* Tile Cash */}
+            <div className="wallet-tile">
               <div>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Saldo Tunai (Cash)
+                <div className="wallet-tile-header">
+                  <span className="wallet-tile-icon">💵</span>
+                  <span className="wallet-tile-name">Cash</span>
                 </div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#065F46' }}>
+                <div className="wallet-tile-amount">
                   {formatRupiah(data.stats.walletBalances.Cash)}
                 </div>
+              </div>
+              <div className="wallet-details-chips">
+                <span className="wallet-chip">Uang Fisik</span>
               </div>
             </div>
           </section>
         )}
 
-        {/* Widget Tracking Budget Bulanan */}
+        {/* Monthly Budget Card (iOS Activity/Battery Ring Style) */}
         {data?.budget && (
-          <section
-            style={{
-              background: '#FFFFFF',
-              borderRadius: '20px',
-              padding: '1.5rem',
-              marginBottom: '1.5rem',
-              border:
-                data.budget.status === 'overbudget'
-                  ? '2px solid #EF4444'
-                  : data.budget.status === 'warning'
-                  ? '2px solid #F59E0B'
-                  : data.budget.status === 'half'
-                  ? '1.5px solid #FBBF24'
-                  : '1px solid rgba(244, 63, 94, 0.2)',
-              boxShadow: '0 4px 16px rgba(244, 63, 94, 0.06)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '0.75rem',
-                marginBottom: '1rem',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '1.35rem' }}>🎯</span>
+          <section className="ios-card" style={{ padding: '1.15rem 1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>🎯</span>
                 <div>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#4C0519', margin: 0 }}>
-                    Tracking Budget Bulan Ini ({data.budget.monthLabel})
-                  </h3>
-                  <div style={{ fontSize: '0.75rem', color: '#881337', fontWeight: 600 }}>
-                    Pos Tabungan: <b>{selectedBook === 'Semua' ? 'Tabungan Utama' : selectedBook}</b>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#000000' }}>
+                    Budget {data.budget.monthLabel}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#8E8E93' }}>
+                    Pos: {selectedBook === 'Semua' ? 'Tabungan Utama' : selectedBook}
                   </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <span
                   style={{
-                    padding: '0.3rem 0.75rem',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '0.2rem 0.55rem',
                     borderRadius: '9999px',
-                    fontSize: '0.78rem',
-                    fontWeight: 800,
                     background:
                       data.budget.status === 'overbudget'
-                        ? '#FEE2E2'
+                        ? 'rgba(255, 59, 48, 0.12)'
                         : data.budget.status === 'warning'
-                        ? '#FEF3C7'
+                        ? 'rgba(255, 149, 0, 0.12)'
                         : data.budget.status === 'half'
-                        ? '#FEF9C3'
+                        ? 'rgba(255, 204, 0, 0.18)'
                         : data.budget.amount > 0
-                        ? '#DCFCE7'
-                        : '#F3F4F6',
+                        ? 'rgba(52, 199, 89, 0.12)'
+                        : 'rgba(142, 142, 147, 0.12)',
                     color:
                       data.budget.status === 'overbudget'
-                        ? '#991B1B'
+                        ? '#FF3B30'
                         : data.budget.status === 'warning'
-                        ? '#92400E'
+                        ? '#FF9500'
                         : data.budget.status === 'half'
-                        ? '#854D0E'
+                        ? '#B25E00'
                         : data.budget.amount > 0
-                        ? '#166534'
-                        : '#6B7280',
+                        ? '#34C759'
+                        : '#8E8E93',
                   }}
                 >
                   {data.budget.status === 'overbudget'
-                    ? '🛑 Budget Habis / Overbudget!'
+                    ? '🛑 Habis / Overbudget'
                     : data.budget.status === 'warning'
-                    ? '🚨 Hampir Habis (>80%)'
+                    ? '🚨 Hampir Habis'
                     : data.budget.status === 'half'
-                    ? '⚠️ Terpakai Separuh (50%)'
+                    ? '⚠️ 50% Terpakai'
                     : data.budget.amount > 0
-                    ? '🟢 Pengeluaran Terkendali'
-                    : '⚪ Belum Ada Target'}
+                    ? '🟢 Terkendali'
+                    : 'Belum Diatur'}
                 </span>
 
                 <button
@@ -647,129 +576,83 @@ export default function FinanceDashboardPage() {
                     setIsEditingBudget(!isEditingBudget);
                   }}
                   style={{
-                    padding: '0.35rem 0.85rem',
+                    border: 'none',
+                    background: 'var(--ios-bg)',
+                    color: 'var(--ios-pink)',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    padding: '0.25rem 0.6rem',
                     borderRadius: '9999px',
-                    border: '1px solid rgba(244, 63, 94, 0.3)',
-                    background: '#FFF1F2',
-                    color: '#BE123C',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
                     cursor: 'pointer',
                   }}
                 >
-                  {isEditingBudget ? '✕ Tutup' : '✏️ Atur Budget'}
+                  {isEditingBudget ? '✕ Tutup' : '✏️ Atur'}
                 </button>
               </div>
             </div>
 
-            {/* Inline Budget Editor Form */}
+            {/* Inline Budget Form */}
             {isEditingBudget && (
               <div
                 style={{
-                  background: '#FFF1F2',
+                  background: 'var(--ios-bg)',
                   borderRadius: '12px',
-                  padding: '1rem',
-                  marginBottom: '1rem',
+                  padding: '0.85rem',
+                  marginBottom: '0.85rem',
                   display: 'flex',
+                  gap: '0.5rem',
                   alignItems: 'center',
-                  gap: '0.75rem',
                   flexWrap: 'wrap',
                 }}
               >
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#881337', display: 'block', marginBottom: '0.25rem' }}>
-                    Nominal Budget Bulanan (Rp):
-                  </label>
-                  <input
-                    type="number"
-                    value={budgetInput}
-                    onChange={(e) => setBudgetInput(e.target.value)}
-                    placeholder="misal: 3000000"
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem 0.75rem',
-                      borderRadius: '8px',
-                      border: '1px solid #FECDD3',
-                      fontSize: '0.9rem',
-                      fontWeight: 700,
-                    }}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-end' }}>
-                  <button
-                    onClick={handleSaveBudget}
-                    disabled={isSavingBudget}
-                    style={{
-                      padding: '0.5rem 1.25rem',
-                      borderRadius: '8px',
-                      background: '#F43F5E',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      fontWeight: 700,
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {isSavingBudget ? 'Menyimpan...' : '💾 Simpan Budget'}
-                  </button>
-                  <button
-                    onClick={() => setIsEditingBudget(false)}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      borderRadius: '8px',
-                      background: '#FFFFFF',
-                      color: '#4B5563',
-                      border: '1px solid #D1D5DB',
-                      fontWeight: 600,
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Batal
-                  </button>
-                </div>
+                <input
+                  type="number"
+                  value={budgetInput}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  placeholder="Target budget (misal: 3000000)"
+                  style={{
+                    flex: 1,
+                    minWidth: '150px',
+                    height: '36px',
+                    border: '0.5px solid rgba(60, 60, 67, 0.15)',
+                    borderRadius: '8px',
+                    padding: '0 0.65rem',
+                    fontSize: '16px', // prevents iOS auto-zoom
+                    outline: 'none',
+                    background: '#FFFFFF',
+                  }}
+                />
+                <button
+                  onClick={handleSaveBudget}
+                  disabled={isSavingBudget}
+                  style={{
+                    height: '36px',
+                    padding: '0 1rem',
+                    borderRadius: '8px',
+                    background: '#FF2D55',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isSavingBudget ? 'Menyimpan...' : 'Simpan'}
+                </button>
               </div>
             )}
 
-            {/* Progress Bar & Detail Angka */}
+            {/* Budget Progress Bar */}
             {data.budget.amount > 0 ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '0.85rem' }}>
-                  <div>
-                    <div style={{ fontSize: '0.72rem', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Target Budget</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#111827' }}>{formatRupiah(data.budget.amount)}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.72rem', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Sudah Terpakai</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: data.budget.percentage >= 100 ? '#DC2626' : '#E11D48' }}>
-                      {formatRupiah(data.budget.spent)} <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>({data.budget.percentage}%)</span>
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.72rem', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Sisa Budget</div>
-                    <div
-                      style={{
-                        fontSize: '1.25rem',
-                        fontWeight: 800,
-                        color: data.budget.remaining < 0 ? '#DC2626' : '#059669',
-                      }}
-                    >
-                      {data.budget.remaining < 0
-                        ? `- ${formatRupiah(Math.abs(data.budget.remaining))}`
-                        : formatRupiah(data.budget.remaining)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Visual Progress Bar */}
                 <div
                   style={{
+                    height: '8px',
                     width: '100%',
-                    height: '14px',
-                    background: '#F3F4F6',
+                    background: 'var(--ios-bg)',
                     borderRadius: '9999px',
                     overflow: 'hidden',
-                    position: 'relative',
+                    margin: '0.65rem 0',
                   }}
                 >
                   <div
@@ -779,631 +662,426 @@ export default function FinanceDashboardPage() {
                       borderRadius: '9999px',
                       background:
                         data.budget.percentage >= 100
-                          ? 'linear-gradient(90deg, #EF4444, #B91C1C)'
+                          ? '#FF3B30'
                           : data.budget.percentage >= 80
-                          ? 'linear-gradient(90deg, #F59E0B, #DC2626)'
-                          : data.budget.percentage >= 50
-                          ? 'linear-gradient(90deg, #FBBF24, #F59E0B)'
-                          : 'linear-gradient(90deg, #10B981, #059669)',
-                      transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                          ? '#FF9500'
+                          : '#34C759',
+                      transition: 'width 0.4s ease',
                     }}
                   />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#9CA3AF', marginTop: '0.35rem' }}>
-                  <span>0%</span>
-                  <span>50% (Peringatan Separuh)</span>
-                  <span>80% (Hampir Habis)</span>
-                  <span>100%</span>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: '#8E8E93', marginTop: '0.2rem' }}>
+                  <span>
+                    Terpakai: <b style={{ color: '#1C1C1E' }}>{formatRupiah(data.budget.spent)}</b> ({data.budget.percentage}%)
+                  </span>
+                  <span>
+                    Sisa: <b style={{ color: data.budget.remaining < 0 ? '#FF3B30' : '#34C759' }}>{formatRupiah(data.budget.remaining)}</b>
+                  </span>
                 </div>
               </>
             ) : (
-              <div style={{ padding: '0.75rem 0', color: '#6B7280', fontSize: '0.88rem' }}>
-                💡 Belum ada target budget untuk pos ini. Klik tombol <b>✏️ Atur Budget</b> di atas atau ketik <code style={{ background: '#F3F4F6', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>/budget 3jt</code> di bot Telegram untuk membatasi pengeluaran bulanan.
+              <div style={{ fontSize: '0.78rem', color: '#8E8E93', padding: '0.25rem 0' }}>
+                Belum ada batas budget untuk pos ini. Klik <b>✏️ Atur</b> atau ketik <code style={{ background: 'var(--ios-bg)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>/budget 3jt</code> di Telegram.
               </div>
             )}
           </section>
         )}
 
-        {/* Month-over-Month Comparison & Historical Peak Insights */}
+        {/* Month-over-Month Comparison Report Card (Collapsible) */}
         {data?.monthlyComparison && data.monthlyComparison.months.length > 0 && (
-          <section
-            style={{
-              background: '#FFFFFF',
-              borderRadius: '20px',
-              padding: '1.5rem',
-              marginBottom: '1.5rem',
-              border: '1px solid rgba(244, 63, 94, 0.15)',
-              boxShadow: '0 4px 16px rgba(244, 63, 94, 0.05)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
-              <span style={{ fontSize: '1.35rem' }}>📈</span>
-              <div>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#4C0519', margin: 0 }}>
-                  Perbandingan Bulan ke Bulan ({selectedBook === 'Semua' ? 'Seluruh Pos' : selectedBook})
-                </h3>
-                <div style={{ fontSize: '0.75rem', color: '#881337', fontWeight: 600 }}>
-                  Pantau tren pengeluaran, bulan rekor pemasukan, dan komparasi performa tabungan
-                </div>
-              </div>
-            </div>
-
-            {/* 4 Cards: Peak Insights */}
+          <section className="ios-card" style={{ padding: '1.15rem 1.25rem' }}>
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '0.85rem',
-                marginBottom: '1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
               }}
+              onClick={() => setShowComparison(!showComparison)}
             >
-              <div style={{ background: '#F0FDF4', borderRadius: '12px', padding: '0.85rem 1rem', border: '1px solid #BBF7D0' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>🏆 Pemasukan Terbanyak</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#14532D', marginTop: '0.2rem' }}>
-                  {data.monthlyComparison.highestIncomeMonth
-                    ? formatRupiah(data.monthlyComparison.highestIncomeMonth.amount)
-                    : '—'}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#15803D' }}>
-                  {data.monthlyComparison.highestIncomeMonth?.monthLabel || 'Belum ada data'}
-                </div>
-              </div>
-
-              <div style={{ background: '#FFF1F2', borderRadius: '12px', padding: '0.85rem 1rem', border: '1px solid #FECDD3' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9F1239', textTransform: 'uppercase' }}>💸 Pengeluaran Terbanyak</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#881337', marginTop: '0.2rem' }}>
-                  {data.monthlyComparison.highestExpenseMonth
-                    ? formatRupiah(data.monthlyComparison.highestExpenseMonth.amount)
-                    : '—'}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#BE123C' }}>
-                  {data.monthlyComparison.highestExpenseMonth?.monthLabel || 'Belum ada data'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>📈</span>
+                <div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#000000' }}>
+                    Tren & Perbandingan Bulan ke Bulan
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#8E8E93' }}>
+                    Rekor pemasukan & riwayat belanja
+                  </div>
                 </div>
               </div>
 
-              <div style={{ background: '#EFF6FF', borderRadius: '12px', padding: '0.85rem 1rem', border: '1px solid #BFDBFE' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase' }}>📥 Rata-Rata Masuk / Bln</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1E3A8A', marginTop: '0.2rem' }}>
-                  {formatRupiah(data.monthlyComparison.averageMonthlyIncome)}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#2563EB' }}>Rata-rata akumulasi</div>
-              </div>
-
-              <div style={{ background: '#FAF5FF', borderRadius: '12px', padding: '0.85rem 1rem', border: '1px solid #E9D5FF' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6B21A8', textTransform: 'uppercase' }}>📤 Rata-Rata Belanja / Bln</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#581C87', marginTop: '0.2rem' }}>
-                  {formatRupiah(data.monthlyComparison.averageMonthlyExpense)}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#7E22CE' }}>Rata-rata pengeluaran</div>
+              <div style={{ fontSize: '0.85rem', color: '#8E8E93', transform: showComparison ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                ▼
               </div>
             </div>
 
-            {/* Monthly Comparison Table */}
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid #F3F4F6', textAlign: 'left', color: '#6B7280', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Bulan</th>
-                    <th style={{ padding: '0.6rem 0.75rem' }}>Visual Rasio (Masuk vs Keluar)</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>Pemasukan</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>Pengeluaran</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>Sisa Surplus</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>Tren Belanja</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.monthlyComparison.months.map((m) => {
-                    const totalVol = m.income + m.expense;
-                    const incPct = totalVol > 0 ? Math.round((m.income / totalVol) * 100) : 50;
-                    const expPct = totalVol > 0 ? 100 - incPct : 50;
+            {showComparison && (
+              <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '0.5px solid var(--ios-separator)' }}>
+                {/* 4 Peak Insight Tiles */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <div style={{ background: 'var(--ios-bg)', borderRadius: '10px', padding: '0.65rem 0.75rem' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#34C759', textTransform: 'uppercase' }}>🏆 Rekor Pemasukan</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1C1C1E', marginTop: '0.15rem' }}>
+                      {data.monthlyComparison.highestIncomeMonth ? formatRupiah(data.monthlyComparison.highestIncomeMonth.amount) : '—'}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#8E8E93' }}>
+                      {data.monthlyComparison.highestIncomeMonth?.monthLabel || '-'}
+                    </div>
+                  </div>
 
-                    return (
-                      <tr key={m.month} style={{ borderBottom: '1px solid #F9FAFB' }}>
-                        <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#1F2937' }}>
-                          📅 {m.monthLabel}
-                        </td>
-                        <td style={{ padding: '0.65rem 0.75rem', minWidth: '150px' }}>
-                          <div style={{ height: '8px', width: '100%', background: '#F3F4F6', borderRadius: '9999px', display: 'flex', overflow: 'hidden' }}>
-                            <div style={{ width: `${incPct}%`, background: '#10B981' }} title={`Masuk: ${incPct}%`} />
-                            <div style={{ width: `${expPct}%`, background: '#F43F5E' }} title={`Keluar: ${expPct}%`} />
-                          </div>
-                        </td>
-                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
-                          + {formatRupiah(m.income)}
-                        </td>
-                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 700, color: '#E11D48' }}>
-                          - {formatRupiah(m.expense)}
-                        </td>
-                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 800, color: m.balance >= 0 ? '#047857' : '#DC2626' }}>
-                          {m.balance >= 0 ? `+ ${formatRupiah(m.balance)}` : `- ${formatRupiah(Math.abs(m.balance))}`}
-                        </td>
-                        <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
-                          {m.expenseChangePercent !== undefined ? (
-                            <span
-                              style={{
-                                fontSize: '0.75rem',
-                                padding: '0.2rem 0.5rem',
-                                borderRadius: '9999px',
-                                fontWeight: 700,
-                                background: m.expenseChangePercent > 0 ? '#FFF1F2' : '#ECFDF5',
-                                color: m.expenseChangePercent > 0 ? '#BE123C' : '#047857',
-                              }}
-                            >
-                              {m.expenseChangePercent > 0 ? `▲ +${m.expenseChangePercent}%` : `▼ ${m.expenseChangePercent}%`}
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>—</span>
-                          )}
-                        </td>
+                  <div style={{ background: 'var(--ios-bg)', borderRadius: '10px', padding: '0.65rem 0.75rem' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#FF3B30', textTransform: 'uppercase' }}>💸 Rekor Belanja</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1C1C1E', marginTop: '0.15rem' }}>
+                      {data.monthlyComparison.highestExpenseMonth ? formatRupiah(data.monthlyComparison.highestExpenseMonth.amount) : '—'}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#8E8E93' }}>
+                      {data.monthlyComparison.highestExpenseMonth?.monthLabel || '-'}
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'var(--ios-bg)', borderRadius: '10px', padding: '0.65rem 0.75rem' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#007AFF', textTransform: 'uppercase' }}>📥 Rata-Rata Masuk</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1C1C1E', marginTop: '0.15rem' }}>
+                      {formatRupiah(data.monthlyComparison.averageMonthlyIncome)}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#8E8E93' }}>per bulan</div>
+                  </div>
+
+                  <div style={{ background: 'var(--ios-bg)', borderRadius: '10px', padding: '0.65rem 0.75rem' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#AF52DE', textTransform: 'uppercase' }}>📤 Rata-Rata Keluar</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1C1C1E', marginTop: '0.15rem' }}>
+                      {formatRupiah(data.monthlyComparison.averageMonthlyExpense)}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: '#8E8E93' }}>per bulan</div>
+                  </div>
+                </div>
+
+                {/* Table Perbandingan */}
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                    <thead>
+                      <tr style={{ color: '#8E8E93', borderBottom: '0.5px solid var(--ios-separator)', textAlign: 'left' }}>
+                        <th style={{ padding: '0.5rem 0.4rem' }}>Bulan</th>
+                        <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Masuk</th>
+                        <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Keluar</th>
+                        <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Sisa</th>
+                        <th style={{ padding: '0.5rem 0.4rem', textAlign: 'center' }}>Tren</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {/* Category Breakdown (Top Kategori Belanja) */}
-        {categoryStats.length > 0 && (
-          <section className="category-summary-box">
-            <div className="category-summary-title">
-              <span>🎯 Top Kategori Belanja ({selectedBook}):</span>
-              {selectedCategory !== 'all' && (
-                <button
-                  onClick={() => setSelectedCategory('all')}
-                  style={{ background: 'none', border: 'none', color: '#BE123C', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 700 }}
-                >
-                  ✕ Reset Filter Kategori
-                </button>
-              )}
-            </div>
-            <div className="category-chips">
-              {categoryStats.map(([cat, amount]) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
-                  className="category-chip"
-                  style={{
-                    cursor: 'pointer',
-                    background: selectedCategory === cat ? '#F43F5E' : undefined,
-                    color: selectedCategory === cat ? '#FFFFFF' : undefined,
-                  }}
-                >
-                  <span>{cat}</span>
-                  <span className="chip-amount" style={{ color: selectedCategory === cat ? '#FFFFFF' : undefined }}>
-                    {formatRupiah(amount)}
-                  </span>
-                </button>
-              ))}
-            </div>
+                    </thead>
+                    <tbody>
+                      {data.monthlyComparison.months.map((m) => (
+                        <tr key={m.month} style={{ borderBottom: '0.5px solid rgba(60, 60, 67, 0.05)' }}>
+                          <td style={{ padding: '0.5rem 0.4rem', fontWeight: 600, color: '#1C1C1E' }}>
+                            {m.monthLabel}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right', color: '#34C759', fontWeight: 600 }}>
+                            +{formatRupiah(m.income)}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right', color: '#1C1C1E', fontWeight: 600 }}>
+                            -{formatRupiah(m.expense)}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right', fontWeight: 700, color: m.balance >= 0 ? '#34C759' : '#FF3B30' }}>
+                            {formatRupiah(m.balance)}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.4rem', textAlign: 'center' }}>
+                            {m.expenseChangePercent !== undefined ? (
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  padding: '0.1rem 0.35rem',
+                                  borderRadius: '9999px',
+                                  fontWeight: 600,
+                                  background: m.expenseChangePercent > 0 ? 'rgba(255, 59, 48, 0.1)' : 'rgba(52, 199, 89, 0.1)',
+                                  color: m.expenseChangePercent > 0 ? '#FF3B30' : '#34C759',
+                                }}
+                              >
+                                {m.expenseChangePercent > 0 ? `▲ +${m.expenseChangePercent}%` : `▼ ${m.expenseChangePercent}%`}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#C7C7CC' }}>—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
         {/* Filter & Search Bar */}
-        <section className="controls-bar">
-          <div className="controls-row-top">
-            <div className="search-box">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="Cari transaksi, item, kategori, tanggal, atau PIC..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="search-input"
-              />
-            </div>
-
-            <div className="filter-pills">
+        <section className="controls-card">
+          <div className="search-field">
+            <span className="search-field-icon">🔍</span>
+            <input
+              type="text"
+              placeholder="Cari keterangan, kategori, atau PIC..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
               <button
-                className={`filter-pill ${typeFilter === 'all' ? 'active' : ''}`}
-                onClick={() => setTypeFilter('all')}
+                onClick={() => setSearchQuery('')}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#8E8E93',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                }}
               >
-                Semua ({data?.transactions.length || 0})
-              </button>
-              <button
-                className={`filter-pill ${typeFilter === 'Pengeluaran' ? 'active' : ''}`}
-                onClick={() => setTypeFilter('Pengeluaran')}
-              >
-                🔴 Pengeluaran
-              </button>
-              <button
-                className={`filter-pill ${typeFilter === 'Pemasukan' ? 'active' : ''}`}
-                onClick={() => setTypeFilter('Pemasukan')}
-              >
-                🟢 Pemasukan
-              </button>
-              <button
-                className={`filter-pill ${typeFilter === 'with_receipt' ? 'active' : ''}`}
-                onClick={() => setTypeFilter('with_receipt')}
-              >
-                📎 Ada Nota Struk
-              </button>
-            </div>
-          </div>
-
-          <div className="controls-row-filters">
-            {/* Filter Kategori Dropdown */}
-            <div className="filter-select-wrapper">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className={`filter-select ${selectedCategory !== 'all' ? 'active' : ''}`}
-                title="Filter berdasarkan Kategori"
-              >
-                <option value="all">📂 Semua Kategori</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filter Bulan Dropdown */}
-            <div className="filter-select-wrapper">
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className={`filter-select ${selectedMonth !== 'all' ? 'active' : ''}`}
-                title="Filter berdasarkan Bulan"
-              >
-                <option value="all">📅 Semua Bulan</option>
-                {MONTH_OPTIONS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.value} - {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filter Tahun Dropdown */}
-            <div className="filter-select-wrapper">
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className={`filter-select ${selectedYear !== 'all' ? 'active' : ''}`}
-                title="Filter berdasarkan Tahun"
-              >
-                <option value="all">🗓️ Semua Tahun</option>
-                {availableYears.map((yr) => (
-                  <option key={yr} value={yr}>
-                    Tahun {yr}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filter Dompet Dropdown */}
-            <div className="filter-select-wrapper">
-              <select
-                value={selectedWallet}
-                onChange={(e) => setSelectedWallet(e.target.value)}
-                className={`filter-select ${selectedWallet !== 'all' ? 'active' : ''}`}
-                title="Filter berdasarkan Dompet"
-              >
-                <option value="all">💳 Semua Dompet</option>
-                <option value="Bank">🏦 Semua Bank</option>
-                <option value="E-Wallet">📱 Semua E-Wallet</option>
-                <option value="Cash">💵 Tunai / Cash</option>
-                {Array.from(new Set(data?.transactions?.map((t) => t.wallet).filter(Boolean)))
-                  .filter((w) => !['Bank', 'E-Wallet', 'Cash'].includes(w as string))
-                  .map((w) => (
-                    <option key={w as string} value={w as string}>
-                      {(w as string).toLowerCase().includes('wallet') ? '📱' : (w as string).toLowerCase().includes('cash') ? '💵' : '🏦'} {w as string}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Tombol Reset Filter */}
-            {isAnyFilterActive && (
-              <button
-                onClick={handleResetFilters}
-                className="btn-reset-filters"
-                title="Kembalikan semua filter ke awal"
-              >
-                <span>✕</span>
-                <span>Reset Filter</span>
+                ✕
               </button>
             )}
           </div>
 
-          {/* Banner Ringkasan Hasil Filter */}
-          {isAnyFilterActive && (
-            <div className="filtered-summary-banner">
-              <div className="filtered-summary-metrics">
-                <span className="filtered-summary-item">
-                  <span>📊 Terfilter:</span>
-                  <span className="filtered-summary-val">{filteredSummary.count} Transaksi</span>
-                </span>
-                <span className="filtered-summary-item">
-                  <span>📥 Pemasukan:</span>
-                  <span className="filtered-summary-val" style={{ color: '#047857' }}>
-                    +{formatRupiah(filteredSummary.income)}
-                  </span>
-                </span>
-                <span className="filtered-summary-item">
-                  <span>📤 Pengeluaran:</span>
-                  <span className="filtered-summary-val" style={{ color: '#BE123C' }}>
-                    -{formatRupiah(filteredSummary.expense)}
-                  </span>
-                </span>
-                <span className="filtered-summary-item">
-                  <span>💰 Saldo Periode:</span>
-                  <span
-                    className="filtered-summary-val"
-                    style={{ color: filteredSummary.balance >= 0 ? '#047857' : '#BE123C' }}
-                  >
-                    {formatRupiah(filteredSummary.balance)}
-                  </span>
-                </span>
-              </div>
+          <div className="filter-pills-row">
+            {/* Filter Jenis */}
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as any)}
+              className="ios-select"
+            >
+              <option value="all">Semua Jenis</option>
+              <option value="Pemasukan">📥 Pemasukan Saja</option>
+              <option value="Pengeluaran">📤 Pengeluaran Saja</option>
+              <option value="with_receipt">📎 Ada Nota Saja</option>
+            </select>
+
+            {/* Filter Dompet */}
+            <select
+              value={selectedWallet}
+              onChange={(e) => setSelectedWallet(e.target.value)}
+              className="ios-select"
+            >
+              <option value="all">💳 Semua Dompet</option>
+              <option value="Bank">🏦 Bank (Semua)</option>
+              <option value="E-Wallet">📱 E-Wallet (Semua)</option>
+              <option value="Cash">💵 Cash</option>
+              {availableWallets
+                .filter((w) => !['Bank', 'E-Wallet', 'Cash'].includes(w))
+                .map((w) => (
+                  <option key={w} value={w}>
+                    {w.toLowerCase().includes('wallet') ? '📱' : w.toLowerCase().includes('cash') ? '💵' : '🏦'} {w}
+                  </option>
+                ))}
+            </select>
+
+            {/* Filter Bulan */}
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="ios-select"
+            >
+              <option value="all">📅 Semua Bulan</option>
+              {MONTH_OPTIONS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Filter Tahun */}
+            {availableYears.length > 0 && (
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="ios-select"
+              >
+                <option value="all">🗓️ Semua Tahun</option>
+                {availableYears.map((yr) => (
+                  <option key={yr} value={yr}>
+                    {yr}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Reset Button */}
+            {hasActiveFilters && (
+              <button onClick={handleResetFilters} className="btn-filter-reset">
+                ✕ Reset
+              </button>
+            )}
+          </div>
+
+          {/* Category Quick Chips */}
+          {availableCategories.length > 0 && (
+            <div className="chips-scroll">
+              <button
+                className={`cat-pill ${selectedCategory === 'all' ? 'active' : ''}`}
+                onClick={() => setSelectedCategory('all')}
+              >
+                Semua Kategori
+              </button>
+              {availableCategories.map((cat) => (
+                <button
+                  key={cat}
+                  className={`cat-pill ${selectedCategory === cat ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
+                >
+                  <span>{getCategoryEmoji(cat)}</span>
+                  <span>{cat}</span>
+                </button>
+              ))}
             </div>
           )}
         </section>
 
-        {/* Transactions Feed */}
+        {/* Transactions List (iOS Inset Grouped Table View) */}
         <section>
           <div className="transactions-header">
-            <div>
-              <h2 className="transactions-title">Daftar Transaksi ({selectedBook})</h2>
-              <div className="transactions-count">
-                Menampilkan {Math.min(visibleCount, filteredTransactions.length)} dari {filteredTransactions.length} transaksi
-              </div>
-            </div>
-
-            <button
-              onClick={() => fetchData(selectedBook, true)}
-              disabled={isRefreshing}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.45rem 0.85rem',
-                borderRadius: '9999px',
-                background: '#FFFFFF',
-                border: '1px solid rgba(244, 63, 94, 0.2)',
-                color: '#BE123C',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span>{isRefreshing ? '⏳' : '🔄'}</span>
-              <span>{isRefreshing ? 'Memperbarui...' : 'Refresh'}</span>
-            </button>
+            <h2 className="transactions-title">
+              Riwayat Transaksi
+            </h2>
+            <span className="transactions-count">
+              {filteredTransactions.length} transaksi
+            </span>
           </div>
 
           {loading && !data ? (
             <div className="empty-state">
               <div className="empty-icon">⏳</div>
-              <div className="empty-title">Memuat data keuangan...</div>
-              <div className="empty-desc">Mengambil catatan terbaru dari spreadsheet secara langsung.</div>
+              <div className="empty-title">Memuat data...</div>
+              <div className="empty-desc">Mengambil transaksi langsung dari Google Sheets.</div>
             </div>
           ) : filteredTransactions.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">🌸</div>
-              <div className="empty-title">Tidak ada transaksi ditemukan</div>
+              <div className="empty-title">Tidak ada transaksi</div>
               <div className="empty-desc">
                 {searchQuery
-                  ? `Tidak ada hasil yang cocok dengan kata kunci "${searchQuery}".`
-                  : 'Belum ada transaksi pada filter ini.'}
+                  ? `Tidak ada transaksi yang cocok dengan "${searchQuery}".`
+                  : 'Belum ada catatan transaksi pada filter ini.'}
               </div>
             </div>
           ) : (
-            <>
-              <div className="table-scroll-hint">
-                <span>↔️ Geser tabel ke samping untuk melihat nominal & nota</span>
-              </div>
-              <div className="table-card">
-                <div className="table-responsive">
-                  <table className="finance-table">
-                    <thead>
-                      <tr>
-                        <th className="col-num desktop-only">#</th>
-                        <th className="col-date desktop-only">Tanggal</th>
-                        <th>Keterangan</th>
-                        <th className="desktop-only">Pos Tabungan</th>
-                        <th className="desktop-only">Dompet</th>
-                        <th className="desktop-only">Kategori</th>
-                        <th className="desktop-only">Jenis</th>
-                        <th style={{ textAlign: 'right' }}>Nominal</th>
-                        <th className="desktop-only" style={{ textAlign: 'center' }}>Bukti Nota</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredTransactions.slice(0, visibleCount).map((tx, idx) => {
-                        const isIncome = tx.type === 'Pemasukan';
-                        return (
-                          <tr key={tx.id || idx}>
-                            <td className="col-num desktop-only">{idx + 1}</td>
-                            <td className="col-date desktop-only">
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                                <span>📅</span>
-                                <span>{tx.date}</span>
-                              </span>
-                            </td>
-                            <td className="col-desc">
-                              <span className="tx-table-desc">{tx.description || tx.category}</span>
-                              {/* Mobile-only metadata */}
-                              <div className="mobile-only-meta">
-                                <span>📅 {tx.date}</span>
-                                <span>•</span>
-                                <span className="book-badge">📖 {tx.book}</span>
-                                <span>•</span>
-                                <span>
-                                  {(tx.wallet || '').toLowerCase().includes('cash') ? '💵' : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay') ? '📱' : '🏦'}{' '}
-                                  {tx.wallet || 'Bank'}
-                                </span>
-                                <span>•</span>
-                                <span className="cat-badge">{tx.category}</span>
-                                {tx.pic && (
-                                  <span className="tx-table-pic">
-                                    <span>👤</span>
-                                    <span>{tx.pic}</span>
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="desktop-only">
-                              <span className="book-badge">
-                                <span>📖</span>
-                                <span>{tx.book}</span>
-                              </span>
-                            </td>
-                            <td className="desktop-only">
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem',
-                                  padding: '0.2rem 0.55rem',
-                                  borderRadius: '9999px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 600,
-                                  background:
-                                    (tx.wallet || '').toLowerCase().includes('cash')
-                                      ? '#ECFDF5'
-                                      : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay')
-                                      ? '#F5F3FF'
-                                      : '#EFF6FF',
-                                  color:
-                                    (tx.wallet || '').toLowerCase().includes('cash')
-                                      ? '#065F46'
-                                      : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay')
-                                      ? '#5B21B6'
-                                      : '#1E3A8A',
-                                  border: `1px solid ${
-                                    (tx.wallet || '').toLowerCase().includes('cash')
-                                      ? 'rgba(16, 185, 129, 0.25)'
-                                      : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay')
-                                      ? 'rgba(139, 92, 246, 0.25)'
-                                      : 'rgba(59, 130, 246, 0.25)'
-                                  }`,
-                                }}
-                              >
-                                <span>{(tx.wallet || '').toLowerCase().includes('cash') ? '💵' : (tx.wallet || '').toLowerCase().includes('wallet') || (tx.wallet || '').toLowerCase().includes('dana') || (tx.wallet || '').toLowerCase().includes('gopay') ? '📱' : '🏦'}</span>
-                                <span>{tx.wallet || 'Bank'}</span>
-                              </span>
-                            </td>
-                            <td className="desktop-only">
-                              <span className="cat-badge">{tx.category}</span>
-                            </td>
-                            <td className="desktop-only">
-                              <span className={`type-badge ${isIncome ? 'pemasukan' : 'pengeluaran'}`}>
-                                <span>{isIncome ? '📥 Masuk' : '📤 Keluar'}</span>
-                              </span>
-                            </td>
-                            <td className={`col-amount ${isIncome ? 'pemasukan' : 'pengeluaran'}`}>
-                              <div>
-                                {isIncome ? '+' : '-'} {formatRupiah(tx.amount)}
-                              </div>
-                              {/* Mobile-only nota link */}
-                              <div className="mobile-only-nota">
-                                {tx.noteLink ? (
-                                  <a
-                                    href={tx.noteLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn-nota-sm"
-                                    title="Buka bukti foto struk"
-                                  >
-                                    <span>📎</span>
-                                    <span>Lihat Nota</span>
-                                  </a>
-                                ) : (
-                                  <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>Tanpa Struk</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="col-nota desktop-only">
-                              {tx.noteLink ? (
-                                <a
-                                  href={tx.noteLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn-nota"
-                                  title="Buka bukti foto struk di Google Drive"
-                                >
-                                  <span>📎</span>
-                                  <span>Lihat Nota</span>
-                                </a>
-                              ) : (
-                                <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+            <div className="ios-list-group">
+              {filteredTransactions.slice(0, visibleCount).map((tx, idx) => {
+                const isIncome = tx.type === 'Pemasukan';
+                const emoji = getCategoryEmoji(tx.category, tx.wallet, tx.type);
+                const isCash = (tx.wallet || '').toLowerCase().includes('cash');
+                const isEw =
+                  (tx.wallet || '').toLowerCase().includes('wallet') ||
+                  (tx.wallet || '').toLowerCase().includes('dana') ||
+                  (tx.wallet || '').toLowerCase().includes('gopay') ||
+                  (tx.wallet || '').toLowerCase().includes('shopee') ||
+                  (tx.wallet || '').toLowerCase().includes('ovo');
+                const walletIcon = isCash ? '💵' : isEw ? '📱' : '🏦';
 
-              {visibleCount < filteredTransactions.length && (
-                <div style={{ textAlign: 'center', padding: '1.25rem', borderTop: '1px solid rgba(244, 63, 94, 0.1)', background: '#FFFDFE' }}>
-                  <button
-                    onClick={() => setVisibleCount((prev) => prev + 50)}
-                    style={{
-                      padding: '0.65rem 1.75rem',
-                      borderRadius: '9999px',
-                      background: 'linear-gradient(135deg, #F43F5E, #FB7185)',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      fontSize: '0.85rem',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 14px rgba(244, 63, 94, 0.25)',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    Muat 50 Transaksi Lagi (Sisa {filteredTransactions.length - visibleCount}) ⤵
-                  </button>
-                </div>
-              )}
-              </div>
-            </>
+                return (
+                  <div key={tx.id || idx} className="ios-row">
+                    {/* Left Icon Badge */}
+                    <div
+                      className="ios-row-icon"
+                      style={{
+                        background: isIncome ? 'rgba(52, 199, 89, 0.12)' : 'rgba(255, 45, 85, 0.08)',
+                      }}
+                    >
+                      {emoji}
+                    </div>
+
+                    {/* Center Info (Guaranteed no collision with min-width: 0 & flex: 1) */}
+                    <div className="ios-row-main">
+                      <div className="ios-row-title">
+                        {tx.description || tx.category || 'Transaksi'}
+                      </div>
+                      <div className="ios-row-meta">
+                        <span>{formatDateDisplay(tx.date)}</span>
+                        <span>•</span>
+                        <span
+                          className="ios-badge-pill"
+                          style={{
+                            background: isCash
+                              ? 'rgba(52, 199, 89, 0.1)'
+                              : isEw
+                              ? 'rgba(175, 82, 222, 0.1)'
+                              : 'rgba(0, 122, 255, 0.1)',
+                            color: isCash ? '#34C759' : isEw ? '#AF52DE' : '#007AFF',
+                          }}
+                        >
+                          <span>{walletIcon}</span>
+                          <span>{tx.wallet || 'Bank'}</span>
+                        </span>
+                        <span>•</span>
+                        <span
+                          className="ios-badge-pill"
+                          style={{
+                            background: 'var(--ios-bg)',
+                            color: 'var(--ios-secondary-label)',
+                          }}
+                        >
+                          {tx.category}
+                        </span>
+                        {selectedBook === 'Semua' && (
+                          <>
+                            <span>•</span>
+                            <span style={{ color: '#8E8E93' }}>{tx.book}</span>
+                          </>
+                        )}
+                        {tx.pic && (
+                          <>
+                            <span>•</span>
+                            <span style={{ color: '#8E8E93' }}>{tx.pic}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Amount & Receipt Button */}
+                    <div className="ios-row-end">
+                      <div className={`ios-row-amount ${isIncome ? 'income' : 'expense'}`}>
+                        {isIncome ? '+' : '-'} {formatRupiah(tx.amount)}
+                      </div>
+                      {tx.noteLink && (
+                        <div>
+                          <a
+                            href={tx.noteLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ios-nota-btn"
+                            title="Buka bukti nota"
+                          >
+                            <span>📎</span>
+                            <span>Nota</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Load More Button */}
+          {filteredTransactions.length > visibleCount && (
+            <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
+              <button
+                onClick={() => setVisibleCount((prev) => prev + 25)}
+                style={{
+                  padding: '0.65rem 1.5rem',
+                  borderRadius: '9999px',
+                  background: '#FFFFFF',
+                  border: '0.5px solid rgba(60, 60, 67, 0.15)',
+                  color: '#000000',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                }}
+              >
+                Muat Lebih Banyak ({filteredTransactions.length - visibleCount} tersisa)
+              </button>
+            </div>
           )}
         </section>
-
-        {/* Info Banner Bot */}
-        <section style={{ marginTop: '3rem', background: '#FFFFFF', border: '1px solid rgba(244, 63, 94, 0.2)', borderRadius: '16px', padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', boxShadow: 'var(--shadow-sm)' }}>
-          <div>
-            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '1.1rem', fontWeight: 800, color: '#4C0519', marginBottom: '0.25rem' }}>
-              💬 Ingin mencatat pemasukan atau pengeluaran baru?
-            </h3>
-            <p style={{ fontSize: '0.85rem', color: '#881337' }}>
-              Gunakan bot Telegram kami. Cukup ketik chat biasa (contoh: <i>Makan malam sate 45rb</i>, <i>Nabung 500rb</i>) atau kirim foto nota struk belanja!
-            </p>
-          </div>
-          <a
-            href="https://t.me/nabung_date_bot"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              padding: '0.65rem 1.25rem',
-              borderRadius: '9999px',
-              background: '#F43F5E',
-              color: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: '0.88rem',
-              textDecoration: 'none',
-              boxShadow: '0 4px 12px rgba(244, 63, 94, 0.3)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Buka Bot Telegram ➔
-          </a>
-        </section>
       </main>
-
-      {/* Footer */}
-      <footer className="footer">
-        <p>💕 Dashboard Tabungan & Keuangan Kita • Terhubung Otomatis ke Google Sheets & Drive</p>
-        <p style={{ marginTop: '0.35rem', fontSize: '0.78rem' }}>
-          Terakhir sinkronisasi: {data?.lastUpdated || 'Baru saja'}
-        </p>
-      </footer>
-    </div>
+    </>
   );
 }

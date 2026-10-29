@@ -1,9 +1,16 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: '💕 Dashboard Tabungan & Keuangan Kita - Nabung Date',
+  title: '💕 Tabungan & Keuangan Kita',
   description: 'Portal catatan tabungan dan keuangan berdua: pantau saldo tabungan, pemasukan, pengeluaran, dan bukti struk nota bersama.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#F2F2F7',
 };
 
 export default function RootLayout({
