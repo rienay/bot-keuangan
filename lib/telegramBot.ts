@@ -5,6 +5,8 @@ import { parseTextMessage, parseReceiptImage } from './gemini';
 import {
   appendTransaction,
   getMonthSummary,
+  getCurrentMonthInfo,
+  getYearSummary,
   updateTransactionNoteLink,
   getAllSheetBooks,
   createSheetBook,
@@ -192,7 +194,8 @@ async function syncBotCommands(api: any) {
       { command: 'dompet', description: 'Cek saldo Bank, E-Wallet & Cash' },
       { command: 'pindahuang', description: 'Pindah uang antar dompet' },
       { command: 'pindahsaldo', description: 'Pindah saldo antar tabungan' },
-      { command: 'rekap', description: 'Rekap tabungan yang aktif' },
+      { command: 'rekap', description: 'Rekap tabungan per bulan' },
+      { command: 'lihattahun', description: 'Rekap tabungan per tahun' },
       { command: 'rekapkas', description: 'Rekap total seluruh tabungan' },
       { command: 'cekfoto', description: 'Cek foto nota di Google Drive' },
       { command: 'unggahfoto', description: 'Unggah ulang foto nota transaksi' },
@@ -328,6 +331,7 @@ async function buildBooksKeyboard(activeBook: string): Promise<InlineKeyboard> {
     (b) => b.toLowerCase() !== DEFAULT_BOOK_NAME.toLowerCase() && b.toLowerCase() !== 'kas' && !b.startsWith('_')
   );
 
+  keyboard.row().text('📊 Rekap Bulan Ini', 'cmd_rekap_bulan').text('📅 Rekap per Tahun', 'cmd_lihattahun');
   keyboard.row().text('➕ Buat Pos Baru', 'cmd_buat_buku');
   if (deletable.length > 0) {
     keyboard.text('🗑️ Hapus Pos Tabungan', 'cmd_hapus_buku');
@@ -375,7 +379,8 @@ bot.command(['start', 'help'], async (ctx) => {
       `• /buat — *Buat Pos Tabungan Baru* (misal: Liburan, Ngedate, Menikah)
       • /hapusbuku — *Hapus Pos Tabungan* (hapus pos yang sudah selesai/tidak dipakai)\n` +
       `• /pindahsaldo — *Pindah Saldo* antar pos tabungan/dompet\n` +
-      `• /rekap — *Rekap Tabungan Aktif* (\`${activeBook}\`)\n` +
+      `• /rekap — *Rekap Tabungan Bulanan* (\`${activeBook}\`)\n` +
+      `• /lihattahun — *Rekap Tabungan Tahunan* (pilih tahun)\n` +
       `• /rekapkas — *Rekap Total Semua Tabungan*\n` +
       `• /cekfoto — *Cek Foto Nota* di Google Drive\n` +
       `• /unggahfoto — *Tautkan Nota ke Transaksi Lama*\n` +
@@ -458,6 +463,18 @@ bot.command(['hapusbuku', 'hapuspos', 'deletebuku', 'deletepos'], async (ctx) =>
 bot.callbackQuery('cmd_hapus_buku', async (ctx) => {
   await ctx.answerCallbackQuery();
   await sendDeleteBookMenu(ctx);
+});
+
+// Callback: cmd_lihattahun dari menu
+bot.callbackQuery('cmd_lihattahun', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await sendRekapTahun(ctx);
+});
+
+// Callback: cmd_rekap_bulan dari menu
+bot.callbackQuery('cmd_rekap_bulan', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await sendRekap(ctx);
 });
 
 // Callback: cmd_buat_buku dari menu /buku
@@ -580,7 +597,8 @@ bot.callbackQuery(/^switch_book:(.+)$/, async (ctx) => {
       `✅ *Buku Aktif Berhasil Diubah!*\n\n` +
         `📌 *Buku Saat Ini:* \`${targetBook}\`\n\n` +
         `Semua transaksi teks dan foto nota selanjutnya akan dicatat ke tab *${targetBook}*.\n` +
-        `• Ketik /rekap untuk rekap buku ini\n` +
+        `• Ketik /rekap untuk rekap bulanan buku ini\n` +
+        `• Ketik /lihattahun untuk rekap per tahun\n` +
         `• Ketik /rekapkas untuk seluruh rekap kas\n` +
         `• Ketik /kas untuk kembali ke Kas Utama`,
       {
@@ -2088,28 +2106,37 @@ function buildTransactionDateBlocks(items: ExpenseDetail[], defaultType: string)
   return blocks;
 }
 
-// Helper: Mengirim pesan rekap buku kegiatan aktif
+// Helper: Mengirim pesan rekap buku kegiatan aktif (per bulan)
 async function sendRekap(ctx: any, queryText: string = '') {
   try {
     await ctx.replyWithChatAction('typing');
 
-    const chatId = ctx.chat.id;
+    const chatId = ctx.chat?.id || ctx.from?.id;
     const activeBook = await getUserActiveBook(chatId);
-    const monthInfo = parseMonthQuery(queryText);
+    let monthInfo = parseMonthQuery(queryText);
+
+    // Default ke bulan berjalan (Bulan Ini) jika pengguna tidak menyebutkan bulan tertentu
+    if (!monthInfo) {
+      const cur = getCurrentMonthInfo();
+      monthInfo = {
+        yearMonth: cur.yearMonth,
+        label: cur.label,
+      };
+    }
 
     const summary = await getMonthSummary(
-      monthInfo?.yearMonth,
-      monthInfo?.label,
+      monthInfo.yearMonth,
+      monthInfo.label,
       activeBook
     );
 
     const isKas = activeBook.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase();
     const judulBuku = isKas ? 'Kas Utama' : `Kegiatan "${activeBook}"`;
 
-    let headerMsg = `📊 *Rekap Transaksi — ${judulBuku}*\n`;
+    let headerMsg = `📊 *Rekap Transaksi Bulanan — ${judulBuku}*\n`;
     headerMsg += `🗓️ *Periode:* ${summary.periodeLabel}\n\n`;
-    headerMsg += `🟢 *Pemasukan:* ${formatRupiah(summary.totalPemasukan)}\n`;
-    headerMsg += `🔴 *Pengeluaran:* ${formatRupiah(summary.totalPengeluaran)}\n`;
+    headerMsg += `🟢 *Pemasukan:* +${formatRupiah(summary.totalPemasukan)}\n`;
+    headerMsg += `🔴 *Pengeluaran:* -${formatRupiah(summary.totalPengeluaran)}\n`;
     headerMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
     const selisihLabel = summary.saldo >= 0 ? '💰 *Sisa Uang (Surplus):*' : '🔻 *Defisit:*';
     headerMsg += `${selisihLabel} ${formatRupiah(summary.saldo)}\n`;
@@ -2132,7 +2159,7 @@ async function sendRekap(ctx: any, queryText: string = '') {
     }
 
     if (summary.count === 0) {
-      headerMsg += `\n\nℹ️ _Belum ada transaksi yang tercatat pada buku ini._`;
+      headerMsg += `\n\nℹ️ _Belum ada transaksi yang tercatat pada bulan ini (${summary.periodeLabel})._`;
     }
 
     // Kelompokkan pemasukan & pengeluaran per tanggal
@@ -2183,7 +2210,7 @@ async function sendRekap(ctx: any, queryText: string = '') {
       }
     }
 
-    const tips = `\n\n💡 _Tips: Ketik \`/rekap [nama bulan]\` (contoh: \`/rekap mei\`) untuk rekap per bulan, atau \`/rekapkas\` untuk seluruh kegiatan._`;
+    const tips = `\n\n💡 _Tips: Ketik \`/rekap [nama bulan]\` (misal: \`/rekap september\`) untuk bulan lain, atau ketik \`/lihattahun\` untuk rekap tahunan._`;
     if ((currentChunk + tips).length <= 3800) {
       currentChunk += tips;
       chunks.push(currentChunk.trim());
@@ -2192,12 +2219,19 @@ async function sendRekap(ctx: any, queryText: string = '') {
       chunks.push(tips.trim());
     }
 
-    for (const chunk of chunks) {
+    const keyboard = new InlineKeyboard()
+      .text('📅 Rekap per Tahun', `lihattahun_menu:${activeBook}`)
+      .url('🌐 Web Dashboard', `https://bot-keuangan-ebon.vercel.app/?buku=${encodeURIComponent(activeBook)}`);
+
+    for (let i = 0; i < chunks.length; i++) {
+      const isLast = i === chunks.length - 1;
+      const opts: any = { parse_mode: 'Markdown' };
+      if (isLast) opts.reply_markup = keyboard;
       try {
-        await ctx.reply(chunk, { parse_mode: 'Markdown' });
+        await ctx.reply(chunks[i], opts);
       } catch (err) {
         console.warn('Gagal kirim rekap Markdown, fallback plain text:', err);
-        await ctx.reply(chunk.replace(/[*_`\\]/g, ''));
+        await ctx.reply(chunks[i].replace(/[*_`\\]/g, ''), isLast ? { reply_markup: keyboard } : undefined);
       }
     }
   } catch (error: any) {
@@ -2264,6 +2298,120 @@ bot.command(['rekapkas', 'recapkas'], async (ctx) => {
   const text = ctx.message?.text || '';
   const parts = text.split(' ').slice(1).join(' ').trim();
   await sendRekapKas(ctx, parts);
+});
+
+// Helper: Mengirim pesan rekap buku kegiatan TAHUNAN
+async function sendRekapTahun(ctx: any, targetYear?: string, customBook?: string) {
+  try {
+    await ctx.replyWithChatAction('typing');
+
+    const chatId = ctx.chat?.id || ctx.from?.id;
+    const activeBook = customBook?.trim() || (await getUserActiveBook(chatId));
+
+    const report = await getYearSummary(targetYear, activeBook);
+    const isKas = activeBook.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase();
+    const judulBuku = isKas ? 'Kas Utama' : `Kegiatan "${activeBook}"`;
+
+    let msg = `📅 *Rekap Keuangan Tahunan — ${judulBuku}*\n`;
+    msg += `🗓️ *Tahun:* *${report.year}*\n\n`;
+    msg += `🟢 *Total Pemasukan:* +${formatRupiah(report.totalPemasukan)}\n`;
+    msg += `🔴 *Total Pengeluaran:* -${formatRupiah(report.totalPengeluaran)}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    const selisihLabel = report.saldo >= 0 ? '💰 *Sisa Uang (Surplus):*' : '🔻 *Defisit:*';
+    msg += `${selisihLabel} ${formatRupiah(report.saldo)}\n`;
+    msg += `📝 *Jumlah Transaksi:* ${report.count} transaksi (${report.year})\n`;
+
+    if (report.count === 0) {
+      msg += `\nℹ️ _Belum ada transaksi yang tercatat pada tahun ${report.year}._`;
+    } else {
+      // Ringkasan per Bulan
+      if (report.monthlyBreakdown.length > 0) {
+        msg += `\n🗓️ *Ringkasan Arus Kas per Bulan (${report.year}):*`;
+        for (const mb of report.monthlyBreakdown) {
+          const sLabel = mb.saldo >= 0 ? 'Surplus' : 'Defisit';
+          msg += `\n• *${mb.monthName}:* +${formatRupiah(mb.pemasukan)} | -${formatRupiah(mb.pengeluaran)} _(${sLabel}: ${formatRupiah(mb.saldo)})_`;
+        }
+      }
+
+      // Top 5 Pengeluaran
+      const expKeys = Object.keys(report.categoryExpenses);
+      if (expKeys.length > 0) {
+        msg += `\n\n🏷️ *Top 5 Pengeluaran Terbesar (${report.year}):*`;
+        const sortedExp = expKeys
+          .sort((a, b) => report.categoryExpenses[b] - report.categoryExpenses[a])
+          .slice(0, 5);
+        for (const kat of sortedExp) {
+          msg += `\n• ${escapeTelegramMarkdown(kat)}: ${formatRupiah(report.categoryExpenses[kat])}`;
+        }
+      }
+    }
+
+    // Bangun keyboard tombol tahun
+    const keyboard = new InlineKeyboard();
+
+    // Tombol pilihan tahun
+    report.availableYears.forEach((yr) => {
+      const isSelected = yr === report.year;
+      keyboard.text(isSelected ? `📌 ${yr}` : `${yr}`, `lihattahun_show:${activeBook}:${yr}`);
+    });
+    keyboard.row();
+
+    keyboard
+      .text('📅 Rekap Bulan Ini', `rekap_bulan_ini:${activeBook}`)
+      .url('🌐 Web Dashboard', `https://bot-keuangan-ebon.vercel.app/?buku=${encodeURIComponent(activeBook)}`);
+
+    msg += `\n\n💡 _Gunakan tombol di atas untuk berganti tahun atau ketik \`/rekap\` untuk rekap bulanan._`;
+
+    if (ctx.callbackQuery) {
+      try {
+        await ctx.editMessageText(msg, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        });
+        return;
+      } catch {
+        // Fallback jika tidak bisa edit
+      }
+    }
+
+    await ctx.reply(msg, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  } catch (error: any) {
+    console.error('Error saat membuat rekap tahunan:', error);
+    await ctx.reply(`⚠️ Gagal mengambil rekap tahunan: ${error?.message || 'Terjadi kesalahan sistem.'}`);
+  }
+}
+
+// Command: /lihattahun /rekaptahun /tahunan
+bot.command(['lihattahun', 'rekaptahun', 'tahunan', 'rekaptahunan'], async (ctx) => {
+  const text = ctx.message?.text || '';
+  const parts = text.split(' ').slice(1).join(' ').trim();
+  const yearMatch = parts.match(/\b(20\d\d)\b/);
+  const targetYear = yearMatch ? yearMatch[1] : undefined;
+  await sendRekapTahun(ctx, targetYear);
+});
+
+// Callback: lihattahun_menu
+bot.callbackQuery(/^lihattahun_menu:(.+)$/, async (ctx) => {
+  const bookName = ctx.match[1];
+  await ctx.answerCallbackQuery();
+  await sendRekapTahun(ctx, undefined, bookName);
+});
+
+// Callback: lihattahun_show
+bot.callbackQuery(/^lihattahun_show:([^:]+):(\d{4})$/, async (ctx) => {
+  const bookName = ctx.match[1];
+  const year = ctx.match[2];
+  await ctx.answerCallbackQuery({ text: `Memuat rekap tahun ${year}...` });
+  await sendRekapTahun(ctx, year, bookName);
+});
+
+// Callback: rekap_bulan_ini
+bot.callbackQuery(/^rekap_bulan_ini:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery({ text: 'Memuat rekap bulan ini...' });
+  await sendRekap(ctx);
 });
 
 async function handleCekFoto(ctx: any, customBook?: string) {
@@ -3061,25 +3209,36 @@ bot.on('message:text', async (ctx) => {
       'tambahdompet',
       'hapusdompet',
       'deletedompet',
+      'lihattahun',
+      'rekaptahun',
+      'tahunan',
+      'rekaptahunan',
     ];
 
     if (!standardCmds.includes(rawCmd)) {
       await ctx.reply(
         '❓ Perintah tidak dikenali.\n' +
           '• Ketik /start untuk melihat menu dan daftar tabungan\n' +
-          '• Ketik /rekap untuk melihat rekap tabungan aktif\n' +
+          '• Ketik /rekap untuk melihat rekap tabungan bulanan\n' +
+          '• Ketik /lihattahun untuk melihat rekap per tahun\n' +
           '• Ketik /buku untuk memilih tabungan'
       );
     }
     return;
   }
 
-  
-
   // Jika pengguna mengetik 'budget' atau 'badget' tanpa slash
   if (/^(budget|badget|bajet|anggaran)\b/i.test(text.trim())) {
     const parts = text.trim().split(/\s+/).slice(1).join(' ').trim();
     await handleBudgetCommand(ctx, parts);
+    return;
+  }
+
+  // Jika pengguna mengetik 'lihattahun' atau 'rekap tahun' tanpa slash
+  if (/^(lihattahun|rekaptahun|tahunan|rekap\s*tahun)\b/i.test(text.trim())) {
+    const yearMatch = text.match(/\b(20\d\d)\b/);
+    const targetYear = yearMatch ? yearMatch[1] : undefined;
+    await sendRekapTahun(ctx, targetYear);
     return;
   }
 
@@ -3187,17 +3346,20 @@ bot.on('message:text', async (ctx) => {
       })();
     }
 
-    // Kirim rekap singkat di background
+    // Kirim rekap singkat bulanan di background
     (async () => {
       try {
-        const summary = await getMonthSummary(undefined, undefined, activeBook);
-        const saldoLabel = summary.saldo >= 0 ? '💰 *Sisa:*' : '🔻 *Defisit:*';
+        const curInfo = getCurrentMonthInfo();
+        const summary = await getMonthSummary(curInfo.yearMonth, curInfo.label, activeBook);
+        const saldoLabel = summary.saldo >= 0 ? '💰 *Sisa Bulan Ini:*' : '🔻 *Defisit Bulan Ini:*';
         await ctx.reply(
           `━━━━━━━━━━━━━━━━━━━━━\n` +
-            `📊 *Rekap Buku [${activeBook}]:*\n` +
-            `🟢 Masuk: ${formatRupiah(summary.totalPemasukan)}\n` +
-            `🔴 Keluar: ${formatRupiah(summary.totalPengeluaran)}\n` +
-            `${saldoLabel} ${formatRupiah(Math.abs(summary.saldo))}`,
+            `📊 *Rekap ${curInfo.label} [${activeBook}]:*\n` +
+            `🟢 Masuk: +${formatRupiah(summary.totalPemasukan)}\n` +
+            `🔴 Keluar: -${formatRupiah(summary.totalPengeluaran)}\n` +
+            `${saldoLabel} ${formatRupiah(summary.saldo)}\n\n` +
+            `_• Ketik /rekap untuk rincian bulan ini_\n` +
+            `_• Ketik /lihattahun untuk rekap per tahun_`,
           { parse_mode: 'Markdown' }
         );
       } catch {
@@ -3521,16 +3683,19 @@ bot.on(['message:photo', 'message:document'], async (ctx) => {
       }
     }
 
-    // Rekap singkat buku aktif (awaited)
+    // Rekap singkat bulanan buku aktif (awaited)
     try {
-      const summary = await getMonthSummary(undefined, undefined, activeBook);
-      const saldoLabel = summary.saldo >= 0 ? '💰 *Sisa:*' : '🔻 *Defisit:*';
+      const curInfo = getCurrentMonthInfo();
+      const summary = await getMonthSummary(curInfo.yearMonth, curInfo.label, activeBook);
+      const saldoLabel = summary.saldo >= 0 ? '💰 *Sisa Bulan Ini:*' : '🔻 *Defisit Bulan Ini:*';
       await ctx.reply(
         `━━━━━━━━━━━━━━━━━━━━━\n` +
-          `📊 *Rekap Buku [${activeBook}]:*\n` +
-          `🟢 Masuk: ${formatRupiah(summary.totalPemasukan)}\n` +
-          `🔴 Keluar: ${formatRupiah(summary.totalPengeluaran)}\n` +
-          `${saldoLabel} ${formatRupiah(Math.abs(summary.saldo))}`,
+          `📊 *Rekap ${curInfo.label} [${activeBook}]:*\n` +
+          `🟢 Masuk: +${formatRupiah(summary.totalPemasukan)}\n` +
+          `🔴 Keluar: -${formatRupiah(summary.totalPengeluaran)}\n` +
+          `${saldoLabel} ${formatRupiah(summary.saldo)}\n\n` +
+          `_• Ketik /rekap untuk rincian bulan ini_\n` +
+          `_• Ketik /lihattahun untuk rekap per tahun_`,
         { parse_mode: 'Markdown' }
       );
     } catch {

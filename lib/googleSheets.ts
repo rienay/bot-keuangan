@@ -15,6 +15,8 @@ import {
   BudgetInfo,
   MonthlyStatsItem,
   MonthlyComparisonReport,
+  YearSummaryReport,
+  MonthBreakdownItem,
 } from './types';
 
 export const DEFAULT_BOOK_NAME = 'Tabungan';
@@ -615,6 +617,170 @@ export async function updateTransactionNoteLink(
       values: [[noteLink]],
     },
   });
+}
+
+/**
+ * Mengambil informasi bulan berjalan (WIB / Asia/Jakarta)
+ */
+export function getCurrentMonthInfo(): { yearMonth: string; label: string; year: string } {
+  const parts = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(new Date());
+
+  const y = parts.find((p) => p.type === 'year')?.value || String(new Date().getFullYear());
+  const m = parts.find((p) => p.type === 'month')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
+
+  const monthNames: Record<string, string> = {
+    '01': 'Januari',
+    '02': 'Februari',
+    '03': 'Maret',
+    '04': 'April',
+    '05': 'Mei',
+    '06': 'Juni',
+    '07': 'Juli',
+    '08': 'Agustus',
+    '09': 'September',
+    '10': 'Oktober',
+    '11': 'November',
+    '12': 'Desember',
+  };
+
+  const label = `${monthNames[m] || m} ${y}`;
+  return {
+    yearMonth: `${y}-${m}`,
+    label,
+    year: y,
+  };
+}
+
+/**
+ * Mengambil rekap transaksi TAHUNAN untuk 1 buku/halaman tertentu
+ */
+export async function getYearSummary(
+  targetYear?: string,
+  sheetName: string = DEFAULT_BOOK_NAME
+): Promise<YearSummaryReport> {
+  await ensureHeaderRow(sheetName);
+
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${sheetName}'!A2:H`,
+  });
+
+  const rows = res.data.values || [];
+
+  // Kumpulkan tahun-tahun yang tersedia
+  const yearSet = new Set<string>();
+  const currentInfo = getCurrentMonthInfo();
+  yearSet.add(currentInfo.year);
+
+  for (const row of rows) {
+    const tglRaw = row[0];
+    if (!tglRaw) continue;
+    const ym = normalizeDateToYearMonth(tglRaw);
+    if (ym && ym.includes('-')) {
+      const yr = ym.split('-')[0];
+      if (/^\d{4}$/.test(yr)) {
+        yearSet.add(yr);
+      }
+    }
+  }
+
+  const availableYears = Array.from(yearSet).sort((a, b) => b.localeCompare(a));
+  const activeYear = targetYear && availableYears.includes(targetYear)
+    ? targetYear
+    : availableYears[0] || currentInfo.year;
+
+  let totalPengeluaran = 0;
+  let totalPemasukan = 0;
+  let count = 0;
+  const categoryExpenses: Record<string, number> = {};
+  const categoryIncome: Record<string, number> = {};
+
+  const monthMap: Record<string, { pemasukan: number; pengeluaran: number; count: number }> = {};
+  const monthNames: Record<string, string> = {
+    '01': 'Januari',
+    '02': 'Februari',
+    '03': 'Maret',
+    '04': 'April',
+    '05': 'Mei',
+    '06': 'Juni',
+    '07': 'Juli',
+    '08': 'Agustus',
+    '09': 'September',
+    '10': 'Oktober',
+    '11': 'November',
+    '12': 'Desember',
+  };
+
+  for (const row of rows) {
+    const [tglRaw, jenis, katRaw, nominalRaw] = row;
+    if (!tglRaw || !nominalRaw) continue;
+
+    const ym = normalizeDateToYearMonth(tglRaw);
+    if (!ym || !ym.startsWith(`${activeYear}-`)) continue;
+
+    const cleanNominal =
+      typeof nominalRaw === 'number'
+        ? nominalRaw
+        : parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
+
+    const isPengeluaran = jenis?.toLowerCase().includes('pengeluaran');
+    const isPemasukan = jenis?.toLowerCase().includes('pemasukan');
+    const kategori = katRaw?.trim() || 'Lain-lain';
+
+    if (!monthMap[ym]) {
+      monthMap[ym] = { pemasukan: 0, pengeluaran: 0, count: 0 };
+    }
+
+    if (isPengeluaran) {
+      totalPengeluaran += cleanNominal;
+      categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
+      monthMap[ym].pengeluaran += cleanNominal;
+      monthMap[ym].count++;
+      count++;
+    } else if (isPemasukan) {
+      totalPemasukan += cleanNominal;
+      categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
+      monthMap[ym].pemasukan += cleanNominal;
+      monthMap[ym].count++;
+      count++;
+    }
+  }
+
+  const monthlyBreakdown: MonthBreakdownItem[] = Object.keys(monthMap)
+    .sort((a, b) => b.localeCompare(a))
+    .map((ym) => {
+      const mCode = ym.split('-')[1];
+      const data = monthMap[ym];
+      return {
+        month: ym,
+        monthName: monthNames[mCode] || `Bulan ${mCode}`,
+        pemasukan: data.pemasukan,
+        pengeluaran: data.pengeluaran,
+        saldo: data.pemasukan - data.pengeluaran,
+        count: data.count,
+      };
+    });
+
+  return {
+    year: activeYear,
+    bookName: sheetName,
+    totalPemasukan,
+    totalPengeluaran,
+    saldo: totalPemasukan - totalPengeluaran,
+    count,
+    monthlyBreakdown,
+    categoryExpenses,
+    categoryIncome,
+    availableYears,
+  };
 }
 
 /**

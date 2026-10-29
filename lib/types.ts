@@ -66,6 +66,28 @@ export interface BookSummary {
   count: number;
 }
 
+export interface MonthBreakdownItem {
+  month: string;
+  monthName: string;
+  pemasukan: number;
+  pengeluaran: number;
+  saldo: number;
+  count: number;
+}
+
+export interface YearSummaryReport {
+  year: string;
+  bookName: string;
+  totalPemasukan: number;
+  totalPengeluaran: number;
+  saldo: number;
+  count: number;
+  monthlyBreakdown: MonthBreakdownItem[];
+  categoryExpenses: Record<string, number>;
+  categoryIncome: Record<string, number>;
+  availableYears: string[];
+}
+
 export interface GlobalSummaryReport {
   isAllTime: boolean;
   periodeLabel: string;
