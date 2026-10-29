@@ -88,14 +88,15 @@ button:active, a:active {
   z-index: 50;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  background: rgba(248, 250, 252, 0.88);
+  background: rgba(248, 250, 252, 0.92);
   border-bottom: 1px solid var(--crm-border);
-  padding: 0.85rem 1.25rem;
+  padding: 0.85rem 2rem;
   padding-top: max(0.85rem, env(safe-area-inset-top));
 }
 
 .crm-nav-inner {
-  max-width: 1120px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -194,12 +195,13 @@ button:active, a:active {
 }
 
 /* ============================================================
-   CONTAINER
+   CONTAINER (Full Width Modern Dashboard)
    ============================================================ */
 .crm-container {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 3.5rem;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 1.5rem 2rem 3.5rem;
 }
 
 .crm-alert-error {
@@ -835,6 +837,9 @@ button:active, a:active {
 }
 
 @media (max-width: 640px) {
+  .crm-navbar {
+    padding: 0.75rem 1rem;
+  }
   .crm-container {
     padding: 1rem 0.85rem 3rem;
   }
