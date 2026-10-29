@@ -809,29 +809,38 @@ button:active, a:active {
 }
 
 /* ============================================================
-   6. COLLAPSIBLE MONTHLY COMPARISON
+   4. MONTH-OVER-MONTH ANALYSIS CARD (Direct, always visible)
    ============================================================ */
-.collapsible-card {
+.analysis-card {
   background: var(--bg-card);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
-  padding: 1rem 1.15rem;
-}
-
-.collapsible-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
-}
-
-.collapsible-content {
+  padding: 1.35rem 1.3rem;
   margin-top: 1rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.analysis-card-header {
+  margin-bottom: 1.15rem;
+}
+
+.analysis-card-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.015em;
+}
+
+.analysis-card-subtitle {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.analysis-card-content {
+  margin-top: 0.5rem;
 }
 
 .comparison-grid {

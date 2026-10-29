@@ -114,9 +114,6 @@ export default function FinanceDashboardPage() {
   const [budgetInput, setBudgetInput] = useState('');
   const [isSavingBudget, setIsSavingBudget] = useState(false);
 
-  // State toggle accordion perbandingan bulanan
-  const [showComparison, setShowComparison] = useState(false);
-
   const fetchData = async (book: string = 'Tabungan', showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
     else setLoading(true);
@@ -492,114 +489,105 @@ export default function FinanceDashboardPage() {
           )}
         </section>
 
-        {/* 4. COLLAPSIBLE MONTH-OVER-MONTH COMPARISON (Neatly tucked at bottom) */}
+        {/* 4. ANALISIS TREN BULANAN (Selalu tampil langsung tanpa dropdown) */}
         {data?.monthlyComparison && data.monthlyComparison.months.length > 0 && (
-          <section className="collapsible-card" style={{ marginTop: '1.5rem' }}>
-            <div
-              className="collapsible-header"
-              onClick={() => setShowComparison(!showComparison)}
-            >
+          <section className="analysis-card">
+            <div className="analysis-card-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '1.15rem' }}>📈</span>
+                <span style={{ fontSize: '1.2rem' }}>📈</span>
                 <div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1E293B' }}>
+                  <div className="analysis-card-title">
                     Tren & Perbandingan Bulan ke Bulan
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#64748B' }}>
+                  <div className="analysis-card-subtitle">
                     Analisis riwayat pemasukan dan pengeluaran
                   </div>
                 </div>
               </div>
-
-              <div style={{ fontSize: '0.8rem', color: '#94A3B8', transform: showComparison ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                ▼
-              </div>
             </div>
 
-            {showComparison && (
-              <div className="collapsible-content">
-                {/* 4 Peak Insight Tiles */}
-                <div className="comparison-grid">
-                  <div className="comparison-tile">
-                    <div className="comp-label" style={{ color: '#10B981' }}>🏆 Rekor Pemasukan</div>
-                    <div className="comp-value">
-                      {data.monthlyComparison.highestIncomeMonth ? formatRupiah(data.monthlyComparison.highestIncomeMonth.amount) : '—'}
-                    </div>
-                    <div className="comp-sub">{data.monthlyComparison.highestIncomeMonth?.monthLabel || '-'}</div>
+            <div className="analysis-card-content">
+              {/* 4 Peak Insight Tiles */}
+              <div className="comparison-grid">
+                <div className="comparison-tile">
+                  <div className="comp-label" style={{ color: '#10B981' }}>🏆 Rekor Pemasukan</div>
+                  <div className="comp-value">
+                    {data.monthlyComparison.highestIncomeMonth ? formatRupiah(data.monthlyComparison.highestIncomeMonth.amount) : '—'}
                   </div>
-
-                  <div className="comparison-tile">
-                    <div className="comp-label" style={{ color: '#EF4444' }}>💸 Rekor Belanja</div>
-                    <div className="comp-value">
-                      {data.monthlyComparison.highestExpenseMonth ? formatRupiah(data.monthlyComparison.highestExpenseMonth.amount) : '—'}
-                    </div>
-                    <div className="comp-sub">{data.monthlyComparison.highestExpenseMonth?.monthLabel || '-'}</div>
-                  </div>
-
-                  <div className="comparison-tile">
-                    <div className="comp-label" style={{ color: '#0EA5E9' }}>📥 Rata-Rata Masuk</div>
-                    <div className="comp-value">
-                      {formatRupiah(data.monthlyComparison.averageMonthlyIncome)}
-                    </div>
-                    <div className="comp-sub">per bulan</div>
-                  </div>
-
-                  <div className="comparison-tile">
-                    <div className="comp-label" style={{ color: '#8B5CF6' }}>📤 Rata-Rata Keluar</div>
-                    <div className="comp-value">
-                      {formatRupiah(data.monthlyComparison.averageMonthlyExpense)}
-                    </div>
-                    <div className="comp-sub">per bulan</div>
-                  </div>
+                  <div className="comp-sub">{data.monthlyComparison.highestIncomeMonth?.monthLabel || '-'}</div>
                 </div>
 
-                {/* Table Perbandingan */}
-                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                  <table className="comparison-table">
-                    <thead>
-                      <tr>
-                        <th>Bulan</th>
-                        <th style={{ textAlign: 'right' }}>Masuk</th>
-                        <th style={{ textAlign: 'right' }}>Keluar</th>
-                        <th style={{ textAlign: 'right' }}>Sisa</th>
-                        <th style={{ textAlign: 'center' }}>Tren</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.monthlyComparison.months.map((m) => (
-                        <tr key={m.month}>
-                          <td style={{ fontWeight: 600, color: '#1E293B' }}>{m.monthLabel}</td>
-                          <td style={{ textAlign: 'right', color: '#10B981', fontWeight: 600 }}>
-                            +{formatRupiah(m.income)}
-                          </td>
-                          <td style={{ textAlign: 'right', color: '#1E293B', fontWeight: 600 }}>
-                            -{formatRupiah(m.expense)}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: m.balance >= 0 ? '#10B981' : '#EF4444' }}>
-                            {formatRupiah(m.balance)}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            {m.expenseChangePercent !== undefined ? (
-                              <span
-                                className="trend-badge"
-                                style={{
-                                  background: m.expenseChangePercent > 0 ? '#FEE2E2' : '#DCFCE7',
-                                  color: m.expenseChangePercent > 0 ? '#DC2626' : '#16A34A',
-                                }}
-                              >
-                                {m.expenseChangePercent > 0 ? `▲ +${m.expenseChangePercent}%` : `▼ ${m.expenseChangePercent}%`}
-                              </span>
-                            ) : (
-                              <span style={{ color: '#CBD5E1' }}>—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="comparison-tile">
+                  <div className="comp-label" style={{ color: '#EF4444' }}>💸 Rekor Belanja</div>
+                  <div className="comp-value">
+                    {data.monthlyComparison.highestExpenseMonth ? formatRupiah(data.monthlyComparison.highestExpenseMonth.amount) : '—'}
+                  </div>
+                  <div className="comp-sub">{data.monthlyComparison.highestExpenseMonth?.monthLabel || '-'}</div>
+                </div>
+
+                <div className="comparison-tile">
+                  <div className="comp-label" style={{ color: '#0EA5E9' }}>📥 Rata-Rata Masuk</div>
+                  <div className="comp-value">
+                    {formatRupiah(data.monthlyComparison.averageMonthlyIncome)}
+                  </div>
+                  <div className="comp-sub">per bulan</div>
+                </div>
+
+                <div className="comparison-tile">
+                  <div className="comp-label" style={{ color: '#8B5CF6' }}>📤 Rata-Rata Keluar</div>
+                  <div className="comp-value">
+                    {formatRupiah(data.monthlyComparison.averageMonthlyExpense)}
+                  </div>
+                  <div className="comp-sub">per bulan</div>
                 </div>
               </div>
-            )}
+
+              {/* Table Perbandingan */}
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Bulan</th>
+                      <th style={{ textAlign: 'right' }}>Masuk</th>
+                      <th style={{ textAlign: 'right' }}>Keluar</th>
+                      <th style={{ textAlign: 'right' }}>Sisa</th>
+                      <th style={{ textAlign: 'center' }}>Tren</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.monthlyComparison.months.map((m) => (
+                      <tr key={m.month}>
+                        <td style={{ fontWeight: 600, color: '#1E293B' }}>{m.monthLabel}</td>
+                        <td style={{ textAlign: 'right', color: '#10B981', fontWeight: 600 }}>
+                          +{formatRupiah(m.income)}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#1E293B', fontWeight: 600 }}>
+                          -{formatRupiah(m.expense)}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: m.balance >= 0 ? '#10B981' : '#EF4444' }}>
+                          {formatRupiah(m.balance)}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {m.expenseChangePercent !== undefined ? (
+                            <span
+                              className="trend-badge"
+                              style={{
+                                background: m.expenseChangePercent > 0 ? '#FEE2E2' : '#DCFCE7',
+                                color: m.expenseChangePercent > 0 ? '#DC2626' : '#16A34A',
+                              }}
+                            >
+                              {m.expenseChangePercent > 0 ? `▲ +${m.expenseChangePercent}%` : `▼ ${m.expenseChangePercent}%`}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#CBD5E1' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </section>
         )}
       </main>
