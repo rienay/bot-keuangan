@@ -909,6 +909,14 @@ a:active {
   display: inline-block;
 }
 
+.crm-legend-bar-icon.green {
+  background: #10B981;
+}
+
+.crm-legend-bar-icon.red {
+  background: #EF4444;
+}
+
 .crm-legend-line-icon {
   width: 14px;
   height: 2.5px;

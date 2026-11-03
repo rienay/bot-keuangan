@@ -734,20 +734,36 @@ export default function FinanceDashboardPage() {
     const expenseArea = `${expenseCurve} L ${expensePoints[11].x} ${SVG_H} L ${expensePoints[0].x} ${SVG_H} Z`;
     const balanceArea = `${balanceCurve} L ${balancePoints[11].x} ${SVG_H} L ${balancePoints[0].x} ${SVG_H} Z`;
 
-    // Combo Chart geometry (Excel style: Bar Pengeluaran Biru + Garis Saldo Kas Oranye)
-    const barWidth = 18;
+    // Combo Chart geometry (Excel style: Clustered Bars Masuk & Keluar + Garis Saldo Kas)
+    const maxIncExpBars = Math.max(50000, ...months.map((m) => Math.max(m.income, m.expense)));
+    const rangeIncExpBars = maxIncExpBars || 1;
+
+    const singleBarWidth = 10;
+    const barGap = 2;
     const comboBars = months.map((m, i) => {
       const xCenter = PAD_X + i * ((SVG_W - PAD_X * 2) / 11);
-      const height = m.expense > 0 ? Math.max(4, (m.expense / rangeExpOnly) * chartHeight) : 0;
-      const y = baselineY - height;
+      const incHeight = m.income > 0 ? Math.max(4, (m.income / rangeIncExpBars) * chartHeight) : 0;
+      const expHeight = m.expense > 0 ? Math.max(4, (m.expense / rangeIncExpBars) * chartHeight) : 0;
+      const incY = baselineY - incHeight;
+      const expY = baselineY - expHeight;
       return {
         monthIdx: i,
-        x: xCenter - barWidth / 2,
         xCenter,
-        y,
-        width: barWidth,
-        height,
-        expense: m.expense,
+        income: {
+          x: xCenter - singleBarWidth - barGap / 2,
+          y: incY,
+          width: singleBarWidth,
+          height: incHeight,
+          value: m.income,
+        },
+        expense: {
+          x: xCenter + barGap / 2,
+          y: expY,
+          width: singleBarWidth,
+          height: expHeight,
+          value: m.expense,
+        },
+        balance: m.balance,
       };
     });
 
@@ -784,6 +800,7 @@ export default function FinanceDashboardPage() {
       comboBars,
       comboLinePoints,
       comboLinePath,
+      maxIncExp: maxIncExpBars,
       maxExpense: maxExpOnly,
       maxBal,
     };
@@ -795,7 +812,7 @@ export default function FinanceDashboardPage() {
   const activeIncomePoint = monthlyTrendData.incomePoints[activeMonthlyIdx] || { x: 30, y: 70 };
   const activeExpensePoint = monthlyTrendData.expensePoints[activeMonthlyIdx] || { x: 30, y: 70 };
 
-  // Active highlighted month untuk Saldo Kas & Pengeluaran (Excel Combo Chart)
+  // Active highlighted month untuk Saldo Kas, Pemasukan & Pengeluaran (Excel Combo Chart)
   const activeMonthlyBalIdx =
     hoveredMonthlyBalIdx !== null
       ? hoveredMonthlyBalIdx
@@ -804,7 +821,13 @@ export default function FinanceDashboardPage() {
       : monthlyTrendData.activeDefaultIdx;
   const activeBalMonthItem = monthlyTrendData.months[activeMonthlyBalIdx] || monthlyTrendData.months[0];
   const activeBalMonthPoint = monthlyTrendData.comboLinePoints[activeMonthlyBalIdx] || { x: 35, y: 70 };
-  const activeBarItem = monthlyTrendData.comboBars[activeMonthlyBalIdx] || { x: 35, y: 118, width: 18, height: 0, expense: 0 };
+  const activeComboBarItem = monthlyTrendData.comboBars[activeMonthlyBalIdx] || {
+    monthIdx: 0,
+    xCenter: 35,
+    income: { x: 24, y: 118, width: 10, height: 0, value: 0 },
+    expense: { x: 36, y: 118, width: 10, height: 0, value: 0 },
+    balance: 0,
+  };
 
   // 2. Kategori pengeluaran sorted descending untuk Donut Chart (sesuai tahun aktif dan bulan yang dipilih di dropdown)
   const categoryExpensesList = useMemo(() => {
@@ -1473,16 +1496,19 @@ export default function FinanceDashboardPage() {
             </div>
           </div>
 
-          {/* B. KARTU KANAN: TREN SALDO KAS & PENGELUARAN BULANAN (EXCEL COMBO CHART) */}
+          {/* B. KARTU KANAN: TREN SALDO KAS, PEMASUKAN & PENGELUARAN BULANAN (EXCEL COMBO CHART) */}
           <div className="crm-card crm-daily-card balance">
             <div className="crm-daily-header">
               <div style={{ width: '100%' }}>
                 <div className="crm-monthly-header-top">
-                  <div className="crm-daily-title">💰 Saldo Kas &amp; Pengeluaran • Tren Bulanan</div>
+                  <div className="crm-daily-title">💰 Saldo Kas, Pemasukan &amp; Pengeluaran • Tren Bulanan</div>
                   {/* Legend Excel Style */}
                   <div className="crm-chart-legend">
                     <span className="crm-legend-item">
-                      <span className="crm-legend-bar-icon" /> Pengeluaran
+                      <span className="crm-legend-bar-icon green" /> Masuk
+                    </span>
+                    <span className="crm-legend-item">
+                      <span className="crm-legend-bar-icon red" /> Keluar
                     </span>
                     <span className="crm-legend-item">
                       <span className="crm-legend-line-icon" /> Saldo Kas
@@ -1494,10 +1520,13 @@ export default function FinanceDashboardPage() {
 
                 <div className="crm-daily-subrow">
                   <span className="crm-daily-growth-badge" style={{ background: '#FFF7ED', color: '#EA580C', borderColor: '#FDBA74' }}>
-                    🟠 Saldo Kas
+                    🟠 Saldo: {formatRupiah(activeBalMonthItem.balance)}
                   </span>
-                  <span className="crm-daily-growth-badge" style={{ background: '#EFF6FF', color: '#2563EB', borderColor: '#BFDBFE' }}>
-                    🔵 Pengeluaran: {formatRupiah(activeBalMonthItem.expense)}
+                  <span className="crm-daily-growth-badge" style={{ background: '#ECFDF5', color: '#059669', borderColor: '#A7F3D0' }}>
+                    🟢 Masuk: +{formatRupiah(activeBalMonthItem.income)}
+                  </span>
+                  <span className="crm-daily-growth-badge" style={{ background: '#FEF2F2', color: '#DC2626', borderColor: '#FECACA' }}>
+                    🔴 Keluar: -{formatRupiah(activeBalMonthItem.expense)}
                   </span>
                   <span className="crm-daily-date-label">
                     Bulan {parseInt(activeBalMonthItem.monthNum, 10)} — {activeBalMonthItem.monthFull} {monthlyTrendData.targetYear}
@@ -1516,20 +1545,30 @@ export default function FinanceDashboardPage() {
               </div>
             </div>
 
-            {/* SVG Excel Combo Chart (Bar Pengeluaran + Garis Saldo Kas) */}
+            {/* SVG Excel Combo Chart (Clustered Bars Masuk/Keluar + Garis Saldo Kas) */}
             <div className="crm-daily-chart-wrap">
               <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
                 <defs>
                   <filter id="badgeGlowCombo" x="-20%" y="-20%" width="140%" height="140%">
                     <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.12" />
                   </filter>
-                  <linearGradient id="barBlueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#60A5FA" />
-                    <stop offset="100%" stopColor="#3B82F6" />
+                  {/* Gradien Pemasukan (Hijau) */}
+                  <linearGradient id="barGreenGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#34D399" />
+                    <stop offset="100%" stopColor="#10B981" />
                   </linearGradient>
-                  <linearGradient id="barBlueActiveGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3B82F6" />
-                    <stop offset="100%" stopColor="#1D4ED8" />
+                  <linearGradient id="barGreenActiveGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10B981" />
+                    <stop offset="100%" stopColor="#047857" />
+                  </linearGradient>
+                  {/* Gradien Pengeluaran (Merah) */}
+                  <linearGradient id="barRedGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F87171" />
+                    <stop offset="100%" stopColor="#EF4444" />
+                  </linearGradient>
+                  <linearGradient id="barRedActiveGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#EF4444" />
+                    <stop offset="100%" stopColor="#B91C1C" />
                   </linearGradient>
                 </defs>
 
@@ -1540,8 +1579,8 @@ export default function FinanceDashboardPage() {
                 <line x1="25" y1="118" x2="515" y2="118" stroke="#E2E8F0" strokeWidth="1" />
 
                 {/* Left & Right Y-Axis Scale Indicators (Excel Dual Axis) */}
-                <text x="18" y="29" fontSize="8" fontWeight="700" fill="#93C5FD" textAnchor="end">
-                  {formatRupiahShort(monthlyTrendData.maxExpense)}
+                <text x="18" y="29" fontSize="8" fontWeight="700" fill="#10B981" textAnchor="end">
+                  {formatRupiahShort(monthlyTrendData.maxIncExp)}
                 </text>
                 <text x="18" y="118" fontSize="8" fontWeight="600" fill="#CBD5E1" textAnchor="end">
                   0
@@ -1553,42 +1592,78 @@ export default function FinanceDashboardPage() {
                   0
                 </text>
 
-                {/* 1. Bar Series: Pengeluaran Bulanan (Blue Column Bars) */}
+                {/* 1. Clustered Bars: Pemasukan (Hijau) & Pengeluaran (Merah) */}
                 {monthlyTrendData.comboBars.map((bar) => {
                   const isActive = bar.monthIdx === activeMonthlyBalIdx;
                   return (
                     <g key={bar.monthIdx} onClick={() => setHoveredMonthlyBalIdx(bar.monthIdx)} style={{ cursor: 'pointer' }}>
-                      {bar.height > 0 ? (
+                      {/* Bar Pemasukan (Kiri) */}
+                      {bar.income.height > 0 ? (
                         <rect
-                          x={bar.x}
-                          y={bar.y}
-                          width={bar.width}
-                          height={bar.height}
-                          rx="3"
-                          fill={isActive ? 'url(#barBlueActiveGrad)' : 'url(#barBlueGrad)'}
+                          x={bar.income.x}
+                          y={bar.income.y}
+                          width={bar.income.width}
+                          height={bar.income.height}
+                          rx="2.5"
+                          fill={isActive ? 'url(#barGreenActiveGrad)' : 'url(#barGreenGrad)'}
                           opacity={isActive ? 1 : 0.85}
                         />
                       ) : (
                         <rect
-                          x={bar.x}
+                          x={bar.income.x}
                           y={116}
-                          width={bar.width}
+                          width={bar.income.width}
                           height={2}
                           rx="1"
                           fill="#E2E8F0"
                         />
                       )}
+
+                      {/* Bar Pengeluaran (Kanan) */}
+                      {bar.expense.height > 0 ? (
+                        <rect
+                          x={bar.expense.x}
+                          y={bar.expense.y}
+                          width={bar.expense.width}
+                          height={bar.expense.height}
+                          rx="2.5"
+                          fill={isActive ? 'url(#barRedActiveGrad)' : 'url(#barRedGrad)'}
+                          opacity={isActive ? 1 : 0.85}
+                        />
+                      ) : (
+                        <rect
+                          x={bar.expense.x}
+                          y={116}
+                          width={bar.expense.width}
+                          height={2}
+                          rx="1"
+                          fill="#E2E8F0"
+                        />
+                      )}
+
                       {/* Nilai di atas bar saat aktif */}
-                      {isActive && bar.expense > 0 && (
+                      {isActive && bar.income.value > 0 && (
                         <text
-                          x={bar.x + bar.width / 2}
-                          y={Math.max(16, bar.y - 4)}
+                          x={bar.income.x + bar.income.width / 2}
+                          y={Math.max(14, bar.income.y - 4)}
                           textAnchor="middle"
-                          fontSize="9"
+                          fontSize="8.5"
                           fontWeight="800"
-                          fill="#1D4ED8"
+                          fill="#059669"
                         >
-                          {formatRupiahShort(bar.expense)}
+                          +{formatRupiahShort(bar.income.value)}
+                        </text>
+                      )}
+                      {isActive && bar.expense.value > 0 && (
+                        <text
+                          x={bar.expense.x + bar.expense.width / 2}
+                          y={Math.max(14, bar.expense.y - 4)}
+                          textAnchor="middle"
+                          fontSize="8.5"
+                          fontWeight="800"
+                          fill="#DC2626"
+                        >
+                          -{formatRupiahShort(bar.expense.value)}
                         </text>
                       )}
                     </g>
@@ -1610,7 +1685,7 @@ export default function FinanceDashboardPage() {
                 {/* Guideline Vertikal Aktif */}
                 <line
                   x1={activeBalMonthPoint.x}
-                  y1={Math.min(activeBalMonthPoint.y, activeBarItem.y) - 6}
+                  y1={Math.min(activeBalMonthPoint.y, activeComboBarItem.income.y, activeComboBarItem.expense.y) - 6}
                   x2={activeBalMonthPoint.x}
                   y2="118"
                   stroke="#CBD5E1"
@@ -1639,13 +1714,13 @@ export default function FinanceDashboardPage() {
                 {/* Center dot untuk point aktif */}
                 <circle cx={activeBalMonthPoint.x} cy={activeBalMonthPoint.y} r="2" fill="#EA580C" />
 
-                {/* Floating Tooltip Saldo Kas */}
-                <g transform={`translate(${activeBalMonthPoint.x}, ${Math.max(18, activeBalMonthPoint.y - 26)})`}>
+                {/* Floating Tooltip Lengkap: Saldo, Masuk, Keluar */}
+                <g transform={`translate(${activeBalMonthPoint.x}, ${Math.max(22, activeBalMonthPoint.y - 34)})`}>
                   <rect
-                    x="-48"
-                    y="-13"
-                    width="96"
-                    height="26"
+                    x="-58"
+                    y="-18"
+                    width="116"
+                    height="36"
                     rx="8"
                     fill="#FFFFFF"
                     stroke="#FDBA74"
@@ -1654,13 +1729,18 @@ export default function FinanceDashboardPage() {
                   />
                   <text
                     textAnchor="middle"
-                    y="4"
-                    fontSize="11"
+                    y="-4"
+                    fontSize="10.5"
                     fontWeight="800"
-                    fill="#C2410C"
+                    fill="#EA580C"
                     letterSpacing="-0.02em"
                   >
-                    {formatRupiah(activeBalMonthItem.balance)}
+                    Saldo: {formatRupiah(activeBalMonthItem.balance)}
+                  </text>
+                  <text textAnchor="middle" y="11" fontSize="9" fontWeight="700">
+                    <tspan fill="#059669">+{formatRupiahShort(activeBalMonthItem.income)}</tspan>
+                    <tspan fill="#94A3B8"> • </tspan>
+                    <tspan fill="#DC2626">-{formatRupiahShort(activeBalMonthItem.expense)}</tspan>
                   </text>
                 </g>
               </svg>
