@@ -634,20 +634,8 @@ export default function FinanceDashboardPage() {
     const currentYearStr = now.getFullYear().toString();
     const currentMonthIdx = now.getMonth(); // 0 = Jan, ..., 10 = Nov
 
-    // Map transaksi tahun aktif dan akumulasi saldo tahun sebelumnya
-    let baselineBalance = 0;
-    if (data?.transactions) {
-      data.transactions.forEach((tx) => {
-        if (isTransferTx(tx)) return;
-        const d = parseTxDate(tx.date);
-        if (d && d.getFullYear().toString() < targetYr) {
-          if (tx.type === 'Pemasukan') baselineBalance += tx.amount;
-          else baselineBalance -= tx.amount;
-        }
-      });
-    }
-
-    let runningBalance = baselineBalance;
+    // Saldo bergulir murni dihitung per tahun aktif (tanpa mencampur saldo tahun sebelumnya)
+    let runningBalance = 0;
     const txThisYear = filteredTransactions.filter((tx) => !isTransferTx(tx));
 
     const months: {
@@ -765,8 +753,13 @@ export default function FinanceDashboardPage() {
   const activeIncomePoint = monthlyTrendData.incomePoints[activeMonthlyIdx] || { x: 30, y: 70 };
   const activeExpensePoint = monthlyTrendData.expensePoints[activeMonthlyIdx] || { x: 30, y: 70 };
 
-  // Active highlighted month untuk Saldo Kas
-  const activeMonthlyBalIdx = hoveredMonthlyBalIdx !== null ? hoveredMonthlyBalIdx : monthlyTrendData.activeDefaultIdx;
+  // Active highlighted month untuk Saldo Kas (default ikuti bulan terpilih di dropdown atau bulan berjalan)
+  const activeMonthlyBalIdx =
+    hoveredMonthlyBalIdx !== null
+      ? hoveredMonthlyBalIdx
+      : selectedMonthPill !== 'all'
+      ? parseInt(selectedMonthPill, 10) - 1
+      : monthlyTrendData.activeDefaultIdx;
   const activeBalMonthItem = monthlyTrendData.months[activeMonthlyBalIdx] || monthlyTrendData.months[0];
   const activeBalMonthPoint = monthlyTrendData.balancePoints[activeMonthlyBalIdx] || { x: 30, y: 70 };
 
@@ -1453,6 +1446,11 @@ export default function FinanceDashboardPage() {
                   {activeBalMonthItem.isCurrentMonth && (
                     <span className="crm-badge-tag tag-high" style={{ background: '#ECFDF5', color: '#059669' }}>
                       Bulan Berjalan
+                    </span>
+                  )}
+                  {!activeBalMonthItem.hasData && activeBalMonthItem.balance === 0 && (
+                    <span className="crm-badge-tag" style={{ background: '#F1F5F9', color: '#64748B' }}>
+                      Belum Ada Transaksi
                     </span>
                   )}
                 </div>
