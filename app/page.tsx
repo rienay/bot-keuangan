@@ -174,9 +174,9 @@ export default function FinanceDashboardPage() {
   // Active hover slice state for interactive Donut Chart
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  // State untuk Treking Harian (Default ke Pengeluaran Harian)
-  const [dailyChartMode, setDailyChartMode] = useState<'balance' | 'spent'>('spent');
-  const [hoveredDayIdx, setHoveredDayIdx] = useState<number | null>(null);
+  // State untuk Treking Harian (Hover state independen untuk Pengeluaran & Saldo Kas)
+  const [hoveredSpentIdx, setHoveredSpentIdx] = useState<number | null>(null);
+  const [hoveredBalIdx, setHoveredBalIdx] = useState<number | null>(null);
 
   // Filter range bulan untuk Bar Chart (default 6 bulan agar rapi di HP)
   const [barChartRange, setBarChartRange] = useState<'6' | '12' | 'all'>('6');
@@ -429,56 +429,66 @@ export default function FinanceDashboardPage() {
     const PAD_Y_TOP = 30;
     const PAD_Y_BOTTOM = 25;
 
-    const values = days.map((d) => (dailyChartMode === 'balance' ? d.balance : d.expense));
-    const activeValues = days.filter((d) => d.isPastOrToday).map((d) => (dailyChartMode === 'balance' ? d.balance : d.expense));
-    const minVal = dailyChartMode === 'spent' ? 0 : Math.min(...(activeValues.length > 0 ? activeValues : [0]));
-    const maxVal = Math.max(dailyChartMode === 'spent' ? 40000 : 100000, ...(activeValues.length > 0 ? activeValues : [40000]));
-    const range = maxVal - minVal || 1;
+    const calcGeometry = (mode: 'spent' | 'balance') => {
+      const activeValues = days
+        .filter((d) => d.isPastOrToday)
+        .map((d) => (mode === 'balance' ? d.balance : d.expense));
+      const minVal = mode === 'spent' ? 0 : Math.min(...(activeValues.length > 0 ? activeValues : [0]));
+      const maxVal = Math.max(
+        mode === 'spent' ? 40000 : 100000,
+        ...(activeValues.length > 0 ? activeValues : [40000])
+      );
+      const range = maxVal - minVal || 1;
 
-    const points = days.map((d, i) => {
-      const x = PAD_X + i * ((SVG_W - PAD_X * 2) / 6);
-      let y: number;
-      if (d.isPastOrToday) {
-        const val = dailyChartMode === 'balance' ? d.balance : d.expense;
-        y = (SVG_H - PAD_Y_BOTTOM) - ((val - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
-      } else {
-        // Future projected day (melandai turun perlahan seperti di referensi)
-        const lastKnownVal = dailyChartMode === 'balance' ? days[currentDayOfWeek].balance : days[currentDayOfWeek].expense;
-        const lastKnownY = (SVG_H - PAD_Y_BOTTOM) - ((lastKnownVal - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
-        y = lastKnownY + (i - currentDayOfWeek) * 6;
-      }
-      return { x, y: Math.max(PAD_Y_TOP, Math.min(SVG_H - PAD_Y_BOTTOM, y)) };
-    });
+      const points = days.map((d, i) => {
+        const x = PAD_X + i * ((SVG_W - PAD_X * 2) / 6);
+        let y: number;
+        if (d.isPastOrToday) {
+          const val = mode === 'balance' ? d.balance : d.expense;
+          y = (SVG_H - PAD_Y_BOTTOM) - ((val - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+        } else {
+          // Future projected day (melandai perlahan seperti di referensi)
+          const lastKnownVal =
+            mode === 'balance'
+              ? days[currentDayOfWeek].balance
+              : days[currentDayOfWeek].expense;
+          const lastKnownY =
+            (SVG_H - PAD_Y_BOTTOM) - ((lastKnownVal - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+          y = lastKnownY + (i - currentDayOfWeek) * 6;
+        }
+        return { x, y: Math.max(PAD_Y_TOP, Math.min(SVG_H - PAD_Y_BOTTOM, y)) };
+      });
 
-    // Spline curve up to today (Hijau/Indigo tebal & area fill)
-    const pointsUpToToday = points.slice(0, currentDayOfWeek + 1);
-    const curvePast = generateSmoothCurve(pointsUpToToday);
+      const pointsUpToToday = points.slice(0, currentDayOfWeek + 1);
+      const curvePast = generateSmoothCurve(pointsUpToToday);
+      const pointsFuture = points.slice(currentDayOfWeek);
+      const curveFuture = generateSmoothCurve(pointsFuture);
+      const areaPath =
+        pointsUpToToday.length > 1
+          ? `${curvePast} L ${pointsUpToToday[pointsUpToToday.length - 1].x} ${SVG_H} L ${pointsUpToToday[0].x} ${SVG_H} Z`
+          : '';
 
-    // Spline curve after today (Garis abu-abu projected)
-    const pointsFuture = points.slice(currentDayOfWeek);
-    const curveFuture = generateSmoothCurve(pointsFuture);
-
-    // Area fill path up to today
-    const areaPath = pointsUpToToday.length > 1
-      ? `${curvePast} L ${pointsUpToToday[pointsUpToToday.length - 1].x} ${SVG_H} L ${pointsUpToToday[0].x} ${SVG_H} Z`
-      : '';
+      return { points, curvePast, curveFuture, areaPath };
+    };
 
     return {
       days,
       currentDayOfWeek,
-      points,
-      curvePast,
-      curveFuture,
-      areaPath,
+      spent: calcGeometry('spent'),
+      balance: calcGeometry('balance'),
       currentBalance: runningBal,
       totalSpentThisWeek: days.filter((d) => d.isPastOrToday).reduce((acc, d) => acc + d.expense, 0),
     };
-  }, [filteredTransactions, dailyChartMode]);
+  }, [filteredTransactions]);
 
-  // Active highlighted day
-  const activeDayIdx = hoveredDayIdx !== null ? hoveredDayIdx : dailyTracking.currentDayOfWeek;
-  const activeDayData = dailyTracking.days[activeDayIdx] || dailyTracking.days[0];
-  const activeDayPoint = dailyTracking.points[activeDayIdx] || { x: 40, y: 70 };
+  // Active highlighted day untuk Pengeluaran & Saldo Kas
+  const activeSpentIdx = hoveredSpentIdx !== null ? hoveredSpentIdx : dailyTracking.currentDayOfWeek;
+  const activeSpentDay = dailyTracking.days[activeSpentIdx] || dailyTracking.days[0];
+  const activeSpentPoint = dailyTracking.spent.points[activeSpentIdx] || { x: 40, y: 70 };
+
+  const activeBalIdx = hoveredBalIdx !== null ? hoveredBalIdx : dailyTracking.currentDayOfWeek;
+  const activeBalDay = dailyTracking.days[activeBalIdx] || dailyTracking.days[0];
+  const activeBalPoint = dailyTracking.balance.points[activeBalIdx] || { x: 40, y: 70 };
 
   // 2. Kategori pengeluaran sorted descending untuk Donut Chart (sesuai tahun aktif)
   const categoryExpensesList = useMemo(() => {
@@ -903,175 +913,261 @@ export default function FinanceDashboardPage() {
           </div>
         </section>
 
-        {/* 3. DAILY TRACKING HERO CARD (Treking Pengeluaran Harian) */}
-        <section className="crm-card crm-daily-card">
-          <div className="crm-daily-header">
-            <div>
-              <div className="crm-daily-title">
-                {dailyChartMode === 'spent' ? '📉 Treking Pengeluaran Harian' : '💰 Saldo Kas • Treking Harian'}
-              </div>
-              <div className="crm-daily-amount">
-                {formatRupiah(dailyChartMode === 'spent' ? activeDayData.expense : activeDayData.balance)}
-              </div>
-              <div className="crm-daily-subrow">
-                <span className={`crm-daily-growth-badge ${dailyChartMode === 'spent' ? 'expense' : 'balance'}`}>
-                  {dailyChartMode === 'spent'
-                    ? (activeDayData.isToday ? '🔴 Belanja Hari Ini' : activeDayData.isPastOrToday ? '📅 Belanja' : '⏳ Estimasi')
-                    : `🟢 Saldo Kas ${selectedYear === 'Semua' ? 'All-Time' : selectedYear}`}
-                </span>
-                <span className="crm-daily-date-label">
-                  {activeDayData.dayNameId}, {activeDayData.dateFormatted}
-                </span>
-                {dailyChartMode === 'spent' && activeDayData.expense === 0 && activeDayData.isPastOrToday && (
-                  <span className="crm-daily-date-label" style={{ color: '#10B981', fontWeight: 700 }}>
-                    ✨ Hemat (Rp 0)
+        {/* 3. DAILY TRACKING SECTION (Dua Kartu Berdampingan: Kiri = Pengeluaran Harian, Kanan = Saldo Kas) */}
+        <section className="crm-daily-grid">
+          {/* A. KARTU KIRI: TREKING PENGELUARAN HARIAN */}
+          <div className="crm-card crm-daily-card spent">
+            <div className="crm-daily-header">
+              <div>
+                <div className="crm-daily-title">📉 Treking Pengeluaran Harian</div>
+                <div className="crm-daily-amount">{formatRupiah(activeSpentDay.expense)}</div>
+                <div className="crm-daily-subrow">
+                  <span className="crm-daily-growth-badge expense">
+                    {activeSpentDay.isToday ? '🔴 Belanja Hari Ini' : activeSpentDay.isPastOrToday ? '📅 Belanja' : '⏳ Estimasi'}
                   </span>
-                )}
-                {dailyChartMode === 'spent' && hasDailyBudget && activeDayData.isToday && (
-                  <span className="crm-daily-budget-pill">
-                    🎯 Kuota: {formatRupiah(dailyBudgetAmount)} • Sisa {formatRupiah(dailyRemaining)}
+                  <span className="crm-daily-date-label">
+                    {activeSpentDay.dayNameId}, {activeSpentDay.dateFormatted}
                   </span>
-                )}
+                  {activeSpentDay.expense === 0 && activeSpentDay.isPastOrToday && (
+                    <span className="crm-daily-date-label" style={{ color: '#10B981', fontWeight: 700 }}>
+                      ✨ Hemat (Rp 0)
+                    </span>
+                  )}
+                  {hasDailyBudget && activeSpentDay.isToday && (
+                    <span className="crm-daily-budget-pill">
+                      🎯 Kuota: {formatRupiah(dailyBudgetAmount)} • Sisa {formatRupiah(dailyRemaining)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Mode Switcher (Pengeluaran vs Saldo) */}
-            <div className="crm-daily-mode-tabs">
-              <button
-                className={`crm-mode-tab ${dailyChartMode === 'spent' ? 'active' : ''}`}
-                onClick={() => setDailyChartMode('spent')}
-              >
-                Pengeluaran Harian
-              </button>
-              <button
-                className={`crm-mode-tab ${dailyChartMode === 'balance' ? 'active' : ''}`}
-                onClick={() => setDailyChartMode('balance')}
-              >
-                Saldo Kas
-              </button>
-            </div>
-          </div>
+            {/* SVG Smooth Curve Area Chart untuk Pengeluaran */}
+            <div className="crm-daily-chart-wrap">
+              <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="dailySpentAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366F1" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#6366F1" stopOpacity="0.0" />
+                  </linearGradient>
+                  <filter id="badgeGlowSpent" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
+                  </filter>
+                </defs>
 
-          {/* SVG Smooth Curve Area Chart */}
-          <div className="crm-daily-chart-wrap">
-            <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="dailyAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'} stopOpacity="0.25" />
-                  <stop offset="100%" stopColor={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'} stopOpacity="0.0" />
-                </linearGradient>
-                <filter id="badgeGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
-                </filter>
-              </defs>
+                {dailyTracking.spent.areaPath && (
+                  <path d={dailyTracking.spent.areaPath} fill="url(#dailySpentAreaGrad)" />
+                )}
 
-              {/* Area Fill Gradient under curve up to active day */}
-              {dailyTracking.areaPath && (
-                <path d={dailyTracking.areaPath} fill="url(#dailyAreaGrad)" />
-              )}
+                {dailyTracking.spent.curvePast && (
+                  <path
+                    d={dailyTracking.spent.curvePast}
+                    fill="none"
+                    stroke="#6366F1"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
 
-              {/* Solid Curved Line for Past & Today */}
-              {dailyTracking.curvePast && (
-                <path
-                  d={dailyTracking.curvePast}
-                  fill="none"
-                  stroke={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'}
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                {dailyTracking.spent.curveFuture && (
+                  <path
+                    d={dailyTracking.spent.curveFuture}
+                    fill="none"
+                    stroke="#CBD5E1"
+                    strokeWidth="2"
+                    strokeDasharray="4,4"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                <line
+                  x1={activeSpentPoint.x}
+                  y1={activeSpentPoint.y}
+                  x2={activeSpentPoint.x}
+                  y2="135"
+                  stroke="#94A3B8"
+                  strokeDasharray="3,3"
+                  strokeWidth="1.5"
                 />
-              )}
 
-              {/* Light Gray Dashed Curved Line for Future Days */}
-              {dailyTracking.curveFuture && (
-                <path
-                  d={dailyTracking.curveFuture}
-                  fill="none"
-                  stroke="#CBD5E1"
-                  strokeWidth="2"
-                  strokeDasharray="4,4"
-                  strokeLinecap="round"
-                />
-              )}
-
-              {/* Vertical Guide Line down from active point */}
-              <line
-                x1={activeDayPoint.x}
-                y1={activeDayPoint.y}
-                x2={activeDayPoint.x}
-                y2="135"
-                stroke="#94A3B8"
-                strokeDasharray="3,3"
-                strokeWidth="1.5"
-              />
-
-              {/* Outer halo circle & inner dot at active point */}
-              <circle
-                cx={activeDayPoint.x}
-                cy={activeDayPoint.y}
-                r="7"
-                fill="#FFFFFF"
-                stroke={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'}
-                strokeWidth="3.5"
-              />
-              <circle
-                cx={activeDayPoint.x}
-                cy={activeDayPoint.y}
-                r="2.5"
-                fill={dailyChartMode === 'spent' ? '#6366F1' : '#10B981'}
-              />
-
-              {/* Floating Tooltip Pill */}
-              <g transform={`translate(${activeDayPoint.x}, ${Math.max(20, activeDayPoint.y - 26)})`}>
-                <rect
-                  x="-46"
-                  y="-14"
-                  width="92"
-                  height="26"
-                  rx="8"
+                <circle
+                  cx={activeSpentPoint.x}
+                  cy={activeSpentPoint.y}
+                  r="7"
                   fill="#FFFFFF"
-                  stroke="#E2E8F0"
-                  filter="url(#badgeGlow)"
+                  stroke="#6366F1"
+                  strokeWidth="3.5"
                 />
-                <text
-                  textAnchor="middle"
-                  y="4"
-                  fontSize="11"
-                  fontWeight="800"
-                  fill="#0F172A"
-                  letterSpacing="-0.02em"
-                >
-                  {formatRupiah(dailyChartMode === 'spent' ? activeDayData.expense : activeDayData.balance)}
-                </text>
-              </g>
-            </svg>
+                <circle cx={activeSpentPoint.x} cy={activeSpentPoint.y} r="2.5" fill="#6366F1" />
 
-            {/* X-Axis Days Labels (Mon, Tue, Wed, Thu, Fri, Sat, Sun) */}
-            <div className="crm-daily-days-row">
-              {dailyTracking.days.map((d) => {
-                const isSelected = activeDayIdx === d.idx;
-                const displayVal = dailyChartMode === 'spent'
-                  ? d.isPastOrToday
+                <g transform={`translate(${activeSpentPoint.x}, ${Math.max(20, activeSpentPoint.y - 26)})`}>
+                  <rect
+                    x="-46"
+                    y="-14"
+                    width="92"
+                    height="26"
+                    rx="8"
+                    fill="#FFFFFF"
+                    stroke="#E2E8F0"
+                    filter="url(#badgeGlowSpent)"
+                  />
+                  <text
+                    textAnchor="middle"
+                    y="4"
+                    fontSize="11"
+                    fontWeight="800"
+                    fill="#0F172A"
+                    letterSpacing="-0.02em"
+                  >
+                    {formatRupiah(activeSpentDay.expense)}
+                  </text>
+                </g>
+              </svg>
+
+              <div className="crm-daily-days-row">
+                {dailyTracking.days.map((d) => {
+                  const isSelected = activeSpentIdx === d.idx;
+                  const displayVal = d.isPastOrToday
                     ? d.expense > 0
                       ? formatRupiahShort(d.expense)
                       : 'Rp 0'
-                    : '-'
-                  : d.isPastOrToday
-                  ? formatRupiahShort(d.balance)
-                  : '-';
+                    : '-';
 
-                return (
-                  <button
-                    key={d.dayName}
-                    className={`crm-day-pill ${isSelected ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
-                    onClick={() => setHoveredDayIdx(d.idx)}
-                    onMouseEnter={() => setHoveredDayIdx(d.idx)}
+                  return (
+                    <button
+                      key={d.dayName}
+                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
+                      onClick={() => setHoveredSpentIdx(d.idx)}
+                      onMouseEnter={() => setHoveredSpentIdx(d.idx)}
+                    >
+                      <span className="crm-day-abbr">{d.dayName}</span>
+                      <span className="crm-day-val">{displayVal}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* B. KARTU KANAN: TREKING SALDO KAS */}
+          <div className="crm-card crm-daily-card balance">
+            <div className="crm-daily-header">
+              <div>
+                <div className="crm-daily-title">💰 Saldo Kas • Treking Harian</div>
+                <div className="crm-daily-amount">{formatRupiah(activeBalDay.balance)}</div>
+                <div className="crm-daily-subrow">
+                  <span className="crm-daily-growth-badge balance">
+                    🟢 Saldo Kas {selectedYear === 'Semua' ? 'All-Time' : selectedYear}
+                  </span>
+                  <span className="crm-daily-date-label">
+                    {activeBalDay.dayNameId}, {activeBalDay.dateFormatted}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* SVG Smooth Curve Area Chart untuk Saldo Kas */}
+            <div className="crm-daily-chart-wrap">
+              <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="dailyBalAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
+                  </linearGradient>
+                  <filter id="badgeGlowBal" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
+                  </filter>
+                </defs>
+
+                {dailyTracking.balance.areaPath && (
+                  <path d={dailyTracking.balance.areaPath} fill="url(#dailyBalAreaGrad)" />
+                )}
+
+                {dailyTracking.balance.curvePast && (
+                  <path
+                    d={dailyTracking.balance.curvePast}
+                    fill="none"
+                    stroke="#10B981"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+
+                {dailyTracking.balance.curveFuture && (
+                  <path
+                    d={dailyTracking.balance.curveFuture}
+                    fill="none"
+                    stroke="#CBD5E1"
+                    strokeWidth="2"
+                    strokeDasharray="4,4"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                <line
+                  x1={activeBalPoint.x}
+                  y1={activeBalPoint.y}
+                  x2={activeBalPoint.x}
+                  y2="135"
+                  stroke="#94A3B8"
+                  strokeDasharray="3,3"
+                  strokeWidth="1.5"
+                />
+
+                <circle
+                  cx={activeBalPoint.x}
+                  cy={activeBalPoint.y}
+                  r="7"
+                  fill="#FFFFFF"
+                  stroke="#10B981"
+                  strokeWidth="3.5"
+                />
+                <circle cx={activeBalPoint.x} cy={activeBalPoint.y} r="2.5" fill="#10B981" />
+
+                <g transform={`translate(${activeBalPoint.x}, ${Math.max(20, activeBalPoint.y - 26)})`}>
+                  <rect
+                    x="-46"
+                    y="-14"
+                    width="92"
+                    height="26"
+                    rx="8"
+                    fill="#FFFFFF"
+                    stroke="#E2E8F0"
+                    filter="url(#badgeGlowBal)"
+                  />
+                  <text
+                    textAnchor="middle"
+                    y="4"
+                    fontSize="11"
+                    fontWeight="800"
+                    fill="#0F172A"
+                    letterSpacing="-0.02em"
                   >
-                    <span className="crm-day-abbr">{d.dayName}</span>
-                    <span className="crm-day-val">{displayVal}</span>
-                  </button>
-                );
-              })}
+                    {formatRupiah(activeBalDay.balance)}
+                  </text>
+                </g>
+              </svg>
+
+              <div className="crm-daily-days-row">
+                {dailyTracking.days.map((d) => {
+                  const isSelected = activeBalIdx === d.idx;
+                  const displayVal = d.isPastOrToday ? formatRupiahShort(d.balance) : '-';
+
+                  return (
+                    <button
+                      key={d.dayName}
+                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
+                      onClick={() => setHoveredBalIdx(d.idx)}
+                      onMouseEnter={() => setHoveredBalIdx(d.idx)}
+                    >
+                      <span className="crm-day-abbr">{d.dayName}</span>
+                      <span className="crm-day-val">{displayVal}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </section>

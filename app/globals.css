@@ -486,17 +486,32 @@ button:active, a:active {
 }
 
 /* ============================================================
-   DAILY TRACKING HERO CARD (Net Worth / Daily Line Curve)
+   DAILY TRACKING SECTION (Dua Kartu Berdampingan Kanan-Kiri)
    ============================================================ */
-.crm-daily-card {
+.crm-daily-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
   margin-bottom: 1.5rem;
-  padding: 1.5rem 1.6rem 1.25rem;
+}
+
+.crm-daily-card {
+  margin-bottom: 0;
+  padding: 1.4rem 1.5rem 1.2rem;
   background: var(--crm-card);
   border-radius: var(--radius-xl);
   border: 1px solid var(--crm-border);
   box-shadow: var(--crm-shadow);
   position: relative;
   overflow: hidden;
+}
+
+.crm-daily-card.spent {
+  border-color: rgba(99, 102, 241, 0.22);
+}
+
+.crm-daily-card.balance {
+  border-color: rgba(16, 185, 129, 0.22);
 }
 
 .crm-daily-header {
@@ -654,6 +669,14 @@ button:active, a:active {
 
 .crm-day-pill.active {
   background: #EEF2FF;
+}
+
+.crm-daily-card.balance .crm-day-pill.active {
+  background: #ECFDF5;
+}
+
+.crm-daily-card.balance .crm-day-pill.active .crm-day-val {
+  color: #059669;
 }
 
 .crm-daily-growth-badge.expense {
@@ -1623,6 +1646,10 @@ button:active, a:active {
    RESPONSIVE (Mobile & Tablet)
    ============================================================ */
 @media (max-width: 960px) {
+  .crm-daily-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
   .crm-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
