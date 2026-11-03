@@ -2306,11 +2306,21 @@ async function sendRekap(ctx: any, queryText: string = '') {
 
     let headerMsg = `📊 *Rekap Transaksi Bulanan — ${judulBuku}*\n`;
     headerMsg += `🗓️ *Periode:* ${summary.periodeLabel}\n\n`;
-    headerMsg += `🟢 *Pemasukan:* +${formatRupiah(summary.totalPemasukan)}\n`;
-    headerMsg += `🔴 *Pengeluaran:* -${formatRupiah(summary.totalPengeluaran)}\n`;
+    if (summary.openingBalance !== undefined && summary.openingBalance > 0) {
+      headerMsg += `💼 *Saldo Pindahan Bulan Lalu:* ${formatRupiah(summary.openingBalance)}\n`;
+    }
+    headerMsg += `🟢 *Pemasukan Bulan Ini:* +${formatRupiah(summary.totalPemasukan)}\n`;
+    headerMsg += `🔴 *Pengeluaran Bulan Ini:* -${formatRupiah(summary.totalPengeluaran)}\n`;
     headerMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    const selisihLabel = summary.saldo >= 0 ? '💰 *Sisa Uang (Surplus):*' : '🔻 *Defisit:*';
-    headerMsg += `${selisihLabel} ${formatRupiah(summary.saldo)}\n`;
+    headerMsg += `💰 *Saldo Kas Akhir:* *${formatRupiah(summary.saldo)}*\n`;
+    if (summary.openingBalance !== undefined && summary.openingBalance > 0) {
+      const net = summary.saldoBulanIni ?? (summary.totalPemasukan - summary.totalPengeluaran);
+      const selisihLabel = net >= 0 ? '🟢 *Surplus Bulan Ini:*' : '🔻 *Defisit Bulan Ini:*';
+      headerMsg += `${selisihLabel} ${formatRupiah(net)}\n`;
+    } else {
+      const selisihLabel = summary.saldo >= 0 ? '🟢 *Sisa Uang (Surplus):*' : '🔻 *Defisit:*';
+      headerMsg += `${selisihLabel} ${formatRupiah(summary.saldo)}\n`;
+    }
     headerMsg += `📝 *Jumlah Transaksi:* ${summary.count} transaksi\n`;
 
     const incomeKeys = Object.keys(summary.categoryIncome || {});
@@ -2500,7 +2510,8 @@ async function sendRekapTahun(ctx: any, targetYear?: string, customBook?: string
         msg += `\n🗓️ *Ringkasan Arus Kas per Bulan (${report.year}):*`;
         for (const mb of report.monthlyBreakdown) {
           const sLabel = mb.saldo >= 0 ? 'Surplus' : 'Defisit';
-          msg += `\n• *${mb.monthName}:* +${formatRupiah(mb.pemasukan)} | -${formatRupiah(mb.pengeluaran)} _(${sLabel}: ${formatRupiah(mb.saldo)})_`;
+          const saldoAkhirStr = mb.endingBalance !== undefined ? ` ➔ Saldo Kas: *${formatRupiah(mb.endingBalance)}*` : '';
+          msg += `\n• *${mb.monthName}:* +${formatRupiah(mb.pemasukan)} | -${formatRupiah(mb.pengeluaran)} _(${sLabel}: ${formatRupiah(mb.saldo)})${saldoAkhirStr}_`;
         }
       }
 
@@ -3579,17 +3590,19 @@ bot.on('message:text', async (ctx) => {
       try {
         const curInfo = getCurrentMonthInfo();
         const summary = await getMonthSummary(curInfo.yearMonth, curInfo.label, activeBook);
-        const saldoLabel = summary.saldo >= 0 ? '💰 *Sisa Bulan Ini:*' : '🔻 *Defisit Bulan Ini:*';
-        await ctx.reply(
+        let msg =
           `━━━━━━━━━━━━━━━━━━━━━\n` +
-            `📊 *Rekap ${curInfo.label} [${activeBook}]:*\n` +
-            `🟢 Masuk: +${formatRupiah(summary.totalPemasukan)}\n` +
-            `🔴 Keluar: -${formatRupiah(summary.totalPengeluaran)}\n` +
-            `${saldoLabel} ${formatRupiah(summary.saldo)}\n\n` +
-            `_• Ketik /rekap untuk rincian bulan ini_\n` +
-            `_• Ketik /lihattahun untuk rekap per tahun_`,
-          { parse_mode: 'Markdown' }
-        );
+          `📊 *Rekap ${curInfo.label} [${activeBook}]:*\n`;
+        if (summary.openingBalance !== undefined && summary.openingBalance > 0) {
+          msg += `💼 Saldo Pindahan: ${formatRupiah(summary.openingBalance)}\n`;
+        }
+        msg +=
+          `🟢 Masuk: +${formatRupiah(summary.totalPemasukan)}\n` +
+          `🔴 Keluar: -${formatRupiah(summary.totalPengeluaran)}\n` +
+          `💰 *Saldo Kas: ${formatRupiah(summary.saldo)}*\n\n` +
+          `_• Ketik /rekap untuk rincian bulan ini_\n` +
+          `_• Ketik /lihattahun untuk rekap per tahun_`;
+        await ctx.reply(msg, { parse_mode: 'Markdown' });
       } catch {
         // Abaikan jika rekap background gagal
       }
@@ -3915,17 +3928,19 @@ bot.on(['message:photo', 'message:document'], async (ctx) => {
     try {
       const curInfo = getCurrentMonthInfo();
       const summary = await getMonthSummary(curInfo.yearMonth, curInfo.label, activeBook);
-      const saldoLabel = summary.saldo >= 0 ? '💰 *Sisa Bulan Ini:*' : '🔻 *Defisit Bulan Ini:*';
-      await ctx.reply(
+      let msg =
         `━━━━━━━━━━━━━━━━━━━━━\n` +
-          `📊 *Rekap ${curInfo.label} [${activeBook}]:*\n` +
-          `🟢 Masuk: +${formatRupiah(summary.totalPemasukan)}\n` +
-          `🔴 Keluar: -${formatRupiah(summary.totalPengeluaran)}\n` +
-          `${saldoLabel} ${formatRupiah(summary.saldo)}\n\n` +
-          `_• Ketik /rekap untuk rincian bulan ini_\n` +
-          `_• Ketik /lihattahun untuk rekap per tahun_`,
-        { parse_mode: 'Markdown' }
-      );
+        `📊 *Rekap ${curInfo.label} [${activeBook}]:*\n`;
+      if (summary.openingBalance !== undefined && summary.openingBalance > 0) {
+        msg += `💼 Saldo Pindahan: ${formatRupiah(summary.openingBalance)}\n`;
+      }
+      msg +=
+        `🟢 Masuk: +${formatRupiah(summary.totalPemasukan)}\n` +
+        `🔴 Keluar: -${formatRupiah(summary.totalPengeluaran)}\n` +
+        `💰 *Saldo Kas: ${formatRupiah(summary.saldo)}*\n\n` +
+        `_• Ketik /rekap untuk rincian bulan ini_\n` +
+        `_• Ketik /lihattahun untuk rekap per tahun_`;
+      await ctx.reply(msg, { parse_mode: 'Markdown' });
     } catch {
       // Abaikan jika rekap background gagal
     }

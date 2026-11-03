@@ -51,6 +51,9 @@ export interface SummaryReport {
   totalPengeluaran: number;
   totalPemasukan: number;
   saldo: number;
+  openingBalance?: number;
+  closingBalance?: number;
+  saldoBulanIni?: number;
   count: number;
   categoryExpenses: Record<string, number>;
   categoryIncome: Record<string, number>;
@@ -74,6 +77,8 @@ export interface MonthBreakdownItem {
   pemasukan: number;
   pengeluaran: number;
   saldo: number;
+  openingBalance?: number;
+  endingBalance?: number;
   count: number;
 }
 
@@ -170,6 +175,8 @@ export interface MonthlyStatsItem {
   income: number;
   expense: number;
   balance: number;
+  openingBalance?: number;
+  endingBalance?: number;
   budget?: number;
   percentageOfBudget?: number;
   expenseChangePercent?: number; // Perubahan % dibanding bulan sebelumnya (+ / -)

@@ -761,20 +761,31 @@ export async function getYearSummary(
     }
   }
 
+  const sortedYms = Object.keys(monthMap).sort(); // Urutkan kronologis dari awal tahun (Januari s/d Desember)
+  let runningYearBalance = 0;
+  const breakdownMap: Record<string, MonthBreakdownItem> = {};
+  for (const ym of sortedYms) {
+    const mCode = ym.split('-')[1];
+    const data = monthMap[ym];
+    const net = data.pemasukan - data.pengeluaran;
+    const opBal = runningYearBalance;
+    runningYearBalance += net;
+    const endBal = runningYearBalance;
+    breakdownMap[ym] = {
+      month: ym,
+      monthName: monthNames[mCode] || `Bulan ${mCode}`,
+      pemasukan: data.pemasukan,
+      pengeluaran: data.pengeluaran,
+      saldo: net,
+      openingBalance: opBal,
+      endingBalance: endBal,
+      count: data.count,
+    };
+  }
+
   const monthlyBreakdown: MonthBreakdownItem[] = Object.keys(monthMap)
     .sort((a, b) => b.localeCompare(a))
-    .map((ym) => {
-      const mCode = ym.split('-')[1];
-      const data = monthMap[ym];
-      return {
-        month: ym,
-        monthName: monthNames[mCode] || `Bulan ${mCode}`,
-        pemasukan: data.pemasukan,
-        pengeluaran: data.pengeluaran,
-        saldo: data.pemasukan - data.pengeluaran,
-        count: data.count,
-      };
-    });
+    .map((ym) => breakdownMap[ym]);
 
   return {
     year: activeYear,
@@ -812,6 +823,7 @@ export async function getMonthSummary(
   const rows = res.data.values || [];
   let totalPengeluaran = 0;
   let totalPemasukan = 0;
+  let openingBalance = 0;
   let count = 0;
   const categoryExpenses: Record<string, number> = {};
   const categoryIncome: Record<string, number> = {};
@@ -825,6 +837,7 @@ export async function getMonthSummary(
   };
 
   const isAllTime = !yearMonthPrefix;
+  const targetYear = yearMonthPrefix ? yearMonthPrefix.split('-')[0] : '';
 
   for (const row of rows) {
     const [tglRaw, jenis, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, , dompetRaw] = row;
@@ -847,18 +860,25 @@ export async function getMonthSummary(
     const walletKey = wallet as 'Bank' | 'E-Wallet' | 'Cash';
 
     const cleanDate = String(tglRaw).trim().replace(/^'/, '');
-
-    if (!isAllTime) {
-      const ym = normalizeDateToYearMonth(cleanDate);
-      if (ym !== yearMonthPrefix) {
-        continue;
-      }
-    }
-
     const isTransfer =
       kategori.toLowerCase().includes('pindah') ||
       kategori.toLowerCase().includes('transfer') ||
       keterangan.toLowerCase().includes('pindah');
+
+    if (!isAllTime) {
+      const ym = normalizeDateToYearMonth(cleanDate);
+      // Akumulasikan saldo bulan-bulan sebelumnya pada tahun yang sama
+      if (ym && ym < yearMonthPrefix && (!targetYear || ym.startsWith(`${targetYear}-`))) {
+        if (!isTransfer) {
+          if (isPemasukan) openingBalance += cleanNominal;
+          else if (isPengeluaran) openingBalance -= cleanNominal;
+        }
+        continue;
+      }
+      if (ym !== yearMonthPrefix) {
+        continue;
+      }
+    }
 
     if (isPengeluaran) {
       walletBalances[walletKey] -= cleanNominal;
@@ -901,12 +921,18 @@ export async function getMonthSummary(
     ? 'Semua Transaksi (Keseluruhan)'
     : customLabel || yearMonthPrefix || '';
 
+  const saldoBulanIni = totalPemasukan - totalPengeluaran;
+  const closingBalance = openingBalance + saldoBulanIni;
+
   return {
     isAllTime,
     periodeLabel,
     totalPengeluaran,
     totalPemasukan,
-    saldo: totalPemasukan - totalPengeluaran,
+    saldo: isAllTime ? saldoBulanIni : closingBalance,
+    openingBalance: isAllTime ? 0 : openingBalance,
+    closingBalance: isAllTime ? saldoBulanIni : closingBalance,
+    saldoBulanIni,
     count,
     categoryExpenses,
     categoryIncome,
@@ -1948,6 +1974,20 @@ function buildMonthlyComparison(items: WebTransactionItem[]): MonthlyComparisonR
     monthMap.set(parsed.key, existing);
   }
 
+  // Pastikan bulan berjalan (saat ini) selalu ada di daftar meski belum ada transaksi
+  const nowYM = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(new Date()).slice(0, 7);
+
+  if (!monthMap.has(nowYM)) {
+    const [ny, nm] = nowYM.split('-');
+    const dateObj = new Date(parseInt(ny, 10), parseInt(nm, 10) - 1, 1);
+    const label = new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long' }).format(dateObj);
+    monthMap.set(nowYM, { label, income: 0, expense: 0 });
+  }
+
   const sortedKeys = Array.from(monthMap.keys()).sort();
   const months: MonthlyStatsItem[] = [];
 
@@ -1958,10 +1998,19 @@ function buildMonthlyComparison(items: WebTransactionItem[]): MonthlyComparisonR
   let totalIncomeAll = 0;
   let totalExpenseAll = 0;
 
+  // Akumulasikan saldo bergulir (rollover) per tahun
+  const yearBalances: Record<string, number> = {};
+
   for (let i = 0; i < sortedKeys.length; i++) {
     const key = sortedKeys[i];
     const data = monthMap.get(key)!;
     const balance = data.income - data.expense;
+    const yr = key.split('-')[0];
+
+    const currentYearBal = yearBalances[yr] || 0;
+    const openingBalance = currentYearBal;
+    const endingBalance = openingBalance + balance;
+    yearBalances[yr] = endingBalance;
 
     totalIncomeAll += data.income;
     totalExpenseAll += data.expense;
@@ -1998,6 +2047,8 @@ function buildMonthlyComparison(items: WebTransactionItem[]): MonthlyComparisonR
       income: data.income,
       expense: data.expense,
       balance,
+      openingBalance,
+      endingBalance,
       expenseChangePercent,
     });
   }

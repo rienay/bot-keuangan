@@ -827,7 +827,7 @@ button:active, a:active {
 .crm-month-meta {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.25rem;
 }
 
 .crm-month-name {
@@ -835,6 +835,31 @@ button:active, a:active {
   font-weight: 800;
   color: var(--crm-text);
   letter-spacing: -0.01em;
+}
+
+.crm-month-badges-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.crm-month-ending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #1E293B;
+  background: #F8FAFC;
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  border-radius: var(--radius-pill);
+  padding: 0.12rem 0.5rem;
+}
+
+.crm-month-ending-badge b {
+  font-weight: 800;
+  color: #0F172A;
 }
 
 .crm-month-net-badge {
@@ -882,6 +907,10 @@ button:active, a:active {
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.crm-month-val-box.rollover .crm-month-val-num {
+  color: #D97706;
 }
 
 .crm-month-val-box.income .crm-month-val-num {
@@ -1747,16 +1776,27 @@ button:active, a:active {
     padding: 0.75rem 0.85rem;
   }
   .crm-month-card-top {
+    flex-direction: column;
+    align-items: stretch;
     gap: 0.5rem;
+  }
+  .crm-month-info {
+    justify-content: flex-start;
   }
   .crm-month-name {
-    font-size: 0.82rem;
-  }
-  .crm-month-val-num {
-    font-size: 0.72rem;
+    font-size: 0.84rem;
   }
   .crm-month-values {
-    gap: 0.5rem;
+    display: flex;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+  }
+  .crm-month-val-box {
+    align-items: flex-start;
+  }
+  .crm-month-val-num {
+    font-size: 0.75rem;
   }
 
   /* 6. Donut Content */

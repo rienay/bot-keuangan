@@ -473,7 +473,7 @@ export default function FinanceDashboardPage() {
       currentBalance: runningBal,
       totalSpentThisWeek: days.filter((d) => d.isPastOrToday).reduce((acc, d) => acc + d.expense, 0),
     };
-  }, [data?.transactions, dailyChartMode]);
+  }, [filteredTransactions, dailyChartMode]);
 
   // Active highlighted day
   const activeDayIdx = hoveredDayIdx !== null ? hoveredDayIdx : dailyTracking.currentDayOfWeek;
@@ -543,7 +543,34 @@ export default function FinanceDashboardPage() {
     }
 
     if (selectedMonthPill !== 'all') {
-      months = months.filter((m) => m.month.endsWith(`-${selectedMonthPill}`));
+      const filtered = months.filter((m) => m.month.endsWith(`-${selectedMonthPill}`));
+      if (filtered.length > 0) {
+        return filtered;
+      }
+      // Jika bulan yang dipilih belum ada transaksi, hitung saldo bergulir dari bulan sebelumnya
+      const targetYr = selectedYear === 'Semua' ? '2026' : selectedYear;
+      const targetYM = `${targetYr}-${selectedMonthPill}`;
+      const monthObj = MONTH_NAMES_ID.find((m) => m.num === selectedMonthPill);
+      const label = monthObj ? `${monthObj.full} ${targetYr}` : targetYM;
+
+      // Cari bulan terakhir sebelum targetYM di tahun yang sama
+      const priorMonths = months
+        .filter((m) => m.month < targetYM)
+        .sort((a, b) => a.month.localeCompare(b.month));
+      const lastPrior = priorMonths[priorMonths.length - 1];
+      const carriedBal = lastPrior ? (lastPrior.endingBalance ?? lastPrior.balance) : 0;
+
+      return [
+        {
+          month: targetYM,
+          monthLabel: label,
+          income: 0,
+          expense: 0,
+          balance: 0,
+          openingBalance: carriedBal,
+          endingBalance: carriedBal,
+        },
+      ];
     } else {
       if (barChartRange === '6') {
         months = months.slice(-6);
@@ -1130,13 +1157,24 @@ export default function FinanceDashboardPage() {
                           <span className="crm-month-badge-icon">📅</span>
                           <div className="crm-month-meta">
                             <span className="crm-month-name">{m.monthLabel}</span>
-                            <span className={`crm-month-net-badge ${isSurplus ? 'surplus' : 'deficit'}`}>
-                              {isSurplus ? '🟢 Surplus' : '🔴 Defisit'} {formatRupiah(m.balance)}
-                            </span>
+                            <div className="crm-month-badges-row">
+                              <span className="crm-month-ending-badge">
+                                💰 Saldo Kas: <b>{formatRupiah(m.endingBalance ?? m.balance)}</b>
+                              </span>
+                              <span className={`crm-month-net-badge ${isSurplus ? 'surplus' : 'deficit'}`}>
+                                {isSurplus ? '🟢 +' : '🔴 '}{formatRupiah(m.balance)}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
                         <div className="crm-month-values">
+                          {m.openingBalance !== undefined && m.openingBalance > 0 && (
+                            <div className="crm-month-val-box rollover">
+                              <span className="crm-month-val-label">Pindahan</span>
+                              <span className="crm-month-val-num">{formatRupiah(m.openingBalance)}</span>
+                            </div>
+                          )}
                           <div className="crm-month-val-box income">
                             <span className="crm-month-val-label">Masuk</span>
                             <span className="crm-month-val-num">+{formatRupiah(m.income)}</span>
