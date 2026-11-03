@@ -7,7 +7,7 @@
   --crm-bg: #F8FAFC;
   --crm-card: #FFFFFF;
   --crm-subtle: #F1F5F9;
-  
+
   --crm-border: rgba(226, 232, 240, 0.8);
   --crm-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
   --crm-shadow-hover: 0 10px 25px -4px rgba(99, 102, 241, 0.1);
@@ -56,12 +56,15 @@ body {
   overflow-x: hidden;
 }
 
-button, a, input {
+button,
+a,
+input {
   font-family: inherit;
   touch-action: manipulation;
 }
 
-button:active, a:active {
+button:active,
+a:active {
   opacity: 0.85;
   transform: scale(0.98);
 }
@@ -71,9 +74,11 @@ button:active, a:active {
   width: 5px;
   height: 5px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.3);
   border-radius: 9999px;
@@ -386,10 +391,12 @@ button:active, a:active {
   background: #ECFDF5;
   color: var(--crm-green);
 }
+
 .crm-kpi-icon-circle.orange {
   background: #FFF7ED;
   color: var(--crm-orange);
 }
+
 .crm-kpi-icon-circle.purple {
   background: #EEF2FF;
   color: var(--crm-primary);
@@ -406,6 +413,7 @@ button:active, a:active {
   background: #DCFCE7;
   color: #15803D;
 }
+
 .crm-kpi-badge.orange {
   background: #FFEDD5;
   color: #C2410C;
@@ -442,6 +450,7 @@ button:active, a:active {
 .crm-kpi-val.green {
   color: var(--crm-green);
 }
+
 .crm-kpi-val.orange {
   color: var(--crm-text);
 }
@@ -672,11 +681,15 @@ button:active, a:active {
 }
 
 .crm-daily-card.balance .crm-day-pill.active {
-  background: #ECFDF5;
+  background: #FFF7ED;
+}
+
+.crm-daily-card.balance .crm-day-pill.active .crm-day-abbr {
+  color: #EA580C;
 }
 
 .crm-daily-card.balance .crm-day-pill.active .crm-day-val {
-  color: #059669;
+  color: #C2410C;
 }
 
 .crm-daily-growth-badge.expense {
@@ -875,11 +888,47 @@ button:active, a:active {
   height: 8px;
   border-radius: 50%;
 }
+
 .crm-legend-dot.blue {
   background: #3B82F6;
 }
+
 .crm-legend-dot.indigo {
   background: #6366F1;
+}
+
+.crm-legend-dot.orange {
+  background: #F97316;
+}
+
+.crm-legend-bar-icon {
+  width: 10px;
+  height: 9px;
+  border-radius: 2px;
+  background: #3B82F6;
+  display: inline-block;
+}
+
+.crm-legend-line-icon {
+  width: 14px;
+  height: 2.5px;
+  background: #F97316;
+  border-radius: 2px;
+  position: relative;
+  display: inline-block;
+}
+
+.crm-legend-line-icon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1.5px solid #F97316;
 }
 
 .crm-chart-empty {
@@ -903,10 +952,12 @@ button:active, a:active {
 .crm-monthly-list::-webkit-scrollbar {
   width: 5px;
 }
+
 .crm-monthly-list::-webkit-scrollbar-track {
   background: #F1F5F9;
   border-radius: 4px;
 }
+
 .crm-monthly-list::-webkit-scrollbar-thumb {
   background: #CBD5E1;
   border-radius: 4px;
@@ -1120,14 +1171,17 @@ button:active, a:active {
 .crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar {
   width: 5px;
 }
+
 .crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar-track {
   background: #F1F5F9;
   border-radius: 4px;
 }
+
 .crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar-thumb {
   background: #CBD5E1;
   border-radius: 4px;
 }
+
 .crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
 }
@@ -1444,10 +1498,22 @@ button:active, a:active {
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-.crm-bm-label.green { color: var(--crm-green); }
-.crm-bm-label.red { color: var(--crm-red); }
-.crm-bm-label.blue { color: var(--crm-blue); }
-.crm-bm-label.purple { color: var(--crm-purple); }
+
+.crm-bm-label.green {
+  color: var(--crm-green);
+}
+
+.crm-bm-label.red {
+  color: var(--crm-red);
+}
+
+.crm-bm-label.blue {
+  color: var(--crm-blue);
+}
+
+.crm-bm-label.purple {
+  color: var(--crm-purple);
+}
 
 .crm-bm-val {
   font-size: 1.15rem;
@@ -1475,6 +1541,7 @@ button:active, a:active {
   margin-left: auto;
   margin-right: 0.35rem;
 }
+
 .crm-budget-tab-btn {
   border: none;
   background: transparent;
@@ -1486,16 +1553,19 @@ button:active, a:active {
   cursor: pointer;
   transition: all 0.18s ease;
 }
+
 .crm-budget-tab-btn.active {
   background: #FFFFFF;
   color: var(--crm-purple);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
+
 .crm-inline-budget-type {
   display: flex;
   gap: 0.35rem;
   margin-bottom: 0.35rem;
 }
+
 .crm-budget-type-btn {
   flex: 1;
   border: 1px solid rgba(226, 232, 240, 0.8);
@@ -1508,15 +1578,18 @@ button:active, a:active {
   cursor: pointer;
   transition: all 0.15s ease;
 }
+
 .crm-budget-type-btn.active {
   background: var(--crm-purple);
   color: #FFFFFF;
   border-color: var(--crm-purple);
 }
+
 .crm-inline-budget-input-row {
   display: flex;
   gap: 0.35rem;
 }
+
 .crm-inline-budget-input-row input {
   flex: 1;
   padding: 0.35rem 0.6rem;
@@ -1526,6 +1599,7 @@ button:active, a:active {
   font-family: inherit;
   outline: none;
 }
+
 .crm-inline-budget-input-row button {
   padding: 0.35rem 0.75rem;
   background: var(--crm-purple);
@@ -1536,6 +1610,7 @@ button:active, a:active {
   font-weight: 700;
   cursor: pointer;
 }
+
 .crm-daily-budget-pill {
   font-size: 0.7rem;
   font-weight: 700;
@@ -1553,6 +1628,7 @@ button:active, a:active {
   margin-bottom: 1rem;
   padding: 0.25rem 0;
 }
+
 .crm-month-filter-scroll {
   display: flex;
   align-items: center;
@@ -1562,9 +1638,11 @@ button:active, a:active {
   -webkit-overflow-scrolling: touch;
   padding-bottom: 2px;
 }
+
 .crm-month-filter-scroll::-webkit-scrollbar {
   display: none;
 }
+
 .crm-month-filter-pill {
   display: inline-flex;
   align-items: center;
@@ -1581,26 +1659,31 @@ button:active, a:active {
   transition: all 0.18s ease;
   flex-shrink: 0;
 }
+
 .crm-month-filter-pill:hover {
   border-color: #CBD5E1;
   color: var(--crm-text);
   background: #F8FAFC;
 }
+
 .crm-month-filter-pill.active {
   background: var(--crm-purple);
   color: #FFFFFF;
   border-color: var(--crm-purple);
   box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
 }
+
 .crm-month-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: #10B981;
 }
+
 .crm-month-filter-pill.active .crm-month-dot {
   background: #FFFFFF;
 }
+
 .crm-empty-reset-btn {
   margin-top: 0.5rem;
   padding: 0.35rem 0.85rem;
@@ -1613,6 +1696,7 @@ button:active, a:active {
   cursor: pointer;
   transition: all 0.15s ease;
 }
+
 .crm-empty-reset-btn:hover {
   background: var(--crm-purple);
   color: #FFFFFF;
@@ -1629,12 +1713,14 @@ button:active, a:active {
   border: 1px solid rgba(226, 232, 240, 0.8);
   box-shadow: var(--shadow-sm);
 }
+
 .crm-annual-header-tag {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.35rem;
 }
+
 .crm-year-pill-tag {
   background: #EEF2FF;
   color: var(--crm-purple);
@@ -1644,17 +1730,20 @@ button:active, a:active {
   border-radius: var(--radius-pill);
   letter-spacing: 0.05em;
 }
+
 .crm-annual-header-hint {
   font-size: 0.7rem;
   color: var(--crm-muted);
   font-weight: 600;
 }
+
 .crm-annual-highlights {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
   margin: 1.15rem 0 1.25rem;
 }
+
 .crm-annual-kpi {
   background: var(--crm-subtle);
   border: 1px solid rgba(226, 232, 240, 0.8);
@@ -1663,14 +1752,17 @@ button:active, a:active {
   display: flex;
   flex-direction: column;
 }
+
 .crm-annual-kpi.highlight-high {
   background: #FEF2F2;
   border-color: rgba(239, 68, 68, 0.2);
 }
+
 .crm-annual-kpi.highlight-low {
   background: #ECFDF5;
   border-color: rgba(16, 185, 129, 0.2);
 }
+
 .crm-annual-kpi-label {
   font-size: 0.68rem;
   font-weight: 700;
@@ -1678,6 +1770,7 @@ button:active, a:active {
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
+
 .crm-annual-kpi-val {
   font-size: 1.15rem;
   font-weight: 800;
@@ -1685,6 +1778,7 @@ button:active, a:active {
   margin-top: 0.25rem;
   letter-spacing: -0.02em;
 }
+
 .crm-annual-kpi-val.expense {
   color: var(--crm-red);
 }
@@ -1694,6 +1788,7 @@ button:active, a:active {
   flex-direction: column;
   gap: 0.6rem;
 }
+
 .crm-annual-row {
   display: flex;
   align-items: center;
@@ -1704,28 +1799,34 @@ button:active, a:active {
   border: 1px solid rgba(226, 232, 240, 0.7);
   transition: all 0.15s ease;
 }
+
 .crm-annual-row:hover {
   background: #F1F5F9;
   border-color: #CBD5E1;
 }
+
 .crm-annual-row.is-highest {
   background: #FFF7ED;
   border-color: rgba(249, 115, 22, 0.35);
 }
+
 .crm-annual-row.is-zero {
   opacity: 0.65;
 }
+
 .crm-annual-row-left {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   min-width: 160px;
 }
+
 .crm-annual-month-badge {
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
+
 .crm-annual-month-num {
   font-size: 0.7rem;
   font-weight: 800;
@@ -1734,25 +1835,30 @@ button:active, a:active {
   padding: 0.15rem 0.4rem;
   border-radius: 6px;
 }
+
 .crm-annual-month-name {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--crm-text);
 }
+
 .crm-badge-tag {
   font-size: 0.62rem;
   font-weight: 800;
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius-pill);
 }
+
 .crm-badge-tag.tag-high {
   background: #FEE2E2;
   color: #DC2626;
 }
+
 .crm-badge-tag.tag-low {
   background: #D1FAE5;
   color: #059669;
 }
+
 .crm-badge-tag.tag-zero {
   background: #F1F5F9;
   color: #64748B;
@@ -1765,6 +1871,7 @@ button:active, a:active {
   gap: 0.3rem;
   min-width: 0;
 }
+
 .crm-annual-bar-track {
   width: 100%;
   height: 8px;
@@ -1772,15 +1879,18 @@ button:active, a:active {
   border-radius: 999px;
   overflow: hidden;
 }
+
 .crm-annual-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, #6366F1, #818CF8);
   border-radius: 999px;
   transition: width 0.4s ease;
 }
+
 .crm-annual-bar-fill.bar-high {
   background: linear-gradient(90deg, #F97316, #EF4444);
 }
+
 .crm-annual-meta-row {
   display: flex;
   justify-content: space-between;
@@ -1788,9 +1898,11 @@ button:active, a:active {
   font-size: 0.68rem;
   color: var(--crm-muted);
 }
+
 .crm-annual-tx-count {
   font-weight: 600;
 }
+
 .crm-annual-pct-share {
   font-weight: 700;
   color: #475569;
@@ -1800,14 +1912,17 @@ button:active, a:active {
   min-width: 110px;
   text-align: right;
 }
+
 .crm-annual-amount {
   font-size: 0.95rem;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
+
 .crm-annual-amount.has-expense {
   color: var(--crm-text);
 }
+
 .crm-annual-amount.zero-expense {
   color: var(--crm-muted);
   font-weight: 600;
@@ -2266,48 +2381,60 @@ button:active, a:active {
   .crm-debts-grid {
     grid-template-columns: 1fr;
   }
+
   .crm-daily-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
+
   .crm-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .crm-charts-grid {
     grid-template-columns: 1fr;
   }
+
   .crm-bottom-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
+
   /* 1. Mobile Navbar */
   .crm-navbar {
     padding: 0.65rem 0.85rem;
   }
+
   .crm-brand {
     gap: 0.5rem;
   }
+
   .crm-brand-title {
     font-size: 0.95rem;
   }
+
   .crm-brand-logo {
     width: 34px;
     height: 34px;
     font-size: 1.1rem;
     border-radius: 10px;
   }
+
   .crm-badge-book {
     font-size: 0.68rem;
     margin-top: 0;
   }
+
   .crm-btn-text {
     display: none;
   }
+
   .crm-btn-text-mobile {
     display: inline;
   }
+
   .crm-refresh-btn,
   .crm-bot-btn {
     padding: 0.35rem 0.65rem;
@@ -2325,9 +2452,11 @@ button:active, a:active {
     margin-bottom: 0.85rem;
     gap: 0.5rem;
   }
+
   .crm-year-label {
     font-size: 0.68rem;
   }
+
   .crm-year-pill {
     padding: 0.28rem 0.65rem;
     font-size: 0.7rem;
@@ -2339,24 +2468,29 @@ button:active, a:active {
     gap: 0.55rem;
     margin-bottom: 1rem;
   }
+
   .crm-kpi-card {
     padding: 0.8rem;
     border-radius: var(--radius-lg);
   }
+
   .crm-kpi-icon-circle {
     width: 30px;
     height: 30px;
     font-size: 0.85rem;
   }
+
   .crm-kpi-label {
     font-size: 0.65rem;
     margin-top: 0.35rem;
   }
+
   .crm-kpi-val {
     font-size: 1.05rem;
     letter-spacing: -0.02em;
     margin-top: 0.15rem;
   }
+
   .crm-kpi-footer {
     font-size: 0.62rem;
     margin-top: 0.35rem;
@@ -2364,6 +2498,7 @@ button:active, a:active {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
   .crm-kpi-chip,
   .crm-kpi-badge {
     font-size: 0.62rem;
@@ -2376,36 +2511,46 @@ button:active, a:active {
     border-radius: var(--radius-lg);
     margin-bottom: 1rem;
   }
+
   .crm-daily-amount {
     font-size: 1.55rem;
   }
+
   .crm-daily-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
   }
+
   .crm-daily-days-row {
     padding: 0 10px;
   }
+
   .crm-day-abbr {
     font-size: 0.7rem;
   }
+
   .crm-day-val {
     font-size: 0.55rem;
   }
+
   .crm-day-pill {
     padding: 0.2rem 0.25rem;
   }
+
   .crm-dual-amount-row {
     gap: 0.85rem;
   }
+
   .crm-dual-val {
     font-size: 1.05rem;
   }
+
   .crm-daily-days-row.monthly-pills {
     padding: 0 5px;
     gap: 0.15rem;
   }
+
   .crm-daily-days-row.monthly-pills .crm-day-pill {
     min-width: 28px;
     padding: 0.2rem 0.15rem;
@@ -2417,45 +2562,56 @@ button:active, a:active {
     border-radius: var(--radius-lg);
     margin-bottom: 1rem;
   }
+
   .crm-card-title {
     font-size: 0.95rem;
   }
+
   .crm-card-subtitle {
     font-size: 0.68rem;
   }
+
   .crm-card-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.65rem;
     margin-bottom: 0.85rem;
   }
+
   .crm-chart-header-actions {
     width: 100%;
     justify-content: space-between;
   }
+
   .crm-month-card {
     padding: 0.75rem 0.85rem;
   }
+
   .crm-month-card-top {
     flex-direction: column;
     align-items: stretch;
     gap: 0.5rem;
   }
+
   .crm-month-info {
     justify-content: flex-start;
   }
+
   .crm-month-name {
     font-size: 0.84rem;
   }
+
   .crm-month-values {
     display: flex;
     justify-content: flex-start;
     flex-wrap: wrap;
     gap: 0.85rem;
   }
+
   .crm-month-val-box {
     align-items: flex-start;
   }
+
   .crm-month-val-num {
     font-size: 0.75rem;
   }
@@ -2466,13 +2622,16 @@ button:active, a:active {
     align-items: center;
     gap: 1.15rem;
   }
+
   .crm-donut-svg-wrap {
     width: 150px;
     height: 150px;
   }
+
   .crm-donut-legend-list {
     width: 100%;
   }
+
   .crm-donut-legend-list.is-grid-2-col {
     grid-template-columns: 1fr;
     max-height: 380px;
@@ -2487,32 +2646,39 @@ button:active, a:active {
   .crm-annual-card {
     padding: 1.15rem 1rem;
   }
+
   .crm-annual-highlights {
     grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
   }
+
   .crm-annual-kpi {
     padding: 0.65rem 0.75rem;
   }
+
   .crm-annual-kpi-val {
     font-size: 0.95rem;
   }
+
   .crm-annual-row {
     flex-direction: column;
     align-items: stretch;
     gap: 0.45rem;
     padding: 0.65rem 0.75rem;
   }
+
   .crm-annual-row-left {
     justify-content: space-between;
     min-width: 0;
   }
+
   .crm-annual-row-right {
     text-align: left;
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
+
   .crm-annual-amount {
     font-size: 0.88rem;
   }
@@ -2522,14 +2688,17 @@ button:active, a:active {
     width: 100%;
     justify-content: space-between;
   }
+
   .crm-debt-form-grid {
     grid-template-columns: 1fr;
   }
+
   .crm-debt-item-top {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.35rem;
   }
+
   .crm-debt-item-amount {
     font-size: 1.05rem;
   }
