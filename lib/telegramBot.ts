@@ -32,6 +32,7 @@ import {
   getBookBudget,
   getBudgetInfo,
   checkBudgetThresholdAlert,
+  cleanDescription,
 } from './googleSheets';
 import { uploadReceiptToDrive, getDriveConfigStatus, testDriveUpload } from './googleDrive';
 import { formatPrivateKey, getGoogleAuth } from './googleAuth';
@@ -2261,7 +2262,8 @@ function buildTransactionDateBlocks(items: ExpenseDetail[], defaultType: string)
     block += `\n`;
 
     for (const item of list) {
-      const desc = item.description && item.description !== '-' ? escapeTelegramMarkdown(item.description) : '';
+      const rawDesc = cleanDescription(item.description && item.description !== '-' ? item.description : '');
+      const desc = rawDesc ? escapeTelegramMarkdown(rawDesc) : '';
       const cat = escapeTelegramMarkdown(item.category);
       const nominal = formatRupiah(item.nominal);
 
@@ -2667,7 +2669,7 @@ async function handleCekFoto(ctx: any, customBook?: string) {
     }
 
     textList +=
-      `*${num}.* ${item.date} — *${item.description}*\n` +
+      `*${num}.* ${item.date} — *${cleanDescription(item.description)}*\n` +
       `    ${typeIcon} ${amountStr} (${item.category || item.type})\n` +
       `    📎 *Foto:* ${photoStatus}\n\n`;
   });
@@ -2747,7 +2749,8 @@ async function handlePilihUnggahUlang(ctx: any, customBook?: string) {
   }
 
   itemsWithoutPhoto.slice(0, 8).forEach((it) => {
-    const descShort = it.description.length > 22 ? it.description.slice(0, 20) + '..' : it.description;
+    const rawClean = cleanDescription(it.description);
+    const descShort = rawClean.length > 22 ? rawClean.slice(0, 20) + '..' : rawClean;
     const btnLabel = `📤 #${it.rowNumber}: ${descShort} (${formatRupiah(it.amount)})`;
     keyboard.text(btnLabel, `reupload_pick:${activeBook}:${it.rowNumber}`).row();
   });
@@ -2821,7 +2824,7 @@ bot.callbackQuery(/^reupload_pick:([^:]+):(\d+)$/, async (ctx) => {
   await ctx.reply(
     `📸 *Siap Menerima Foto Nota!*\n\n` +
       `📖 *Buku:* \`${targetBook}\`\n` +
-      `📝 *Transaksi:* *${item.description}*\n` +
+      `📝 *Transaksi:* *${cleanDescription(item.description)}*\n` +
       `💰 *Nominal:* ${formatRupiah(item.amount)} (${item.type})\n` +
       `📅 *Tanggal:* ${item.date}\n` +
       `📌 *Baris Sheets:* #${item.rowNumber}\n\n` +
@@ -2910,7 +2913,7 @@ bot.on('message:text', async (ctx) => {
     const keyboard = new InlineKeyboard().text('❌ Batalkan', 'reupload_cancel');
     await ctx.reply(
       `⚠️ Anda sedang dalam mode unggah ulang foto untuk:\n` +
-        `📝 *${state.description}* (${formatRupiah(state.amount)})\n` +
+        `📝 *${cleanDescription(state.description)}* (${formatRupiah(state.amount)})\n` +
         `📌 *Baris Sheets:* #${state.rowNumber}\n\n` +
         `👉 *Silakan kirimkan foto nota/struk*, atau klik tombol di bawah untuk membatalkan.`,
       { parse_mode: 'Markdown', reply_markup: keyboard }
@@ -2997,7 +3000,7 @@ bot.on('message:text', async (ctx) => {
             await ctx.reply(
               `✅ *Foto Nota Berhasil Ditautkan via Reply!*\n\n` +
                 `📖 *Buku Kegiatan:* \`${targetBook}\` _(Tab Sheets: ${targetBook})_\n` +
-                `📝 *Transaksi:* *${matchingRow.description}*\n` +
+                `📝 *Transaksi:* *${cleanDescription(matchingRow.description)}*\n` +
                 `💰 *Nominal:* ${formatRupiah(matchingRow.amount)}\n` +
                 `📌 *Baris Sheets:* #${matchingRow.rowNumber}\n\n` +
                 `🔗 [Buka Foto di Google Drive](${driveLink})\n\n` +
@@ -3520,11 +3523,7 @@ bot.on('message:text', async (ctx) => {
     const adminId = getAdminTelegramId();
     const isAdmin = senderId === adminId;
 
-    // Tag PIC di keterangan Google Sheets agar transparan siapa penginputnya
-    const picTag = username ? `(PIC: ${username})` : `(PIC: ${senderName})`;
-    if (!parsed.description.toLowerCase().includes('pic:')) {
-      parsed.description = `${parsed.description} ${picTag}`;
-    }
+    parsed.description = cleanDescription(parsed.description);
 
         // Simpan ke sheet buku yang sedang aktif
     const rowNumber = await appendTransaction(parsed, activeBook);
@@ -3779,7 +3778,7 @@ bot.on(['message:photo', 'message:document'], async (ctx) => {
             await ctx.reply(
               `✅ *Foto Nota Berhasil Ditautkan via Reply!*\n\n` +
                 `📖 *Buku Kegiatan:* \`${finalBook}\` _(Tab Sheets: ${finalBook})_\n` +
-                `📝 *Transaksi:* *${matchingRow.description}*\n` +
+                `📝 *Transaksi:* *${cleanDescription(matchingRow.description)}*\n` +
                 `💰 *Nominal:* ${formatRupiah(matchingRow.amount)}\n` +
                 `📌 *Baris Sheets:* #${matchingRow.rowNumber}\n\n` +
                 `🔗 [Buka Foto di Google Drive](${driveLink})\n\n` +
@@ -3842,11 +3841,7 @@ bot.on(['message:photo', 'message:document'], async (ctx) => {
     const adminId = getAdminTelegramId();
     const isAdmin = senderId === adminId;
 
-    // Tag PIC di keterangan Google Sheets agar jelas siapa penginputnya
-    const picTag = username ? `(PIC: ${username})` : `(PIC: ${senderName})`;
-    if (!parsed.description.toLowerCase().includes('pic:')) {
-      parsed.description = `${parsed.description} ${picTag}`;
-    }
+    parsed.description = cleanDescription(parsed.description);
 
     if (driveLink) {
       parsed.noteLink = driveLink;

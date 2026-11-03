@@ -50,6 +50,14 @@ let cachedSheetList: { list: string[]; timestamp: number } | null = null;
 const CACHE_TTL_MS = 30_000;
 
 /**
+ * Membersihkan tag (PIC: ...) dari keterangan transaksi agar tampilan ringkas
+ */
+export function cleanDescription(desc: string): string {
+  if (!desc) return '';
+  return desc.replace(/[\(\[]\s*PIC\s*:[^\]\)]+[\)\]]/gi, '').trim();
+}
+
+/**
  * Membersihkan nama sheet agar valid di Google Sheets
  */
 export function sanitizeBookName(rawName: string): string {
@@ -890,7 +898,7 @@ export async function getMonthSummary(
           date: cleanDate,
           category: kategori,
           nominal: cleanNominal,
-          description: keterangan,
+          description: cleanDescription(keterangan),
           noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
           wallet,
           isTransfer: false,
@@ -906,7 +914,7 @@ export async function getMonthSummary(
           date: cleanDate,
           category: kategori,
           nominal: cleanNominal,
-          description: keterangan,
+          description: cleanDescription(keterangan),
           noteLink: noteLink && noteLink !== '-' ? noteLink : undefined,
           wallet,
           isTransfer: false,
@@ -1258,7 +1266,7 @@ export async function getAllTransactionsForWeb(
         type: jenis,
         category: kategori,
         amount: cleanNominal,
-        description: keterangan,
+        description: cleanDescription(keterangan),
         noteLink,
         pic,
         inputTime,
@@ -1895,7 +1903,7 @@ export async function transferWalletMoney(params: {
     type: 'Pengeluaran',
     amount: params.amount,
     category: 'Pindah Uang',
-    description: `Pindah uang ke ${cleanTo} (PIC: ${params.senderName})`,
+    description: `Pindah uang ke ${cleanTo}`,
     date: todayStr,
     wallet: cleanFrom,
   };
@@ -1906,7 +1914,7 @@ export async function transferWalletMoney(params: {
     type: 'Pemasukan',
     amount: params.amount,
     category: 'Pindah Uang',
-    description: `Terima pindah uang dari ${cleanFrom} (PIC: ${params.senderName})`,
+    description: `Terima pindah uang dari ${cleanFrom}`,
     date: todayStr,
     wallet: cleanTo,
   };
