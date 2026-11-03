@@ -690,8 +690,8 @@ button:active, a:active {
    ============================================================ */
 .crm-charts-grid {
   display: grid;
-  grid-template-columns: 1.25fr 1fr;
-  gap: 1rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
   margin-bottom: 1.5rem;
 }
 
@@ -729,6 +729,40 @@ button:active, a:active {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.crm-month-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.crm-month-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #F8FAFC url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.75rem center;
+  border: 1px solid #CBD5E1;
+  border-radius: var(--radius-pill);
+  padding: 0.35rem 2rem 0.35rem 0.85rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #1E293B;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.crm-month-select:hover {
+  background-color: #F1F5F9;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.crm-month-select:focus {
+  border-color: #6366F1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18);
 }
 
 .crm-pill-toggle {
@@ -982,8 +1016,76 @@ button:active, a:active {
 /* Donut Chart (Product Statistic Style) */
 .crm-donut-content {
   display: flex;
-  align-items: center;
-  gap: 1.5rem;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.crm-donut-content.expanded {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.crm-donut-content.expanded .crm-donut-svg-wrap {
+  align-self: center;
+  margin-bottom: 0.5rem;
+}
+
+.crm-donut-legend-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.crm-donut-legend-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.crm-donut-legend-list.is-grid-2-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
+.crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar {
+  width: 5px;
+}
+.crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+.crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.crm-donut-legend-list.is-grid-2-col::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.crm-badge-count-btn {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--crm-purple);
+  background: #EEF2FF;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.crm-badge-count-btn:hover {
+  background: #E0E7FF;
+  border-color: rgba(99, 102, 241, 0.4);
 }
 
 .crm-donut-svg-wrap {
@@ -1105,12 +1207,15 @@ button:active, a:active {
   gap: 0.5rem;
   flex-shrink: 0;
   margin-left: auto;
+  white-space: nowrap;
 }
 
 .crm-legend-amount {
   font-size: 0.74rem;
-  font-weight: 600;
-  color: var(--crm-muted);
+  font-weight: 700;
+  color: var(--crm-text);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .crm-legend-pct {
@@ -2290,6 +2395,10 @@ button:active, a:active {
   }
   .crm-donut-legend-list {
     width: 100%;
+  }
+  .crm-donut-legend-list.is-grid-2-col {
+    grid-template-columns: 1fr;
+    max-height: 380px;
   }
 
   /* 7. Bottom Benchmarks */

@@ -1447,7 +1447,7 @@ export default function FinanceDashboardPage() {
                   className="crm-badge-count-btn"
                   onClick={() => setShowAllCategories(!showAllCategories)}
                 >
-                  {showAllCategories ? 'Ringkas' : `Lihat Semua (${categoryExpensesList.length})`}
+                  {showAllCategories ? 'Ringkas (5)' : `Lihat Semua (${categoryExpensesList.length})`}
                 </button>
               )}
             </div>
@@ -1457,7 +1457,7 @@ export default function FinanceDashboardPage() {
                 <span>🍩 Belum ada data pengeluaran untuk divisualisasikan ke dalam donut chart.</span>
               </div>
             ) : (
-              <div className="crm-donut-content">
+              <div className={`crm-donut-content ${showAllCategories ? 'expanded' : ''}`}>
                 {/* Interactive SVG Donut */}
                 <div className="crm-donut-svg-wrap">
                   <svg className="crm-donut-svg" viewBox="0 0 160 160">
@@ -1516,41 +1516,43 @@ export default function FinanceDashboardPage() {
                   </div>
                 </div>
 
-                {/* Donut Legend List */}
-                <div className="crm-donut-legend-list">
-                  {(showAllCategories ? categoryExpensesList : categoryExpensesList.slice(0, 5)).map((c) => (
-                    <div
-                      key={c.name}
-                      className={`crm-donut-legend-row ${activeCategory === c.name ? 'highlighted' : ''}`}
-                      onMouseEnter={() => setActiveCategory(c.name)}
-                      onMouseLeave={() => setActiveCategory(null)}
-                    >
-                      <div className="crm-legend-row-top">
-                        <div className="crm-legend-left">
-                          <span
-                            className="crm-donut-color-dot"
-                            style={{ background: c.config.barColor }}
-                          />
-                          <span className="crm-legend-icon">{c.config.icon}</span>
-                          <span className="crm-legend-name">{c.name}</span>
-                        </div>
+                {/* Donut Legend List (Mendukung 2 Kolom saat Kategori Banyak) */}
+                <div className="crm-donut-legend-wrap">
+                  <div className={`crm-donut-legend-list ${showAllCategories ? 'is-grid-2-col' : ''}`}>
+                    {(showAllCategories ? categoryExpensesList : categoryExpensesList.slice(0, 5)).map((c) => (
+                      <div
+                        key={c.name}
+                        className={`crm-donut-legend-row ${activeCategory === c.name ? 'highlighted' : ''}`}
+                        onMouseEnter={() => setActiveCategory(c.name)}
+                        onMouseLeave={() => setActiveCategory(null)}
+                      >
+                        <div className="crm-legend-row-top">
+                          <div className="crm-legend-left">
+                            <span
+                              className="crm-donut-color-dot"
+                              style={{ background: c.config.barColor }}
+                            />
+                            <span className="crm-legend-icon">{c.config.icon}</span>
+                            <span className="crm-legend-name" title={c.name}>{c.name}</span>
+                          </div>
 
-                        <div className="crm-legend-right">
-                          <span className="crm-legend-amount">{formatRupiah(c.amount)}</span>
-                          <span className="crm-legend-pct">{c.percentage}%</span>
+                          <div className="crm-legend-right">
+                            <span className="crm-legend-amount">{formatRupiah(c.amount)}</span>
+                            <span className="crm-legend-pct">{c.percentage}%</span>
+                          </div>
+                        </div>
+                        <div className="crm-legend-bar-track">
+                          <div
+                            className="crm-legend-bar-fill"
+                            style={{
+                              width: `${Math.min(100, Math.max(3, c.percentage))}%`,
+                              background: c.config.barColor,
+                            }}
+                          />
                         </div>
                       </div>
-                      <div className="crm-legend-bar-track">
-                        <div
-                          className="crm-legend-bar-fill"
-                          style={{
-                            width: `${Math.min(100, Math.max(3, c.percentage))}%`,
-                            background: c.config.barColor,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
 
                   {categoryExpensesList.length > 5 && (
                     <button
@@ -1558,7 +1560,7 @@ export default function FinanceDashboardPage() {
                       onClick={() => setShowAllCategories(!showAllCategories)}
                     >
                       {showAllCategories
-                        ? '▲ Tampilkan 5 Teratas Saja'
+                        ? '▲ Tampilkan Ringkas (5 Teratas Saja)'
                         : `▼ Lihat Semua (${categoryExpensesList.length} Kategori)`}
                     </button>
                   )}
