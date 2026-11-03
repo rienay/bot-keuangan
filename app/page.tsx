@@ -96,43 +96,56 @@ interface CategoryStyle {
   textColor: string;
 }
 
+const CATEGORY_PALETTE: CategoryStyle[] = [
+  { barColor: '#6366F1', bgColor: '#EEF2FF', textColor: '#4F46E5', icon: '🛍️', label: 'Belanja' },
+  { barColor: '#EC4899', bgColor: '#FDF2F8', textColor: '#DB2777', icon: '🎁', label: 'Hadiah' },
+  { barColor: '#0EA5E9', bgColor: '#EFF6FF', textColor: '#0284C7', icon: '🚗', label: 'Transport' },
+  { barColor: '#F97316', bgColor: '#FFF7ED', textColor: '#EA580C', icon: '🍽️', label: 'Kuliner' },
+  { barColor: '#10B981', bgColor: '#ECFDF5', textColor: '#059669', icon: '🍿', label: 'Hiburan' },
+  { barColor: '#F59E0B', bgColor: '#FEF3C7', textColor: '#D97706', icon: '⚡', label: 'Tagihan' },
+  { barColor: '#8B5CF6', bgColor: '#F5F3FF', textColor: '#7C3AED', icon: '📚', label: 'Edukasi' },
+  { barColor: '#14B8A6', bgColor: '#F0FDFA', textColor: '#0D9488', icon: '💊', label: 'Kesehatan' },
+  { barColor: '#D946EF', bgColor: '#FDF4FF', textColor: '#C026D3', icon: '💄', label: 'Kecantikan' },
+  { barColor: '#06B6D4', bgColor: '#ECFEFF', textColor: '#0891B2', icon: '🌊', label: 'Lain-lain' },
+  { barColor: '#84CC16', bgColor: '#F7FEE7', textColor: '#65A30D', icon: '🌱', label: 'Investasi' },
+  { barColor: '#E11D48', bgColor: '#FFE4E6', textColor: '#BE123C', icon: '🏡', label: 'Keluarga' },
+];
+
 function getCategoryConfig(categoryName: string, index: number = 0): CategoryStyle {
   const c = (categoryName || '').toLowerCase();
-  
-  const PALETTE = [
-    { barColor: '#6366F1', bgColor: '#EEF2FF', textColor: '#4F46E5', icon: '🛍️' },
-    { barColor: '#F97316', bgColor: '#FFF7ED', textColor: '#EA580C', icon: '🍽️' },
-    { barColor: '#0EA5E9', bgColor: '#EFF6FF', textColor: '#0284C7', icon: '🚗' },
-    { barColor: '#F59E0B', bgColor: '#FEF3C7', textColor: '#D97706', icon: '📄' },
-    { barColor: '#10B981', bgColor: '#ECFDF5', textColor: '#059669', icon: '🍿' },
-    { barColor: '#EC4899', bgColor: '#FDF2F8', textColor: '#DB2777', icon: '💖' },
-    { barColor: '#8B5CF6', bgColor: '#F5F3FF', textColor: '#7C3AED', icon: '🎁' },
-    { barColor: '#14B8A6', bgColor: '#F0FDFA', textColor: '#0D9488', icon: '💊' },
-  ];
 
-  if (c.includes('makan') || c.includes('minum') || c.includes('konsumsi') || c.includes('resto') || c.includes('cafe') || c.includes('food')) {
+  if (c.includes('makan') || c.includes('minum') || c.includes('konsumsi') || c.includes('resto') || c.includes('cafe') || c.includes('food') || c.includes('jajan') || c.includes('kopi')) {
     return { label: categoryName || 'Makanan & Minuman', icon: '🍽️', bgColor: '#FFF7ED', barColor: '#F97316', textColor: '#EA580C' };
   }
-  if (c.includes('belanja') || c.includes('shopping') || c.includes('pasar') || c.includes('supermarket') || c.includes('baju')) {
+  if (c.includes('hadiah') || c.includes('donasi') || c.includes('sedekah') || c.includes('amal') || c.includes('kado') || c.includes('pinjam') || c.includes('kasih') || c.includes('mamah') || c.includes('ibu')) {
+    return { label: categoryName || 'Hadiah & Donasi', icon: '🎁', bgColor: '#FDF2F8', barColor: '#EC4899', textColor: '#DB2777' };
+  }
+  if (c.includes('belanja') || c.includes('shopping') || c.includes('pasar') || c.includes('supermarket') || c.includes('baju') || c.includes('kebutuhan') || c.includes('shopee') || c.includes('tokopedia')) {
     return { label: categoryName || 'Belanja', icon: '🛍️', bgColor: '#EEF2FF', barColor: '#6366F1', textColor: '#4F46E5' };
   }
-  if (c.includes('transport') || c.includes('bensin') || c.includes('parkir') || c.includes('ojek') || c.includes('grab') || c.includes('gojek')) {
+  if (c.includes('transport') || c.includes('bensin') || c.includes('parkir') || c.includes('ojek') || c.includes('grab') || c.includes('gojek') || c.includes('angkot') || c.includes('kereta')) {
     return { label: categoryName || 'Transportasi', icon: '🚗', bgColor: '#EFF6FF', barColor: '#0EA5E9', textColor: '#0284C7' };
   }
-  if (c.includes('tagihan') || c.includes('listrik') || c.includes('wifi') || c.includes('pulsa') || c.includes('bill') || c.includes('langganan')) {
-    return { label: categoryName || 'Tagihan & Utilitas', icon: '📄', bgColor: '#FEF3C7', barColor: '#F59E0B', textColor: '#D97706' };
+  if (c.includes('tagihan') || c.includes('listrik') || c.includes('wifi') || c.includes('pulsa') || c.includes('bill') || c.includes('langganan') || c.includes('air') || c.includes('internet')) {
+    return { label: categoryName || 'Tagihan & Utilitas', icon: '⚡', bgColor: '#FEF3C7', barColor: '#F59E0B', textColor: '#D97706' };
   }
-  if (c.includes('hiburan') || c.includes('date') || c.includes('ngedate') || c.includes('nonton') || c.includes('entertainment') || c.includes('kencan')) {
+  if (c.includes('hiburan') || c.includes('date') || c.includes('ngedate') || c.includes('nonton') || c.includes('entertainment') || c.includes('kencan') || c.includes('wisata') || c.includes('liburan')) {
     return { label: categoryName || 'Hiburan & Kencan', icon: '🍿', bgColor: '#ECFDF5', barColor: '#10B981', textColor: '#059669' };
   }
-  if (c.includes('sehat') || c.includes('obat') || c.includes('dokter') || c.includes('apotek')) {
+  if (c.includes('cantik') || c.includes('skincare') || c.includes('kosmetik') || c.includes('salon') || c.includes('makeup') || c.includes('beauty')) {
+    return { label: categoryName || 'Kecantikan', icon: '💄', bgColor: '#FDF4FF', barColor: '#D946EF', textColor: '#C026D3' };
+  }
+  if (c.includes('sehat') || c.includes('obat') || c.includes('dokter') || c.includes('apotek') || c.includes('klinik') || c.includes('medis')) {
     return { label: categoryName || 'Kesehatan', icon: '💊', bgColor: '#F0FDFA', barColor: '#14B8A6', textColor: '#0D9488' };
   }
-  if (c.includes('didik') || c.includes('buku') || c.includes('kursus')) {
+  if (c.includes('didik') || c.includes('buku') || c.includes('kursus') || c.includes('kuliah') || c.includes('sekolah')) {
     return { label: categoryName || 'Edukasi', icon: '📚', bgColor: '#F5F3FF', barColor: '#8B5CF6', textColor: '#7C3AED' };
   }
+  if (c.includes('rumah') || c.includes('kos') || c.includes('keluarga') || c.includes('sewa')) {
+    return { label: categoryName || 'Keluarga & Rumah', icon: '🏡', bgColor: '#FFE4E6', barColor: '#E11D48', textColor: '#BE123C' };
+  }
 
-  const fallback = PALETTE[index % PALETTE.length];
+  const fallback = CATEGORY_PALETTE[index % CATEGORY_PALETTE.length];
   return {
     label: categoryName || 'Lain-lain',
     icon: fallback.icon,
@@ -503,17 +516,29 @@ export default function FinanceDashboardPage() {
       }
     });
     const expTotal = totalExp || 1;
-    return Object.entries(catMap)
-      .map(([name, amount], idx) => {
-        const pct = Math.min(100, Math.round((amount / expTotal) * 100));
-        return {
-          name,
-          amount,
-          percentage: pct,
-          config: getCategoryConfig(name, idx),
-        };
-      })
-      .sort((a, b) => b.amount - a.amount);
+    const sortedEntries = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+
+    const usedColors = new Set<string>();
+    return sortedEntries.map(([name, amount], idx) => {
+      const pct = Math.min(100, Math.round((amount / expTotal) * 100));
+      let cfg = getCategoryConfig(name, idx);
+
+      // Pastikan setiap kategori di donut chart memiliki warna berbeda (tidak bentrok)
+      if (usedColors.has(cfg.barColor)) {
+        const alt = CATEGORY_PALETTE.find((p) => !usedColors.has(p.barColor));
+        if (alt) {
+          cfg = { ...cfg, barColor: alt.barColor, bgColor: alt.bgColor, textColor: alt.textColor };
+        }
+      }
+      usedColors.add(cfg.barColor);
+
+      return {
+        name,
+        amount,
+        percentage: pct,
+        config: cfg,
+      };
+    });
   }, [filteredTransactions]);
 
   // Kalkulasi data SVG Donut Chart (Radius = 65, Circumference ~ 408.4)
