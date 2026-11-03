@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { WebFinanceData, WebTransactionItem } from '@/lib/types';
+import { WebFinanceData, WebTransactionItem, DebtItem } from '@/lib/types';
 
 function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -200,6 +200,15 @@ export default function FinanceDashboardPage() {
   // Filter Tahun Transaksi (default tahun aktif 2026 agar tidak menumpuk semua tahun)
   const [selectedYear, setSelectedYear] = useState<string>('2026');
 
+  // State untuk Utang & Piutang (Kewajiban & Tagihan)
+  const [debtTab, setDebtTab] = useState<'active' | 'settled'>('active');
+  const [showDebtForm, setShowDebtForm] = useState(false);
+  const [debtFormType, setDebtFormType] = useState<'Piutang' | 'Utang'>('Piutang');
+  const [debtFormPerson, setDebtFormPerson] = useState('');
+  const [debtFormAmount, setDebtFormAmount] = useState('');
+  const [debtFormDesc, setDebtFormDesc] = useState('');
+  const [isSubmittingDebt, setIsSubmittingDebt] = useState(false);
+
   const fetchData = async (book: string = 'Tabungan', showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
     else setLoading(true);
@@ -237,14 +246,14 @@ export default function FinanceDashboardPage() {
         setSelectedBook(b);
         try {
           localStorage.setItem('last_active_book', b);
-        } catch (_) {}
+        } catch (_) { }
       } else {
         try {
           const saved = localStorage.getItem('last_active_book');
           if (saved) {
             setSelectedBook(saved);
           }
-        } catch (_) {}
+        } catch (_) { }
       }
     }
   }, []);
@@ -275,6 +284,75 @@ export default function FinanceDashboardPage() {
       alert(err.message || 'Error saat menyimpan budget');
     } finally {
       setIsSavingBudget(false);
+    }
+  };
+
+  const handleSettleDebt = async (debtId: string, person: string, type: string) => {
+    const actionLabel = type === 'Piutang' ? 'uang pelunasan sudah Anda terima' : 'utang ini sudah Anda bayar lunas';
+    if (!confirm(`Konfirmasi pelunasan: Apakah ${actionLabel} dari/kepada ${person}?`)) {
+      return;
+    }
+    try {
+      setIsRefreshing(true);
+      const res = await fetch('/api/debts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'settle', debtId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchData(selectedBook, true);
+      } else {
+        alert('Gagal melunasi: ' + (json.error || 'Terjadi kesalahan'));
+      }
+    } catch (e: any) {
+      alert('Gagal melunasi: ' + e.message);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleAddDebt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rawAmt = debtFormAmount.replace(/[^0-9]/g, '');
+    const numAmt = parseFloat(rawAmt);
+    if (!debtFormPerson.trim()) {
+      alert('Silakan masukkan nama pihak / orang terkait');
+      return;
+    }
+    if (!numAmt || numAmt <= 0) {
+      alert('Silakan masukkan nominal uang yang valid');
+      return;
+    }
+
+    try {
+      setIsSubmittingDebt(true);
+      const res = await fetch('/api/debts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add',
+          book: selectedBook === 'Semua' ? 'Tabungan' : selectedBook,
+          type: debtFormType,
+          person: debtFormPerson.trim(),
+          amount: numAmt,
+          description: debtFormDesc.trim() || '-',
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setDebtFormPerson('');
+        setDebtFormAmount('');
+        setDebtFormDesc('');
+        setShowDebtForm(false);
+        await fetchData(selectedBook, true);
+      } else {
+        alert('Gagal mencatat: ' + (json.error || 'Terjadi kesalahan'));
+      }
+    } catch (e: any) {
+      alert('Gagal mencatat: ' + e.message);
+    } finally {
+      setIsSubmittingDebt(false);
     }
   };
 
@@ -426,7 +504,7 @@ export default function FinanceDashboardPage() {
         idx: i,
         dayName: DAY_LABELS[i],
         dayNameId: DAY_LABELS_ID[i],
-        dateFormatted: `${dayDate.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][dayDate.getMonth()]}`,
+        dateFormatted: `${dayDate.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][dayDate.getMonth()]}`,
         isToday: i === currentDayOfWeek,
         isPastOrToday: i <= currentDayOfWeek,
         income,
@@ -704,6 +782,36 @@ export default function FinanceDashboardPage() {
       avgExpense,
     };
   }, [data?.transactions, selectedYear]);
+
+  // ============================================================
+  // DATA UTANG & PIUTANG (TETAP AKTIF LINTAS TAHUN SAMPAI LUNAS)
+  // ============================================================
+  const allDebts = data?.debts?.items || [];
+
+  // Sesuai instruksi user, item yang 'Belum Lunas' TIDAK difilter tahun (selalu tampil sampai lunas)
+  const activeDebts = useMemo(() => {
+    return allDebts.filter((d) => d.status === 'Belum Lunas');
+  }, [allDebts]);
+
+  const settledDebts = useMemo(() => {
+    return allDebts.filter((d) => d.status === 'Lunas');
+  }, [allDebts]);
+
+  const activePiutang = useMemo(() => {
+    return activeDebts.filter((d) => d.type === 'Piutang');
+  }, [activeDebts]);
+
+  const activeUtang = useMemo(() => {
+    return activeDebts.filter((d) => d.type === 'Utang');
+  }, [activeDebts]);
+
+  const totalActivePiutang = useMemo(() => {
+    return activePiutang.reduce((sum, d) => sum + (d.remainingAmount || d.amount), 0);
+  }, [activePiutang]);
+
+  const totalActiveUtang = useMemo(() => {
+    return activeUtang.reduce((sum, d) => sum + (d.remainingAmount || d.amount), 0);
+  }, [activeUtang]);
 
   // Budget calculations (Bulanan & Harian)
   const monthlyBudgetAmount = data?.budget?.amount || 0;
@@ -1207,6 +1315,30 @@ export default function FinanceDashboardPage() {
                 <div className="crm-card-subtitle">Perbandingan pemasukan vs pengeluaran per bulan</div>
               </div>
               <div className="crm-chart-header-actions">
+                {/* Dropdown Filter Bulan 1 - 12 */}
+                <div className="crm-month-select-wrap">
+                  <select
+                    className="crm-month-select"
+                    value={selectedMonthPill}
+                    onChange={(e) => setSelectedMonthPill(e.target.value)}
+                    aria-label="Pilih Bulan"
+                  >
+                    <option value="all">🗓️ Semua Bulan (1-12)</option>
+                    {MONTH_NAMES_ID.map((m) => {
+                      const hasData = (data?.monthlyComparison?.months || []).some(
+                        (item) =>
+                          (selectedYear === 'Semua' || item.month.startsWith(`${selectedYear}-`)) &&
+                          item.month.endsWith(`-${m.num}`)
+                      );
+                      return (
+                        <option key={m.num} value={m.num}>
+                          {hasData ? '● ' : ''}Bulan {parseInt(m.num, 10)} — {m.full}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
                 <div className="crm-chart-legend">
                   <span className="crm-legend-item">
                     <span className="crm-legend-dot blue" /> Masuk
@@ -1215,36 +1347,6 @@ export default function FinanceDashboardPage() {
                     <span className="crm-legend-dot indigo" /> Keluar
                   </span>
                 </div>
-              </div>
-            </div>
-
-            {/* Filter Bulan 1 - 12 (Horizontal Scrollable Pills) */}
-            <div className="crm-month-filter-wrap">
-              <div className="crm-month-filter-scroll">
-                <button
-                  className={`crm-month-filter-pill ${selectedMonthPill === 'all' ? 'active' : ''}`}
-                  onClick={() => setSelectedMonthPill('all')}
-                >
-                  Semua (1-12)
-                </button>
-                {MONTH_NAMES_ID.map((m) => {
-                  const hasData = (data?.monthlyComparison?.months || []).some(
-                    (item) =>
-                      (selectedYear === 'Semua' || item.month.startsWith(`${selectedYear}-`)) &&
-                      item.month.endsWith(`-${m.num}`)
-                  );
-                  return (
-                    <button
-                      key={m.num}
-                      className={`crm-month-filter-pill ${selectedMonthPill === m.num ? 'active' : ''} ${hasData ? 'has-data' : ''}`}
-                      onClick={() => setSelectedMonthPill(m.num)}
-                      title={`${m.full} ${selectedYear}`}
-                    >
-                      <span>{parseInt(m.num, 10)} {m.short}</span>
-                      {hasData && <span className="crm-month-dot" />}
-                    </button>
-                  );
-                })}
               </div>
             </div>
 
@@ -1607,6 +1709,294 @@ export default function FinanceDashboardPage() {
                   <div className="crm-bm-sub">per bulan</div>
                 </div>
               </div>
+            </div>
+          )}
+        </section>
+
+        {/* 5B. UTANG & PIUTANG (TETAP TAMPIL LINTAS TAHUN SAMPAI LUNAS) */}
+        <section className="crm-card crm-debts-card">
+          <div className="crm-card-header">
+            <div>
+              <div className="crm-annual-header-tag">
+                <span className="crm-badge-tag" style={{ background: '#FEF3C7', color: '#B45309' }}>
+                  🤝 MANAJEMEN PINJAMAN
+                </span>
+                <span className="crm-annual-header-hint">Tetap Aktif Lintas Tahun Sampai Lunas</span>
+              </div>
+              <h2 className="crm-card-title">Catatan Utang & Piutang</h2>
+              <div className="crm-card-subtitle">
+                Uang kita di orang lain (Piutang) dan kewajiban bayar kita (Utang) yang tetap dipantau hingga lunas
+              </div>
+            </div>
+
+            <div className="crm-debt-header-actions">
+              <div className="crm-range-pills">
+                <button
+                  type="button"
+                  className={`crm-range-btn ${debtTab === 'active' ? 'active' : ''}`}
+                  onClick={() => setDebtTab('active')}
+                >
+                  🔴 Belum Lunas ({activeDebts.length})
+                </button>
+                <button
+                  type="button"
+                  className={`crm-range-btn ${debtTab === 'settled' ? 'active' : ''}`}
+                  onClick={() => setDebtTab('settled')}
+                >
+                  🟢 Riwayat Lunas ({settledDebts.length})
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className="crm-debt-add-toggle-btn"
+                onClick={() => setShowDebtForm(!showDebtForm)}
+              >
+                {showDebtForm ? '✕ Tutup Form' : '➕ Catat Baru'}
+              </button>
+            </div>
+          </div>
+
+          {/* Form Tambah Utang / Piutang */}
+          {showDebtForm && (
+            <form onSubmit={handleAddDebt} className="crm-debt-form">
+              <div className="crm-debt-form-type-row">
+                <button
+                  type="button"
+                  className={`crm-debt-type-pill ${debtFormType === 'Piutang' ? 'active piutang' : ''}`}
+                  onClick={() => setDebtFormType('Piutang')}
+                >
+                  🟢 Piutang (Uang Kita di Orang)
+                </button>
+                <button
+                  type="button"
+                  className={`crm-debt-type-pill ${debtFormType === 'Utang' ? 'active utang' : ''}`}
+                  onClick={() => setDebtFormType('Utang')}
+                >
+                  🔴 Utang (Kewajiban Bayar)
+                </button>
+              </div>
+
+              <div className="crm-debt-form-grid">
+                <div className="crm-debt-input-group">
+                  <label>Pihak / Nama Orang</label>
+                  <input
+                    type="text"
+                    placeholder="misal: Mamah, Kak Budi, Toko ABC"
+                    value={debtFormPerson}
+                    onChange={(e) => setDebtFormPerson(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="crm-debt-input-group">
+                  <label>Nominal (Rp)</label>
+                  <input
+                    type="text"
+                    placeholder="misal: 70000 atau 150000"
+                    value={debtFormAmount}
+                    onChange={(e) => setDebtFormAmount(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="crm-debt-input-group full">
+                  <label>Keterangan / Keperluan</label>
+                  <input
+                    type="text"
+                    placeholder="misal: pinjam buat arisan, beli barang, dll"
+                    value={debtFormDesc}
+                    onChange={(e) => setDebtFormDesc(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="crm-debt-form-actions">
+                <button
+                  type="submit"
+                  className="crm-debt-btn-submit"
+                  disabled={isSubmittingDebt}
+                >
+                  {isSubmittingDebt ? 'Menyimpan...' : `Simpan Catatan ${debtFormType}`}
+                </button>
+                <button
+                  type="button"
+                  className="crm-debt-btn-cancel"
+                  onClick={() => setShowDebtForm(false)}
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 1: BELUM LUNAS (DUAL COLUMN: PIUTANG SAYA vs UTANG SAYA) */}
+          {debtTab === 'active' && (
+            <div className="crm-debts-grid">
+              {/* Kolom 1: Piutang Saya (Tagihan / Uang Kita di Orang Lain) */}
+              <div className="crm-debt-col piutang">
+                <div className="crm-debt-col-header">
+                  <div className="crm-debt-col-title-wrap">
+                    <span className="crm-debt-col-icon">🤝</span>
+                    <div>
+                      <div className="crm-debt-col-title">Piutang Saya</div>
+                      <div className="crm-debt-col-sub">Uang kita yang dipinjam orang lain</div>
+                    </div>
+                  </div>
+                  <div className="crm-debt-col-total piutang">
+                    <span className="crm-debt-col-total-label">Total Tagihan:</span>
+                    <span className="crm-debt-col-total-val">{formatRupiah(totalActivePiutang)}</span>
+                  </div>
+                </div>
+
+                <div className="crm-debt-list">
+                  {activePiutang.length === 0 ? (
+                    <div className="crm-debt-empty-state">
+                      <span className="crm-debt-empty-icon">✨</span>
+                      <div>Tidak ada piutang aktif saat ini.</div>
+                    </div>
+                  ) : (
+                    activePiutang.map((d) => (
+                      <div key={d.id} className="crm-debt-item piutang">
+                        <div className="crm-debt-item-top">
+                          <div className="crm-debt-item-person">
+                            <span className="crm-debt-person-name">{d.person}</span>
+                            <span className="crm-debt-book-pill">{d.book || selectedBook}</span>
+                            <span className="crm-debt-status-pill unpaid">🔴 Belum Lunas</span>
+                          </div>
+                          <div className="crm-debt-item-amount piutang">
+                            {formatRupiah(d.remainingAmount || d.amount)}
+                          </div>
+                        </div>
+
+                        <div className="crm-debt-item-body">
+                          <div className="crm-debt-item-desc">
+                            {d.description && d.description !== '-' ? d.description : 'Tanpa keterangan'}
+                          </div>
+                          <div className="crm-debt-item-date">
+                            🗓️ Tanggal Pinjam: {d.date}
+                          </div>
+                        </div>
+
+                        <div className="crm-debt-item-footer">
+                          <button
+                            type="button"
+                            className="crm-debt-settle-btn piutang"
+                            onClick={() => handleSettleDebt(d.id, d.person, 'Piutang')}
+                          >
+                            ✓ Sudah Diterima / Lunasi
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Kolom 2: Utang Saya (Kewajiban Bayar) */}
+              <div className="crm-debt-col utang">
+                <div className="crm-debt-col-header">
+                  <div className="crm-debt-col-title-wrap">
+                    <span className="crm-debt-col-icon">💳</span>
+                    <div>
+                      <div className="crm-debt-col-title">Utang Saya</div>
+                      <div className="crm-debt-col-sub">Kewajiban uang yang harus kita bayar</div>
+                    </div>
+                  </div>
+                  <div className="crm-debt-col-total utang">
+                    <span className="crm-debt-col-total-label">Total Kewajiban:</span>
+                    <span className="crm-debt-col-total-val">{formatRupiah(totalActiveUtang)}</span>
+                  </div>
+                </div>
+
+                <div className="crm-debt-list">
+                  {activeUtang.length === 0 ? (
+                    <div className="crm-debt-empty-state">
+                      <span className="crm-debt-empty-icon">🎉</span>
+                      <div>Bebas utang! Tidak ada utang yang harus dibayar.</div>
+                    </div>
+                  ) : (
+                    activeUtang.map((d) => (
+                      <div key={d.id} className="crm-debt-item utang">
+                        <div className="crm-debt-item-top">
+                          <div className="crm-debt-item-person">
+                            <span className="crm-debt-person-name">{d.person}</span>
+                            <span className="crm-debt-book-pill">{d.book || selectedBook}</span>
+                            <span className="crm-debt-status-pill unpaid">🔴 Belum Lunas</span>
+                          </div>
+                          <div className="crm-debt-item-amount utang">
+                            {formatRupiah(d.remainingAmount || d.amount)}
+                          </div>
+                        </div>
+
+                        <div className="crm-debt-item-body">
+                          <div className="crm-debt-item-desc">
+                            {d.description && d.description !== '-' ? d.description : 'Tanpa keterangan'}
+                          </div>
+                          <div className="crm-debt-item-date">
+                            🗓️ Tanggal Pinjam: {d.date}
+                          </div>
+                        </div>
+
+                        <div className="crm-debt-item-footer">
+                          <button
+                            type="button"
+                            className="crm-debt-settle-btn utang"
+                            onClick={() => handleSettleDebt(d.id, d.person, 'Utang')}
+                          >
+                            ✓ Bayar Lunas
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: RIWAYAT PELUNASAN */}
+          {debtTab === 'settled' && (
+            <div className="crm-debt-settled-section">
+              {settledDebts.length === 0 ? (
+                <div className="crm-debt-empty-state">
+                  <span className="crm-debt-empty-icon">📋</span>
+                  <div>Belum ada riwayat transaksi utang atau piutang yang telah dilunasi.</div>
+                </div>
+              ) : (
+                <div className="crm-debt-settled-table-wrap">
+                  <table className="crm-debt-table">
+                    <thead>
+                      <tr>
+                        <th>Tipe</th>
+                        <th>Pihak</th>
+                        <th>Keterangan</th>
+                        <th>Nominal</th>
+                        <th>Tgl Pinjam</th>
+                        <th>Tgl Lunas</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {settledDebts.map((d) => (
+                        <tr key={d.id}>
+                          <td>
+                            <span className={`crm-debt-type-tag ${d.type.toLowerCase()}`}>
+                              {d.type === 'Piutang' ? '🟢 Piutang' : '🔴 Utang'}
+                            </span>
+                          </td>
+                          <td className="crm-debt-td-bold">{d.person}</td>
+                          <td>{d.description && d.description !== '-' ? d.description : '—'}</td>
+                          <td className="crm-debt-td-bold">{formatRupiah(d.amount)}</td>
+                          <td>{d.date}</td>
+                          <td>{d.settledDate || '—'}</td>
+                          <td>
+                            <span className="crm-debt-status-pill paid">🟢 LUNAS</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </section>

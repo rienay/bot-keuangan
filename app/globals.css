@@ -1646,9 +1646,458 @@ button:active, a:active {
 }
 
 /* ============================================================
+   UTANG & PIUTANG STYLES
+   ============================================================ */
+.crm-debts-card {
+  margin-top: 1.5rem;
+}
+
+.crm-debt-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.crm-debt-add-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #6366F1, #4F46E5);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+}
+
+.crm-debt-add-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.35);
+}
+
+/* Form Catat Utang/Piutang */
+.crm-debt-form {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.crm-debt-form-type-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.crm-debt-type-pill {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #64748B;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.crm-debt-type-pill.active.piutang {
+  background: #ECFDF5;
+  border-color: #10B981;
+  color: #047857;
+}
+
+.crm-debt-type-pill.active.utang {
+  background: #FFF1F2;
+  border-color: #F43F5E;
+  color: #BE123C;
+}
+
+.crm-debt-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.crm-debt-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.crm-debt-input-group.full {
+  grid-column: 1 / -1;
+}
+
+.crm-debt-input-group label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.crm-debt-input-group input {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #1E293B;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.crm-debt-input-group input:focus {
+  border-color: #6366F1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.crm-debt-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.crm-debt-btn-submit {
+  padding: 0.45rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: #10B981;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.crm-debt-btn-submit:hover {
+  background: #059669;
+}
+
+.crm-debt-btn-cancel {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #E2E8F0;
+  color: #475569;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Debts Grid */
+.crm-debts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.crm-debt-col {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.crm-debt-col.piutang {
+  border-top: 4px solid #10B981;
+}
+
+.crm-debt-col.utang {
+  border-top: 4px solid #F43F5E;
+}
+
+.crm-debt-col-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.crm-debt-col-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.crm-debt-col-icon {
+  font-size: 1.4rem;
+}
+
+.crm-debt-col-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #1E293B;
+}
+
+.crm-debt-col-sub {
+  font-size: 0.68rem;
+  color: #64748B;
+}
+
+.crm-debt-col-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.crm-debt-col-total-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.crm-debt-col-total-val {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.crm-debt-col-total.piutang .crm-debt-col-total-val {
+  color: #059669;
+}
+
+.crm-debt-col-total.utang .crm-debt-col-total-val {
+  color: #E11D48;
+}
+
+.crm-debt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.crm-debt-item {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.crm-debt-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+}
+
+.crm-debt-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.crm-debt-item-person {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.crm-debt-person-name {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+.crm-debt-book-pill {
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: #EEF2FF;
+  color: #4F46E5;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.crm-debt-status-pill {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.12rem 0.4rem;
+  border-radius: var(--radius-pill);
+}
+
+.crm-debt-status-pill.unpaid {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.crm-debt-status-pill.paid {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.crm-debt-item-amount {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.crm-debt-item-amount.piutang {
+  color: #059669;
+}
+
+.crm-debt-item-amount.utang {
+  color: #E11D48;
+}
+
+.crm-debt-item-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: #64748B;
+}
+
+.crm-debt-item-desc {
+  font-style: italic;
+  color: #334155;
+  font-weight: 500;
+}
+
+.crm-debt-item-date {
+  font-size: 0.68rem;
+  color: #94A3B8;
+}
+
+.crm-debt-item-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.2rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed #F1F5F9;
+}
+
+.crm-debt-settle-btn {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.crm-debt-settle-btn.piutang {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.crm-debt-settle-btn.piutang:hover {
+  background: #10B981;
+  color: #FFFFFF;
+}
+
+.crm-debt-settle-btn.utang {
+  background: #FFE4E6;
+  color: #9F1239;
+}
+
+.crm-debt-settle-btn.utang:hover {
+  background: #F43F5E;
+  color: #FFFFFF;
+}
+
+.crm-debt-empty-state {
+  text-align: center;
+  padding: 1.75rem 1rem;
+  color: #64748B;
+  font-size: 0.8rem;
+  background: #FFFFFF;
+  border-radius: 8px;
+  border: 1px dashed #CBD5E1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.crm-debt-empty-icon {
+  font-size: 1.4rem;
+}
+
+/* Riwayat Pelunasan Table */
+.crm-debt-settled-section {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.crm-debt-settled-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.crm-debt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.crm-debt-table th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  background: #F8FAFC;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.7rem;
+  border-bottom: 1px solid #E2E8F0;
+  white-space: nowrap;
+}
+
+.crm-debt-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #F1F5F9;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.crm-debt-td-bold {
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.crm-debt-type-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.crm-debt-type-tag.piutang {
+  background: #ECFDF5;
+  color: #047857;
+}
+
+.crm-debt-type-tag.utang {
+  background: #FFF1F2;
+  color: #BE123C;
+}
+
+/* ============================================================
    RESPONSIVE (Mobile & Tablet)
    ============================================================ */
 @media (max-width: 960px) {
+  .crm-debts-grid {
+    grid-template-columns: 1fr;
+  }
   .crm-daily-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
@@ -1880,5 +2329,22 @@ button:active, a:active {
   }
   .crm-annual-amount {
     font-size: 0.88rem;
+  }
+
+  /* 9. Mobile Utang & Piutang */
+  .crm-debt-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .crm-debt-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .crm-debt-item-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .crm-debt-item-amount {
+    font-size: 1.05rem;
   }
 }

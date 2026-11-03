@@ -17,9 +17,14 @@ import {
   MonthlyComparisonReport,
   YearSummaryReport,
   MonthBreakdownItem,
+  DebtItem,
+  DebtType,
+  DebtStatus,
+  DebtsSummary,
 } from './types';
 
 export const DEFAULT_BOOK_NAME = 'Tabungan';
+export const DEBT_SHEET_NAME = '_Debts';
 
 const SHEET_COLUMNS = [
   'Tanggal',
@@ -1292,6 +1297,7 @@ export async function getAllTransactionsForWeb(
   const monthlyComparison = buildMonthlyComparison(allItems);
   const activeBookForBudget = isAll ? DEFAULT_BOOK_NAME : (books.find((b) => b.toLowerCase() === normalizedTarget) || DEFAULT_BOOK_NAME);
   const budget = await getBudgetInfo(activeBookForBudget);
+  const debts = await getDebtsSummary(isAll ? undefined : normalizedTarget);
 
   const data: WebFinanceData = {
     books,
@@ -1308,6 +1314,7 @@ export async function getAllTransactionsForWeb(
       walletBalances,
     },
     budget,
+    debts,
     monthlyComparison,
     lastUpdated: nowJakarta,
   };
@@ -2417,4 +2424,333 @@ export async function checkBudgetThresholdAlert(
   }
 
   return { alertType, alertMessage, budgetInfo };
+}
+
+// ============================================================
+// SISTEM UTANG & PIUTANG (DEBTS & RECEIVABLES)
+// ============================================================
+
+const DEBT_COLUMNS = [
+  'ID',
+  'Buku',
+  'Tanggal',
+  'Tipe',
+  'Pihak',
+  'Nominal',
+  'Sisa',
+  'Status',
+  'Keterangan',
+  'Tanggal Lunas',
+  'Dompet',
+  'Waktu Input',
+];
+
+async function ensureDebtSheet(sheets: any, spreadsheetId: string) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const exists = meta.data.sheets?.some(
+      (s: any) => s.properties?.title?.toLowerCase() === DEBT_SHEET_NAME.toLowerCase()
+    );
+    if (!exists) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: DEBT_SHEET_NAME,
+                  hidden: false,
+                },
+              },
+            },
+          ],
+        },
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${DEBT_SHEET_NAME}'!A1:L1`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [DEBT_COLUMNS],
+        },
+      });
+
+      // Auto-seed data piutang "dipinjam mamah 70rb" yang sudah ada di SulisNie
+      try {
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: `'${DEBT_SHEET_NAME}'!A:L`,
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: {
+            values: [
+              [
+                `DEBT-INIT-1`,
+                'SulisNie',
+                '2026-10-31',
+                'Piutang',
+                'Mamah',
+                '70000',
+                '70000',
+                'Belum Lunas',
+                'dipinjam mamah',
+                '-',
+                'Cash',
+                todayStr,
+              ],
+            ],
+          },
+        });
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.warn('Gagal ensureDebtSheet:', err);
+  }
+}
+
+export async function addDebtItem(params: {
+  book: string;
+  date?: string;
+  type: DebtType;
+  person: string;
+  amount: number;
+  description?: string;
+  wallet?: string;
+}): Promise<DebtItem> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+  await ensureDebtSheet(sheets, spreadsheetId);
+
+  const cleanBook = sanitizeBookName(params.book) || DEFAULT_BOOK_NAME;
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+  const date = params.date || todayStr;
+  const nowJakarta = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date());
+
+  const id = `DEBT-${Date.now()}`;
+  const amount = Math.round(params.amount);
+  const cleanPerson = params.person.trim();
+  const cleanDesc = cleanDescription(params.description || '-');
+  const wallet = params.wallet || 'Cash';
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `'${DEBT_SHEET_NAME}'!A:L`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: {
+      values: [
+        [
+          id,
+          cleanBook,
+          date,
+          params.type,
+          cleanPerson,
+          String(amount),
+          String(amount),
+          'Belum Lunas',
+          cleanDesc,
+          '-',
+          wallet,
+          nowJakarta,
+        ],
+      ],
+    },
+  });
+
+  webFinanceCache.clear();
+
+  return {
+    id,
+    book: cleanBook,
+    date,
+    type: params.type,
+    person: cleanPerson,
+    amount,
+    remainingAmount: amount,
+    status: 'Belum Lunas',
+    description: cleanDesc,
+    wallet,
+    createdAt: nowJakarta,
+  };
+}
+
+export async function getDebts(bookName?: string): Promise<DebtItem[]> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+  await ensureDebtSheet(sheets, spreadsheetId);
+
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${DEBT_SHEET_NAME}'!A2:L`,
+    });
+    const rows = res.data.values || [];
+    const items: DebtItem[] = [];
+
+    const normBook = bookName && bookName !== 'Semua' ? bookName.trim().toLowerCase() : '';
+
+    for (const r of rows) {
+      const [id, book, date, type, person, nominalRaw, sisaRaw, status, desc, settledDate, wallet, createdAt] = r;
+      if (!id || !type || !nominalRaw) continue;
+
+      const itemBook = String(book || '').trim();
+      if (normBook && itemBook.toLowerCase() !== normBook) {
+        continue;
+      }
+
+      const amount = parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
+      const remainingAmount = sisaRaw !== undefined && sisaRaw !== ''
+        ? parseFloat(String(sisaRaw).replace(/[^0-9.-]+/g, '')) || 0
+        : (String(status).toLowerCase().includes('lunas') ? 0 : amount);
+
+      const isLunas = String(status || '').trim().toLowerCase() === 'lunas' || remainingAmount <= 0;
+
+      items.push({
+        id: String(id).trim(),
+        book: itemBook || DEFAULT_BOOK_NAME,
+        date: String(date || '').trim(),
+        type: String(type).trim() as DebtType,
+        person: String(person || 'Tanpa Nama').trim(),
+        amount,
+        remainingAmount: isLunas ? 0 : remainingAmount,
+        status: isLunas ? 'Lunas' : 'Belum Lunas',
+        description: cleanDescription(String(desc || '-')),
+        settledDate: settledDate && settledDate !== '-' ? String(settledDate).trim() : undefined,
+        wallet: wallet ? String(wallet).trim() : undefined,
+        createdAt: createdAt ? String(createdAt).trim() : undefined,
+      });
+    }
+
+    // Urutkan tanggal terbaru di atas
+    return items.sort((a, b) => b.date.localeCompare(a.date));
+  } catch (err) {
+    console.warn('Gagal getDebts:', err);
+    return [];
+  }
+}
+
+export async function settleDebt(debtId: string, settleAmount?: number): Promise<DebtItem | null> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+  await ensureDebtSheet(sheets, spreadsheetId);
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${DEBT_SHEET_NAME}'!A2:L`,
+  });
+  const rows = res.data.values || [];
+  let foundRowIdx = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === debtId.trim()) {
+      foundRowIdx = i + 2; // header baris 1
+      break;
+    }
+  }
+
+  if (foundRowIdx === -1) return null;
+
+  const targetRow = rows[foundRowIdx - 2];
+  const totalAmount = parseFloat(String(targetRow[5]).replace(/[^0-9.-]+/g, '')) || 0;
+  const currentRemaining = targetRow[6] !== undefined && targetRow[6] !== ''
+    ? parseFloat(String(targetRow[6]).replace(/[^0-9.-]+/g, '')) || 0
+    : totalAmount;
+
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+
+  let newRemaining = 0;
+  let newStatus: DebtStatus = 'Lunas';
+  let settledDate = todayStr;
+
+  if (settleAmount !== undefined && settleAmount > 0 && settleAmount < currentRemaining) {
+    newRemaining = currentRemaining - settleAmount;
+    newStatus = 'Belum Lunas';
+    settledDate = '-';
+  }
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${DEBT_SHEET_NAME}'!G${foundRowIdx}:J${foundRowIdx}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[String(newRemaining), newStatus, targetRow[8] || '-', settledDate]],
+    },
+  });
+
+  webFinanceCache.clear();
+
+  return {
+    id: debtId,
+    book: String(targetRow[1]),
+    date: String(targetRow[2]),
+    type: String(targetRow[3]) as DebtType,
+    person: String(targetRow[4]),
+    amount: totalAmount,
+    remainingAmount: newRemaining,
+    status: newStatus,
+    description: cleanDescription(String(targetRow[8] || '-')),
+    settledDate: settledDate !== '-' ? settledDate : undefined,
+  };
+}
+
+export async function deleteDebt(debtId: string): Promise<boolean> {
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = getSpreadsheetId();
+  await ensureDebtSheet(sheets, spreadsheetId);
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${DEBT_SHEET_NAME}'!A2:L`,
+  });
+  const rows = res.data.values || [];
+  let foundRowIdx = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === debtId.trim()) {
+      foundRowIdx = i + 2;
+      break;
+    }
+  }
+
+  if (foundRowIdx === -1) return false;
+
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `'${DEBT_SHEET_NAME}'!A${foundRowIdx}:L${foundRowIdx}`,
+  });
+
+  webFinanceCache.clear();
+  return true;
+}
+
+export async function getDebtsSummary(bookName?: string): Promise<DebtsSummary> {
+  const items = await getDebts(bookName);
+  let totalUtangBelumLunas = 0;
+  let totalPiutangBelumLunas = 0;
+
+  for (const it of items) {
+    if (it.status === 'Belum Lunas') {
+      if (it.type === 'Utang') {
+        totalUtangBelumLunas += it.remainingAmount;
+      } else if (it.type === 'Piutang') {
+        totalPiutangBelumLunas += it.remainingAmount;
+      }
+    }
+  }
+
+  return {
+    totalUtangBelumLunas,
+    totalPiutangBelumLunas,
+    items,
+  };
 }

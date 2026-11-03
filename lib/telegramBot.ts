@@ -33,10 +33,15 @@ import {
   getBudgetInfo,
   checkBudgetThresholdAlert,
   cleanDescription,
+  getDebtsSummary,
+  addDebtItem,
+  settleDebt,
+  getDebts,
+  deleteDebt,
 } from './googleSheets';
 import { uploadReceiptToDrive, getDriveConfigStatus, testDriveUpload } from './googleDrive';
 import { formatPrivateKey, getGoogleAuth } from './googleAuth';
-import { ExpenseDetail } from './types';
+import { ExpenseDetail, DebtItem, DebtType, DebtStatus, DebtsSummary } from './types';
 import {
   checkUserAccess,
   isUserAdmin,
@@ -102,6 +107,13 @@ interface WalletInputState {
   rowNumber?: number;
 }
 const walletInputStates = new Map<number, WalletInputState>();
+
+// State untuk percakapan input Utang / Piutang
+interface DebtPromptState {
+  type: DebtType;
+  book: string;
+}
+const debtPromptStates = new Map<number, DebtPromptState>();
 
 function renderProgressBar(percentage: number): string {
   const clamped = Math.max(0, Math.min(100, percentage));
@@ -193,6 +205,9 @@ async function syncBotCommands(api: any) {
       { command: 'hapusbuku', description: 'Hapus pos tabungan' },
       { command: 'budget', description: 'Atur budget belanja bulanan' },
       { command: 'badgetharian', description: 'Atur budget belanja harian' },
+      { command: 'utang', description: 'Cek catatan utang & piutang' },
+      { command: 'catatpiutang', description: 'Catat piutang (uang di orang)' },
+      { command: 'catatutang', description: 'Catat utang (kewajiban bayar)' },
       { command: 'dompet', description: 'Cek saldo Bank, E-Wallet & Cash' },
       { command: 'pindahuang', description: 'Pindah uang antar dompet' },
       { command: 'pindahsaldo', description: 'Pindah saldo antar tabungan' },
@@ -397,6 +412,10 @@ bot.command(['start', 'help'], async (ctx) => {
       `• /pindahuang — Pindah uang antar akun/dompet\n` +
       `• /budget <Nominal> — Atur batas pengeluaran bulanan\n` +
       `• /badgetharian <Nominal> — Atur batas pengeluaran harian\n\n` +
+      `🤝 *Utang & Piutang (Kewajiban & Tagihan):*\n` +
+      `• /utang atau /piutang — Cek daftar utang & piutang (aktif sampai lunas)\n` +
+      `• /catatpiutang <Nama> <Nominal> [Ket] — Catat uang kita dipinjam orang\n` +
+      `• /catatutang <Nama> <Nominal> [Ket] — Catat utang kita ke orang lain\n\n` +
       adminMenuText +
       `📚 *Pos Tabungan Tersedia:*\n` +
       `${booksListText}\n` +
@@ -2115,6 +2134,306 @@ bot.callbackQuery('cmd_budget_harian', async (ctx) => {
   await handleDailyBudgetCommand(ctx, '');
 });
 
+// ============================================================
+// SISTEM UTANG & PIUTANG (TELEGRAM BOT COMMANDS & ACTIONS)
+// ============================================================
+
+function parseDebtArgs(text: string): { person: string; amount: number; description: string } | null {
+  const clean = text.trim();
+  if (!clean) return null;
+
+  const tokens = clean.split(/\s+/);
+  if (tokens.length < 2) return null;
+
+  let amountIdx = -1;
+  let parsedAmount: number | null = null;
+
+  for (let i = 1; i < tokens.length; i++) {
+    const amt = parseNominalInput(tokens[i]);
+    if (amt !== null && amt > 0) {
+      amountIdx = i;
+      parsedAmount = amt;
+      break;
+    }
+  }
+
+  if (amountIdx === -1 || parsedAmount === null) {
+    return null;
+  }
+
+  const person = tokens.slice(0, amountIdx).join(' ').trim();
+  const desc = tokens.slice(amountIdx + 1).join(' ').trim() || '-';
+
+  return {
+    person,
+    amount: parsedAmount,
+    description: desc,
+  };
+}
+
+async function sendDebtsReport(ctx: any, targetBook?: string, editMessage: boolean = false) {
+  const chatId = ctx.chat?.id;
+  const activeBook = targetBook || (chatId ? await getUserActiveBook(chatId) : DEFAULT_BOOK_NAME);
+  const debts = await getDebtsSummary(activeBook === 'Semua' ? undefined : activeBook);
+
+  const activePiutang = debts.items.filter((d) => d.type === 'Piutang' && d.status === 'Belum Lunas');
+  const activeUtang = debts.items.filter((d) => d.type === 'Utang' && d.status === 'Belum Lunas');
+
+  let piutangList = '';
+  if (activePiutang.length === 0) {
+    piutangList = '• _Tidak ada piutang aktif (uang di orang lain kosong)_\n';
+  } else {
+    for (const p of activePiutang) {
+      const descPart = p.description && p.description !== '-' ? ` — _${cleanDescription(p.description)}_` : '';
+      piutangList += `• *${p.person}*: *${formatRupiah(p.remainingAmount)}* (${p.date})${descPart}\n`;
+    }
+  }
+
+  let utangList = '';
+  if (activeUtang.length === 0) {
+    utangList = '• _Tidak ada utang aktif (bebas utang! 🎉)_\n';
+  } else {
+    for (const u of activeUtang) {
+      const descPart = u.description && u.description !== '-' ? ` — _${cleanDescription(u.description)}_` : '';
+      utangList += `• *${u.person}*: *${formatRupiah(u.remainingAmount)}* (${u.date})${descPart}\n`;
+    }
+  }
+
+  const webUrl = `https://bot-keuangan-ebon.vercel.app/?buku=${encodeURIComponent(activeBook)}`;
+
+  const text =
+    `🤝 *Daftar Catatan Utang & Piutang*\n` +
+    `📖 *Pos Tabungan:* \`${activeBook}\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🟢 *Piutang Saya (Uang Kita di Orang):*\n` +
+    `💰 Total: *${formatRupiah(debts.totalPiutangBelumLunas)}*\n` +
+    `${piutangList}\n` +
+    `🔴 *Utang Saya (Kewajiban Bayar):*\n` +
+    `💸 Total: *${formatRupiah(debts.totalUtangBelumLunas)}*\n` +
+    `${utangList}\n` +
+    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `💡 _Utang & Piutang belum lunas akan tetap muncul di Web & Bot biarpun berganti tahun sampai ditandai Lunas._`;
+
+  const kb = new InlineKeyboard();
+  kb.text('➕ Catat Piutang', `debt_prompt:Piutang:${activeBook}`)
+    .text('➕ Catat Utang', `debt_prompt:Utang:${activeBook}`)
+    .row();
+
+  const totalActive = activePiutang.length + activeUtang.length;
+  if (totalActive > 0) {
+    kb.text('✓ Lunasi / Bayar Selesai', `debt_settle_pick:${activeBook}`).row();
+  }
+
+  kb.url('🌐 Buka Web Dashboard', webUrl)
+    .text('🔄 Refresh', `debt_refresh:${activeBook}`);
+
+  if (editMessage && ctx.callbackQuery?.message) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: kb });
+      return;
+    } catch (_) {}
+  }
+
+  await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: kb });
+}
+
+// BINDING COMMANDS UTANG & PIUTANG
+bot.command(['utang', 'piutang', 'hutang'], async (ctx) => {
+  const chatId = ctx.chat.id;
+  const activeBook = await getUserActiveBook(chatId);
+  await sendDebtsReport(ctx, activeBook);
+});
+
+bot.command(['catatpiutang', 'tambahpiutang'], async (ctx) => {
+  const chatId = ctx.chat.id;
+  const activeBook = await getUserActiveBook(chatId);
+  const text = ctx.message?.text || '';
+  const args = text.replace(/^\/(catatpiutang|tambahpiutang)(?:@\w+)?/i, '').trim();
+
+  if (!args) {
+    debtPromptStates.set(chatId, { type: 'Piutang', book: activeBook });
+    await ctx.reply(
+      `📝 *Catat Piutang (Uang Kita di Orang)*\n` +
+        `📖 *Pos Tabungan:* \`${activeBook}\`\n\n` +
+        `Silakan ketik dengan format:\n` +
+        `*<Nama Pihak> <Nominal> [Keterangan]*\n\n` +
+        `Contoh:\n\`Mamah 70rb dipinjam mamah\`\n\`Budi 50000 makan bareng\`\n\n` +
+        `Ketik *batal* untuk membatalkan.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  const parsed = parseDebtArgs(args);
+  if (!parsed) {
+    await ctx.reply(
+      '⚠️ Format salah. Contoh: `/catatpiutang Mamah 70rb dipinjam mamah`',
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  try {
+    const item = await addDebtItem({
+      book: activeBook,
+      type: 'Piutang',
+      person: parsed.person,
+      amount: parsed.amount,
+      description: parsed.description,
+    });
+
+    await ctx.reply(
+      `✅ *Piutang Berhasil Dicatat!*\n\n` +
+        `👤 *Pihak:* *${item.person}*\n` +
+        `💰 *Nominal:* *${formatRupiah(item.amount)}*\n` +
+        `📝 *Keterangan:* ${cleanDescription(item.description)}\n` +
+        `📖 *Buku Tabungan:* \`${item.book}\`\n` +
+        `📌 *Status:* 🔴 Belum Lunas\n\n` +
+        `_Data piutang ini akan selalu muncul di Web Dashboard & Bot sampai ditandai Lunas!_`,
+      { parse_mode: 'Markdown' }
+    );
+    await sendDebtsReport(ctx, activeBook);
+  } catch (err: any) {
+    await ctx.reply('❌ Gagal mencatat piutang: ' + err.message);
+  }
+});
+
+bot.command(['catatutang', 'tambahutang', 'catathutang'], async (ctx) => {
+  const chatId = ctx.chat.id;
+  const activeBook = await getUserActiveBook(chatId);
+  const text = ctx.message?.text || '';
+  const args = text.replace(/^\/(catatutang|tambahutang|catathutang)(?:@\w+)?/i, '').trim();
+
+  if (!args) {
+    debtPromptStates.set(chatId, { type: 'Utang', book: activeBook });
+    await ctx.reply(
+      `📝 *Catat Utang (Kewajiban Bayar)*\n` +
+        `📖 *Pos Tabungan:* \`${activeBook}\`\n\n` +
+        `Silakan ketik dengan format:\n` +
+        `*<Nama Pihak> <Nominal> [Keterangan]*\n\n` +
+        `Contoh:\n\`Anto 100rb beli tiket\`\n\`Pak RT 50rb iuran\`\n\n` +
+        `Ketik *batal* untuk membatalkan.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  const parsed = parseDebtArgs(args);
+  if (!parsed) {
+    await ctx.reply(
+      '⚠️ Format salah. Contoh: `/catatutang Anto 100rb beli tiket`',
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  try {
+    const item = await addDebtItem({
+      book: activeBook,
+      type: 'Utang',
+      person: parsed.person,
+      amount: parsed.amount,
+      description: parsed.description,
+    });
+
+    await ctx.reply(
+      `✅ *Utang Berhasil Dicatat!*\n\n` +
+        `👤 *Pihak:* *${item.person}*\n` +
+        `💰 *Nominal:* *${formatRupiah(item.amount)}*\n` +
+        `📝 *Keterangan:* ${cleanDescription(item.description)}\n` +
+        `📖 *Buku Tabungan:* \`${item.book}\`\n` +
+        `📌 *Status:* 🔴 Belum Lunas\n\n` +
+        `_Data utang ini akan selalu muncul di Web Dashboard & Bot sampai ditandai Lunas!_`,
+      { parse_mode: 'Markdown' }
+    );
+    await sendDebtsReport(ctx, activeBook);
+  } catch (err: any) {
+    await ctx.reply('❌ Gagal mencatat utang: ' + err.message);
+  }
+});
+
+// CALLBACK QUERIES UTANG & PIUTANG
+bot.callbackQuery(/^debt_prompt:(Piutang|Utang):(.+)$/, async (ctx) => {
+  const type = ctx.match[1] as DebtType;
+  const book = ctx.match[2];
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  debtPromptStates.set(chatId, { type, book });
+  await ctx.answerCallbackQuery();
+
+  const title = type === 'Piutang' ? '🟢 Catat Piutang (Uang Kita di Orang)' : '🔴 Catat Utang (Kewajiban Bayar)';
+  const contoh =
+    type === 'Piutang'
+      ? '`Mamah 70rb dipinjam mamah` atau `Budi 50000 traktiran`'
+      : '`Anto 100rb beli tiket` atau `Pak RT 50rb iuran`';
+
+  await ctx.reply(
+    `📝 *${title}*\n` +
+      `📖 *Pos Tabungan:* \`${book}\`\n\n` +
+      `Silakan ketik dengan format:\n` +
+      `*<Nama Pihak> <Nominal> [Keterangan]*\n\n` +
+      `Contoh:\n${contoh}\n\n` +
+      `Ketik *batal* jika ingin membatalkan.`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+bot.callbackQuery(/^debt_refresh:(.+)$/, async (ctx) => {
+  const book = ctx.match[1];
+  await ctx.answerCallbackQuery('Memperbarui data utang/piutang...');
+  await sendDebtsReport(ctx, book, true);
+});
+
+bot.callbackQuery(/^debt_settle_pick:(.+)$/, async (ctx) => {
+  const targetBook = ctx.match[1];
+  await ctx.answerCallbackQuery();
+
+  const debts = await getDebtsSummary(targetBook === 'Semua' ? undefined : targetBook);
+  const activeItems = debts.items.filter((d) => d.status === 'Belum Lunas');
+
+  if (activeItems.length === 0) {
+    await ctx.reply('🎉 Semua utang & piutang sudah lunas!');
+    return;
+  }
+
+  const kb = new InlineKeyboard();
+  for (const item of activeItems) {
+    const icon = item.type === 'Piutang' ? '🟢' : '🔴';
+    kb.text(`${icon} ${item.person} (${formatRupiah(item.remainingAmount)})`, `debt_do_settle:${item.id}:${targetBook}`).row();
+  }
+  kb.text('🔙 Kembali', `debt_refresh:${targetBook}`);
+
+  await ctx.editMessageText(
+    `✅ *Pilih Utang / Piutang yang Sudah Lunas:*\n\n` +
+      `Klik salah satu transaksi di bawah untuk menandainya sebagai *LUNAS*:`,
+    { parse_mode: 'Markdown', reply_markup: kb }
+  );
+});
+
+bot.callbackQuery(/^debt_do_settle:([^:]+):(.+)$/, async (ctx) => {
+  const debtId = ctx.match[1];
+  const targetBook = ctx.match[2];
+  await ctx.answerCallbackQuery('Memproses pelunasan...');
+
+  const settled = await settleDebt(debtId);
+  if (settled) {
+    await ctx.reply(
+      `🎉 *Berhasil Dilunasi!*\n\n` +
+        `📌 *Tipe:* ${settled.type}\n` +
+        `👤 *Pihak:* *${settled.person}*\n` +
+        `💰 *Nominal:* ${formatRupiah(settled.amount)}\n` +
+        `✅ *Status:* *LUNAS*\n` +
+        `📅 *Tanggal Pelunasan:* ${settled.settledDate || 'Hari ini'}`,
+      { parse_mode: 'Markdown' }
+    );
+  } else {
+    await ctx.reply('❌ Transaksi utang/piutang tidak ditemukan atau sudah lunas.');
+  }
+
+  await sendDebtsReport(ctx, targetBook, false);
+});
+
 // Command: /debug
 bot.command('debug', async (ctx) => {
   const rawKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -3234,6 +3553,58 @@ bot.on('message:text', async (ctx) => {
       return;
     } catch (err: any) {
       await ctx.reply('❌ Gagal menyimpan budget harian: ' + err.message);
+      return;
+    }
+  }
+
+  // === 1d3. Cek apakah pengguna sedang dalam proses input utang/piutang ===
+  const debtState = debtPromptStates.get(chatId);
+  if (debtState) {
+    if (text.toLowerCase() === 'batal' || text === '/batal') {
+      debtPromptStates.delete(chatId);
+      await ctx.reply(`❌ Pencatatan ${debtState.type.toLowerCase()} dibatalkan.`);
+      return;
+    }
+
+    const parsed = parseDebtArgs(text);
+    if (!parsed) {
+      await ctx.reply(
+        `⚠️ Format belum sesuai.\n` +
+          `Silakan ketik: *<Nama Pihak> <Nominal> [Keterangan]*\n` +
+          `Contoh: \`Mamah 70rb dipinjam mamah\`\n` +
+          `Atau ketik *batal* untuk membatalkan.`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    debtPromptStates.delete(chatId);
+    try {
+      await ctx.reply(`⏳ Mencatat ${debtState.type.toLowerCase()}...`);
+      const item = await addDebtItem({
+        book: debtState.book,
+        type: debtState.type,
+        person: parsed.person,
+        amount: parsed.amount,
+        description: parsed.description,
+      });
+
+      const icon = debtState.type === 'Piutang' ? '🟢' : '🔴';
+      await ctx.reply(
+        `✅ *${debtState.type} Berhasil Dicatat!*\n\n` +
+          `👤 *Pihak:* *${item.person}*\n` +
+          `💰 *Nominal:* *${formatRupiah(item.amount)}*\n` +
+          `📝 *Keterangan:* ${cleanDescription(item.description)}\n` +
+          `📖 *Buku Tabungan:* \`${item.book}\`\n` +
+          `📌 *Status:* ${icon} ${item.status}\n\n` +
+          `_Data ${debtState.type.toLowerCase()} ini akan selalu muncul di Web Dashboard & Bot sampai ditandai Lunas!_`,
+        { parse_mode: 'Markdown' }
+      );
+
+      await sendDebtsReport(ctx, debtState.book, false);
+      return;
+    } catch (err: any) {
+      await ctx.reply(`❌ Gagal mencatat ${debtState.type.toLowerCase()}: ` + err.message);
       return;
     }
   }

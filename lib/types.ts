@@ -191,6 +191,30 @@ export interface MonthlyComparisonReport {
   averageMonthlyExpense: number;
 }
 
+export type DebtType = 'Utang' | 'Piutang';
+export type DebtStatus = 'Belum Lunas' | 'Lunas';
+
+export interface DebtItem {
+  id: string;
+  book: string;
+  date: string; // YYYY-MM-DD
+  type: DebtType; // 'Utang' (kita pinjam/harus bayar) | 'Piutang' (orang pinjam/kita tagih)
+  person: string; // Nama orang/pihak (e.g. 'Mamah', 'Budi')
+  amount: number;
+  remainingAmount: number;
+  status: DebtStatus; // 'Belum Lunas' | 'Lunas'
+  description: string;
+  settledDate?: string;
+  wallet?: string;
+  createdAt?: string;
+}
+
+export interface DebtsSummary {
+  totalUtangBelumLunas: number;
+  totalPiutangBelumLunas: number;
+  items: DebtItem[];
+}
+
 export interface WebFinanceData {
   books: string[];
   activeBook: string;
@@ -206,6 +230,7 @@ export interface WebFinanceData {
     walletBalances?: WalletBalances;
   };
   budget?: BudgetInfo;
+  debts?: DebtsSummary;
   monthlyComparison?: MonthlyComparisonReport;
   lastUpdated: string;
 }
