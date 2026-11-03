@@ -528,32 +528,64 @@ export default function FinanceDashboardPage() {
     const PAD_Y_TOP = 30;
     const PAD_Y_BOTTOM = 25;
 
-    const calcGeometry = (mode: 'spent' | 'balance') => {
+    const calcDailyIncExpGeometry = () => {
+      const activeIncExp = days
+        .filter((d) => d.isPastOrToday)
+        .flatMap((d) => [d.income, d.expense]);
+      const maxVal = Math.max(30000, ...(activeIncExp.length > 0 ? activeIncExp : [30000]));
+      const range = maxVal || 1;
+
+      const calcPointsFor = (getVal: (d: DayItem) => number) => {
+        const points = days.map((d, i) => {
+          const x = PAD_X + i * ((SVG_W - PAD_X * 2) / 6);
+          let y: number;
+          if (d.isPastOrToday) {
+            const val = getVal(d);
+            y = (SVG_H - PAD_Y_BOTTOM) - (val / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+          } else {
+            // Future day: melandai ke baseline
+            const lastVal = getVal(days[currentDayOfWeek]);
+            const lastY = (SVG_H - PAD_Y_BOTTOM) - (lastVal / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+            y = lastY + (i - currentDayOfWeek) * 4;
+          }
+          return { x, y: Math.max(PAD_Y_TOP, Math.min(SVG_H - PAD_Y_BOTTOM, y)) };
+        });
+
+        const pointsUpToToday = points.slice(0, currentDayOfWeek + 1);
+        const curvePast = generateSmoothCurve(pointsUpToToday);
+        const pointsFuture = points.slice(currentDayOfWeek);
+        const curveFuture = generateSmoothCurve(pointsFuture);
+        const areaPath =
+          pointsUpToToday.length > 1
+            ? `${curvePast} L ${pointsUpToToday[pointsUpToToday.length - 1].x} ${SVG_H} L ${pointsUpToToday[0].x} ${SVG_H} Z`
+            : '';
+
+        return { points, curvePast, curveFuture, areaPath };
+      };
+
+      return {
+        income: calcPointsFor((d) => d.income),
+        expense: calcPointsFor((d) => d.expense),
+      };
+    };
+
+    const calcBalGeometry = () => {
       const activeValues = days
         .filter((d) => d.isPastOrToday)
-        .map((d) => (mode === 'balance' ? d.balance : d.expense));
-      const minVal = mode === 'spent' ? 0 : Math.min(...(activeValues.length > 0 ? activeValues : [0]));
-      const maxVal = Math.max(
-        mode === 'spent' ? 40000 : 100000,
-        ...(activeValues.length > 0 ? activeValues : [40000])
-      );
+        .map((d) => d.balance);
+      const minVal = Math.min(...(activeValues.length > 0 ? activeValues : [0]));
+      const maxVal = Math.max(100000, ...(activeValues.length > 0 ? activeValues : [100000]));
       const range = maxVal - minVal || 1;
 
       const points = days.map((d, i) => {
         const x = PAD_X + i * ((SVG_W - PAD_X * 2) / 6);
         let y: number;
         if (d.isPastOrToday) {
-          const val = mode === 'balance' ? d.balance : d.expense;
-          y = (SVG_H - PAD_Y_BOTTOM) - ((val - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+          y = (SVG_H - PAD_Y_BOTTOM) - ((d.balance - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
         } else {
-          // Future projected day (melandai perlahan seperti di referensi)
-          const lastKnownVal =
-            mode === 'balance'
-              ? days[currentDayOfWeek].balance
-              : days[currentDayOfWeek].expense;
-          const lastKnownY =
-            (SVG_H - PAD_Y_BOTTOM) - ((lastKnownVal - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
-          y = lastKnownY + (i - currentDayOfWeek) * 6;
+          const lastVal = days[currentDayOfWeek].balance;
+          const lastY = (SVG_H - PAD_Y_BOTTOM) - ((lastVal - minVal) / range) * (SVG_H - PAD_Y_TOP - PAD_Y_BOTTOM);
+          y = lastY + (i - currentDayOfWeek) * 5;
         }
         return { x, y: Math.max(PAD_Y_TOP, Math.min(SVG_H - PAD_Y_BOTTOM, y)) };
       });
@@ -570,21 +602,27 @@ export default function FinanceDashboardPage() {
       return { points, curvePast, curveFuture, areaPath };
     };
 
+    const incExpGeo = calcDailyIncExpGeometry();
+
     return {
       days,
       currentDayOfWeek,
-      spent: calcGeometry('spent'),
-      balance: calcGeometry('balance'),
+      income: incExpGeo.income,
+      expense: incExpGeo.expense,
+      balance: calcBalGeometry(),
       currentBalance: runningBal,
       totalSpentThisWeek: days.filter((d) => d.isPastOrToday).reduce((acc, d) => acc + d.expense, 0),
+      totalIncomeThisWeek: days.filter((d) => d.isPastOrToday).reduce((acc, d) => acc + d.income, 0),
     };
   }, [filteredTransactions]);
 
-  // Active highlighted day untuk Pengeluaran & Saldo Kas
-  const activeSpentIdx = hoveredSpentIdx !== null ? hoveredSpentIdx : dailyTracking.currentDayOfWeek;
-  const activeSpentDay = dailyTracking.days[activeSpentIdx] || dailyTracking.days[0];
-  const activeSpentPoint = dailyTracking.spent.points[activeSpentIdx] || { x: 40, y: 70 };
+  // Active highlighted day untuk Pemasukan & Pengeluaran Harian
+  const activeDailyIdx = hoveredSpentIdx !== null ? hoveredSpentIdx : dailyTracking.currentDayOfWeek;
+  const activeDailyDay = dailyTracking.days[activeDailyIdx] || dailyTracking.days[0];
+  const activeDailyIncomePoint = dailyTracking.income.points[activeDailyIdx] || { x: 40, y: 70 };
+  const activeDailyExpensePoint = dailyTracking.expense.points[activeDailyIdx] || { x: 40, y: 70 };
 
+  // Active highlighted day untuk Saldo Kas Harian
   const activeBalIdx = hoveredBalIdx !== null ? hoveredBalIdx : dailyTracking.currentDayOfWeek;
   const activeBalDay = dailyTracking.days[activeBalIdx] || dailyTracking.days[0];
   const activeBalPoint = dailyTracking.balance.points[activeBalIdx] || { x: 40, y: 70 };
@@ -1197,14 +1235,14 @@ export default function FinanceDashboardPage() {
           </div>
         </section>
 
-        {/* 3. TREN BULANAN: PEMASUKAN & PENGELUARAN (2 GARIS) + SALDO KAS BULANAN */}
+        {/* 3. TREKING HARIAN: PEMASUKAN & PENGELUARAN (2 GARIS) + SALDO KAS HARIAN */}
         <section className="crm-daily-grid">
-          {/* A. KARTU KIRI: PEMASUKAN DAN PENGELUARAN BULANAN (2 GARIS) */}
-          <div className="crm-card crm-daily-card monthly-trend">
+          {/* A. KARTU KIRI: PEMASUKAN DAN PENGELUARAN HARIAN (2 GARIS) */}
+          <div className="crm-card crm-daily-card">
             <div className="crm-daily-header">
               <div style={{ width: '100%' }}>
                 <div className="crm-monthly-header-top">
-                  <div className="crm-daily-title">📈 Pemasukan dan Pengeluaran Bulanan</div>
+                  <div className="crm-daily-title">📈 Pemasukan dan Pengeluaran Harian</div>
                   {/* Legend 2 Garis */}
                   <div className="crm-chart-legend">
                     <span className="crm-legend-item">
@@ -1219,59 +1257,64 @@ export default function FinanceDashboardPage() {
                 <div className="crm-dual-amount-row">
                   <div className="crm-dual-amount income">
                     <span className="crm-dual-label">Pemasukan</span>
-                    <span className="crm-dual-val">+{formatRupiah(activeMonthItem.income)}</span>
+                    <span className="crm-dual-val">+{formatRupiah(activeDailyDay.income)}</span>
                   </div>
                   <div className="crm-dual-amount expense">
                     <span className="crm-dual-label">Pengeluaran</span>
-                    <span className="crm-dual-val">-{formatRupiah(activeMonthItem.expense)}</span>
+                    <span className="crm-dual-val">-{formatRupiah(activeDailyDay.expense)}</span>
                   </div>
                 </div>
 
                 <div className="crm-daily-subrow">
-                  <span className={`crm-daily-growth-badge ${activeMonthItem.net >= 0 ? 'income' : 'expense'}`}>
-                    {activeMonthItem.net >= 0 ? '🟢 Surplus' : '🔴 Defisit'} {formatRupiah(Math.abs(activeMonthItem.net))}
-                  </span>
+                  {(() => {
+                    const net = activeDailyDay.income - activeDailyDay.expense;
+                    return (
+                      <span className={`crm-daily-growth-badge ${net >= 0 ? 'income' : 'expense'}`}>
+                        {net >= 0 ? '🟢 Surplus' : '🔴 Defisit'} {formatRupiah(Math.abs(net))}
+                      </span>
+                    );
+                  })()}
                   <span className="crm-daily-date-label">
-                    Bulan {parseInt(activeMonthItem.monthNum, 10)} — {activeMonthItem.monthFull} {monthlyTrendData.targetYear}
+                    {activeDailyDay.dayNameId}, {activeDailyDay.dateFormatted}
                   </span>
-                  {activeMonthItem.isCurrentMonth && (
+                  {activeDailyDay.isToday && (
                     <span className="crm-badge-tag tag-high" style={{ background: '#EEF2FF', color: '#4F46E5' }}>
-                      Bulan Berjalan
+                      Hari Ini
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* SVG Smooth Curve Area Chart untuk Pemasukan & Pengeluaran (2 GARIS) */}
+            {/* SVG Smooth Curve Area Chart untuk Pemasukan & Pengeluaran Harian (2 GARIS) */}
             <div className="crm-daily-chart-wrap">
               <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
                 <defs>
-                  <linearGradient id="monthlyIncomeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="dailyIncomeGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.22" />
                     <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
                   </linearGradient>
-                  <linearGradient id="monthlyExpenseGrad" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="dailyExpenseGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.22" />
                     <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.0" />
                   </linearGradient>
-                  <filter id="badgeGlowDual" x="-20%" y="-20%" width="140%" height="140%">
+                  <filter id="badgeGlowDailyDual" x="-20%" y="-20%" width="140%" height="140%">
                     <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
                   </filter>
                 </defs>
 
                 {/* Area Fills */}
-                {monthlyTrendData.incomeArea && (
-                  <path d={monthlyTrendData.incomeArea} fill="url(#monthlyIncomeGrad)" />
+                {dailyTracking.income.areaPath && (
+                  <path d={dailyTracking.income.areaPath} fill="url(#dailyIncomeGrad)" />
                 )}
-                {monthlyTrendData.expenseArea && (
-                  <path d={monthlyTrendData.expenseArea} fill="url(#monthlyExpenseGrad)" />
+                {dailyTracking.expense.areaPath && (
+                  <path d={dailyTracking.expense.areaPath} fill="url(#dailyExpenseGrad)" />
                 )}
 
-                {/* GARIS 1: PEMASUKAN (BIRU) */}
-                {monthlyTrendData.incomeCurve && (
+                {/* GARIS 1: PEMASUKAN HARIAN (BIRU) */}
+                {dailyTracking.income.curvePast && (
                   <path
-                    d={monthlyTrendData.incomeCurve}
+                    d={dailyTracking.income.curvePast}
                     fill="none"
                     stroke="#3B82F6"
                     strokeWidth="3.5"
@@ -1279,11 +1322,21 @@ export default function FinanceDashboardPage() {
                     strokeLinejoin="round"
                   />
                 )}
-
-                {/* GARIS 2: PENGELUARAN (UNGU) */}
-                {monthlyTrendData.expenseCurve && (
+                {dailyTracking.income.curveFuture && (
                   <path
-                    d={monthlyTrendData.expenseCurve}
+                    d={dailyTracking.income.curveFuture}
+                    fill="none"
+                    stroke="#93C5FD"
+                    strokeWidth="2"
+                    strokeDasharray="4,4"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                {/* GARIS 2: PENGELUARAN HARIAN (UNGU) */}
+                {dailyTracking.expense.curvePast && (
+                  <path
+                    d={dailyTracking.expense.curvePast}
                     fill="none"
                     stroke="#8B5CF6"
                     strokeWidth="3.5"
@@ -1291,12 +1344,22 @@ export default function FinanceDashboardPage() {
                     strokeLinejoin="round"
                   />
                 )}
+                {dailyTracking.expense.curveFuture && (
+                  <path
+                    d={dailyTracking.expense.curveFuture}
+                    fill="none"
+                    stroke="#C4B5FD"
+                    strokeWidth="2"
+                    strokeDasharray="4,4"
+                    strokeLinecap="round"
+                  />
+                )}
 
                 {/* Vertical Guideline */}
                 <line
-                  x1={activeIncomePoint.x}
-                  y1={Math.min(activeIncomePoint.y, activeExpensePoint.y) - 10}
-                  x2={activeIncomePoint.x}
+                  x1={activeDailyIncomePoint.x}
+                  y1={Math.min(activeDailyIncomePoint.y, activeDailyExpensePoint.y) - 8}
+                  x2={activeDailyIncomePoint.x}
                   y2="135"
                   stroke="#94A3B8"
                   strokeDasharray="3,3"
@@ -1305,55 +1368,56 @@ export default function FinanceDashboardPage() {
 
                 {/* Point Pemasukan */}
                 <circle
-                  cx={activeIncomePoint.x}
-                  cy={activeIncomePoint.y}
+                  cx={activeDailyIncomePoint.x}
+                  cy={activeDailyIncomePoint.y}
                   r="6"
                   fill="#FFFFFF"
                   stroke="#3B82F6"
                   strokeWidth="3"
                 />
-                <circle cx={activeIncomePoint.x} cy={activeIncomePoint.y} r="2" fill="#3B82F6" />
+                <circle cx={activeDailyIncomePoint.x} cy={activeDailyIncomePoint.y} r="2" fill="#3B82F6" />
 
                 {/* Point Pengeluaran */}
                 <circle
-                  cx={activeExpensePoint.x}
-                  cy={activeExpensePoint.y}
+                  cx={activeDailyExpensePoint.x}
+                  cy={activeDailyExpensePoint.y}
                   r="6"
                   fill="#FFFFFF"
                   stroke="#8B5CF6"
                   strokeWidth="3"
                 />
-                <circle cx={activeExpensePoint.x} cy={activeExpensePoint.y} r="2" fill="#8B5CF6" />
+                <circle cx={activeDailyExpensePoint.x} cy={activeDailyExpensePoint.y} r="2" fill="#8B5CF6" />
 
                 {/* Floating Tooltips (Pemasukan & Pengeluaran) */}
-                <g transform={`translate(${activeIncomePoint.x}, ${Math.max(16, activeIncomePoint.y - 20)})`}>
-                  <rect x="-38" y="-11" width="76" height="20" rx="6" fill="#FFFFFF" stroke="#93C5FD" filter="url(#badgeGlowDual)" />
+                <g transform={`translate(${activeDailyIncomePoint.x}, ${Math.max(16, activeDailyIncomePoint.y - 20)})`}>
+                  <rect x="-38" y="-11" width="76" height="20" rx="6" fill="#FFFFFF" stroke="#93C5FD" filter="url(#badgeGlowDailyDual)" />
                   <text textAnchor="middle" y="3" fontSize="9.5" fontWeight="800" fill="#2563EB">
-                    +{formatRupiahShort(activeMonthItem.income)}
+                    +{formatRupiahShort(activeDailyDay.income)}
                   </text>
                 </g>
-                <g transform={`translate(${activeExpensePoint.x}, ${Math.max(16, activeExpensePoint.y + 22)})`}>
-                  <rect x="-38" y="-11" width="76" height="20" rx="6" fill="#FFFFFF" stroke="#C4B5FD" filter="url(#badgeGlowDual)" />
+                <g transform={`translate(${activeDailyExpensePoint.x}, ${Math.max(16, activeDailyExpensePoint.y + 22)})`}>
+                  <rect x="-38" y="-11" width="76" height="20" rx="6" fill="#FFFFFF" stroke="#C4B5FD" filter="url(#badgeGlowDailyDual)" />
                   <text textAnchor="middle" y="3" fontSize="9.5" fontWeight="800" fill="#7C3AED">
-                    -{formatRupiahShort(activeMonthItem.expense)}
+                    -{formatRupiahShort(activeDailyDay.expense)}
                   </text>
                 </g>
               </svg>
 
-              {/* 12 Bulan Row (Jan s/d Des) */}
-              <div className="crm-daily-days-row monthly-pills">
-                {monthlyTrendData.months.map((m) => {
-                  const isSelected = activeMonthlyIdx === m.idx;
+              {/* 7 Hari Row (Mon s/d Sun) */}
+              <div className="crm-daily-days-row">
+                {dailyTracking.days.map((d) => {
+                  const isSelected = activeDailyIdx === d.idx;
+                  const displayVal = d.isPastOrToday ? formatRupiahShort(d.expense) : '-';
                   return (
                     <button
-                      key={m.monthNum}
-                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${m.isCurrentMonth ? 'is-today' : ''}`}
-                      onClick={() => setHoveredMonthlyIdx(m.idx)}
-                      onMouseEnter={() => setHoveredMonthlyIdx(m.idx)}
-                      title={`${m.monthFull} ${monthlyTrendData.targetYear}`}
+                      key={d.dayName}
+                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
+                      onClick={() => setHoveredSpentIdx(d.idx)}
+                      onMouseEnter={() => setHoveredSpentIdx(d.idx)}
+                      title={`${d.dayNameId}, ${d.dateFormatted}`}
                     >
-                      <span className="crm-day-abbr">{parseInt(m.monthNum, 10)} {m.monthShort}</span>
-                      {m.hasData && <span className="crm-month-dot" />}
+                      <span className="crm-day-abbr">{d.dayName}</span>
+                      <span className="crm-day-val">{displayVal}</span>
                     </button>
                   );
                 })}
@@ -1361,48 +1425,48 @@ export default function FinanceDashboardPage() {
             </div>
           </div>
 
-          {/* B. KARTU KANAN: TREKING SALDO KAS BULANAN */}
+          {/* B. KARTU KANAN: TREKING SALDO KAS HARIAN */}
           <div className="crm-card crm-daily-card balance">
             <div className="crm-daily-header">
               <div>
-                <div className="crm-daily-title">💰 Saldo Kas • Tren Bulanan</div>
-                <div className="crm-daily-amount">{formatRupiah(activeBalMonthItem.balance)}</div>
+                <div className="crm-daily-title">💰 Saldo Kas • Treking Harian</div>
+                <div className="crm-daily-amount">{formatRupiah(activeBalDay.balance)}</div>
                 <div className="crm-daily-subrow">
                   <span className="crm-daily-growth-badge balance">
-                    🟢 Saldo Kas Akhir Bulan
+                    🟢 Akumulasi Real-Time
                   </span>
                   <span className="crm-daily-date-label">
-                    Bulan {parseInt(activeBalMonthItem.monthNum, 10)} — {activeBalMonthItem.monthFull} {monthlyTrendData.targetYear}
+                    {activeBalDay.dayNameId}, {activeBalDay.dateFormatted}
                   </span>
-                  {activeBalMonthItem.isCurrentMonth && (
+                  {activeBalDay.isToday && (
                     <span className="crm-badge-tag tag-high" style={{ background: '#ECFDF5', color: '#059669' }}>
-                      Bulan Berjalan
+                      Hari Ini
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* SVG Smooth Curve Area Chart untuk Saldo Kas Bulanan */}
+            {/* SVG Smooth Curve Area Chart untuk Saldo Kas Harian */}
             <div className="crm-daily-chart-wrap">
               <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
                 <defs>
-                  <linearGradient id="monthlyBalAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="dailyBalAreaGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
                     <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
                   </linearGradient>
-                  <filter id="badgeGlowBal" x="-20%" y="-20%" width="140%" height="140%">
+                  <filter id="badgeGlowBalDaily" x="-20%" y="-20%" width="140%" height="140%">
                     <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
                   </filter>
                 </defs>
 
-                {monthlyTrendData.balanceArea && (
-                  <path d={monthlyTrendData.balanceArea} fill="url(#monthlyBalAreaGrad)" />
+                {dailyTracking.balance.areaPath && (
+                  <path d={dailyTracking.balance.areaPath} fill="url(#dailyBalAreaGrad)" />
                 )}
 
-                {monthlyTrendData.balanceCurve && (
+                {dailyTracking.balance.curvePast && (
                   <path
-                    d={monthlyTrendData.balanceCurve}
+                    d={dailyTracking.balance.curvePast}
                     fill="none"
                     stroke="#10B981"
                     strokeWidth="3.5"
@@ -1411,10 +1475,21 @@ export default function FinanceDashboardPage() {
                   />
                 )}
 
+                {dailyTracking.balance.curveFuture && (
+                  <path
+                    d={dailyTracking.balance.curveFuture}
+                    fill="none"
+                    stroke="#CBD5E1"
+                    strokeWidth="2"
+                    strokeDasharray="4,4"
+                    strokeLinecap="round"
+                  />
+                )}
+
                 <line
-                  x1={activeBalMonthPoint.x}
-                  y1={activeBalMonthPoint.y}
-                  x2={activeBalMonthPoint.x}
+                  x1={activeBalPoint.x}
+                  y1={activeBalPoint.y}
+                  x2={activeBalPoint.x}
                   y2="135"
                   stroke="#94A3B8"
                   strokeDasharray="3,3"
@@ -1422,16 +1497,16 @@ export default function FinanceDashboardPage() {
                 />
 
                 <circle
-                  cx={activeBalMonthPoint.x}
-                  cy={activeBalMonthPoint.y}
+                  cx={activeBalPoint.x}
+                  cy={activeBalPoint.y}
                   r="7"
                   fill="#FFFFFF"
                   stroke="#10B981"
                   strokeWidth="3.5"
                 />
-                <circle cx={activeBalMonthPoint.x} cy={activeBalMonthPoint.y} r="2.5" fill="#10B981" />
+                <circle cx={activeBalPoint.x} cy={activeBalPoint.y} r="2.5" fill="#10B981" />
 
-                <g transform={`translate(${activeBalMonthPoint.x}, ${Math.max(20, activeBalMonthPoint.y - 26)})`}>
+                <g transform={`translate(${activeBalPoint.x}, ${Math.max(20, activeBalPoint.y - 26)})`}>
                   <rect
                     x="-46"
                     y="-14"
@@ -1440,7 +1515,7 @@ export default function FinanceDashboardPage() {
                     rx="8"
                     fill="#FFFFFF"
                     stroke="#E2E8F0"
-                    filter="url(#badgeGlowBal)"
+                    filter="url(#badgeGlowBalDaily)"
                   />
                   <text
                     textAnchor="middle"
@@ -1450,25 +1525,26 @@ export default function FinanceDashboardPage() {
                     fill="#0F172A"
                     letterSpacing="-0.02em"
                   >
-                    {formatRupiah(activeBalMonthItem.balance)}
+                    {formatRupiah(activeBalDay.balance)}
                   </text>
                 </g>
               </svg>
 
-              {/* 12 Bulan Row untuk Saldo Kas */}
-              <div className="crm-daily-days-row monthly-pills">
-                {monthlyTrendData.months.map((m) => {
-                  const isSelected = activeMonthlyBalIdx === m.idx;
+              {/* 7 Hari Row untuk Saldo Kas */}
+              <div className="crm-daily-days-row">
+                {dailyTracking.days.map((d) => {
+                  const isSelected = activeBalIdx === d.idx;
+                  const displayVal = d.isPastOrToday ? formatRupiahShort(d.balance) : '-';
                   return (
                     <button
-                      key={m.monthNum}
-                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${m.isCurrentMonth ? 'is-today' : ''}`}
-                      onClick={() => setHoveredMonthlyBalIdx(m.idx)}
-                      onMouseEnter={() => setHoveredMonthlyBalIdx(m.idx)}
-                      title={`${m.monthFull} ${monthlyTrendData.targetYear}`}
+                      key={d.dayName}
+                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
+                      onClick={() => setHoveredBalIdx(d.idx)}
+                      onMouseEnter={() => setHoveredBalIdx(d.idx)}
+                      title={`${d.dayNameId}, ${d.dateFormatted}`}
                     >
-                      <span className="crm-day-abbr">{parseInt(m.monthNum, 10)} {m.monthShort}</span>
-                      {m.hasData && <span className="crm-month-dot" />}
+                      <span className="crm-day-abbr">{d.dayName}</span>
+                      <span className="crm-day-val">{displayVal}</span>
                     </button>
                   );
                 })}
