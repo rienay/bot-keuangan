@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const book = searchParams.get('book') || 'Tabungan';
-    const force = searchParams.get('force') === 'true' || searchParams.has('_t');
+    const force = searchParams.get('force') === 'true';
     const data = await getAllTransactionsForWeb(book, force);
     return NextResponse.json(
       { success: true, data },

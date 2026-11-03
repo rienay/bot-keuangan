@@ -174,7 +174,18 @@ export default function FinanceDashboardPage() {
   const [data, setData] = useState<WebFinanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedBook, setSelectedBook] = useState<string>('Tabungan');
+  const [selectedBook, setSelectedBook] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const b = params.get('buku') || params.get('book');
+      if (b) return b;
+      try {
+        const saved = localStorage.getItem('last_active_book');
+        if (saved) return saved;
+      } catch (_) { }
+    }
+    return 'Tabungan';
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // State untuk form edit budget bulanan & harian
@@ -219,7 +230,7 @@ export default function FinanceDashboardPage() {
     setError(null);
 
     try {
-      const url = `/api/finances?book=${encodeURIComponent(book)}&_t=${Date.now()}${showRefreshSpinner ? '&force=true' : ''}`;
+      const url = `/api/finances?book=${encodeURIComponent(book)}${showRefreshSpinner ? '&force=true' : ''}`;
       const res = await fetch(url, {
         cache: 'no-store',
         headers: {
@@ -246,24 +257,17 @@ export default function FinanceDashboardPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const b = params.get('buku') || params.get('book');
-      if (b) {
+      if (b && b !== selectedBook) {
         setSelectedBook(b);
-        try {
-          localStorage.setItem('last_active_book', b);
-        } catch (_) { }
-      } else {
-        try {
-          const saved = localStorage.getItem('last_active_book');
-          if (saved) {
-            setSelectedBook(saved);
-          }
-        } catch (_) { }
       }
     }
   }, []);
 
   useEffect(() => {
     fetchData(selectedBook);
+    try {
+      localStorage.setItem('last_active_book', selectedBook);
+    } catch (_) { }
   }, [selectedBook]);
 
   const handleSaveBudget = async () => {

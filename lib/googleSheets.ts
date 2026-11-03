@@ -50,9 +50,25 @@ function getSpreadsheetId(): string {
 
 // In-memory cache untuk sesi buku aktif pengguna (chatId -> bookName)
 const activeBookCache = new Map<string, string>();
-// In-memory cache daftar sheets dengan timestamp (TTL 30 detik)
+// In-memory cache daftar sheets dengan timestamp (TTL 5 menit agar hemat kuota Google Sheets)
 let cachedSheetList: { list: string[]; timestamp: number } | null = null;
-const CACHE_TTL_MS = 30_000;
+const CACHE_TTL_MS = 300_000; // 5 menit
+
+// Set cache untuk sheet yang sudah pasti ada dan terverifikasi di spreadsheet
+// Mencegah panggilan API spreadsheets.get / values.get berulang kali yang menghabiskan kuota
+const knownSpecialSheets = new Set<string>([
+  BUDGET_SHEET_NAME.toLowerCase(),
+  DEBT_SHEET_NAME.toLowerCase(),
+  '_dompet',
+  '_sessions',
+  '_aksesbot',
+  'tabungan',
+  'sulisnie',
+]);
+const knownValidSheets = new Set<string>([
+  'tabungan',
+  'sulisnie',
+]);
 
 /**
  * Membersihkan tag (PIC: ...) dari keterangan transaksi agar tampilan ringkas
@@ -77,12 +93,17 @@ export function sanitizeBookName(rawName: string): string {
  * Memastikan header kolom sudah dibuat di Google Sheet jika masih kosong.
  */
 export async function ensureHeaderRow(sheetName: string = DEFAULT_BOOK_NAME): Promise<void> {
+  const norm = sheetName.trim().toLowerCase();
+  if (knownValidSheets.has(norm)) {
+    return;
+  }
+
   const auth = getGoogleAuth();
   const sheets = google.sheets({ version: 'v4', auth });
   const spreadsheetId = getSpreadsheetId();
 
   // Jika mencari Tabungan, tetapi tab di Google Sheets masih 'Kas', otomatis rename ke 'Tabungan'
-  if (sheetName.toLowerCase() === DEFAULT_BOOK_NAME.toLowerCase()) {
+  if (norm === DEFAULT_BOOK_NAME.toLowerCase() && !knownSpecialSheets.has('tabungan')) {
     try {
       const meta = await sheets.spreadsheets.get({ spreadsheetId });
       const hasDefaultSheet = meta.data.sheets?.some(
@@ -142,6 +163,8 @@ export async function ensureHeaderRow(sheetName: string = DEFAULT_BOOK_NAME): Pr
         },
       });
     }
+    knownValidSheets.add(norm);
+    knownSpecialSheets.add(norm);
   } catch (error: any) {
     // Jika sheet belum ada, buatkan sheet baru
     if (
@@ -172,6 +195,8 @@ export async function ensureHeaderRow(sheetName: string = DEFAULT_BOOK_NAME): Pr
         });
         // Invalidate cache sheet list
         cachedSheetList = null;
+        knownValidSheets.add(norm);
+        knownSpecialSheets.add(norm);
       } catch (innerErr) {
         console.error(`Gagal membuat sheet baru '${sheetName}':`, innerErr);
         throw innerErr;
@@ -384,6 +409,9 @@ export async function deleteSheetBook(
  * Memastikan sheet _Sessions tersedia untuk menyimpan status buku aktif per pengguna
  */
 async function ensureSessionSheet(): Promise<void> {
+  if (knownSpecialSheets.has(SESSION_SHEET_NAME.toLowerCase())) {
+    return;
+  }
   const auth = getGoogleAuth();
   const sheets = google.sheets({ version: 'v4', auth });
   const spreadsheetId = getSpreadsheetId();
@@ -393,6 +421,7 @@ async function ensureSessionSheet(): Promise<void> {
       spreadsheetId,
       range: `'${SESSION_SHEET_NAME}'!A1:C1`,
     });
+    knownSpecialSheets.add(SESSION_SHEET_NAME.toLowerCase());
   } catch (error: any) {
     if (
       error?.message?.includes('Unable to parse range') ||
@@ -419,6 +448,7 @@ async function ensureSessionSheet(): Promise<void> {
             values: [['Chat ID', 'Active Book', 'Updated At']],
           },
         });
+        knownSpecialSheets.add(SESSION_SHEET_NAME.toLowerCase());
       } catch (e) {
         console.warn('Gagal membuat session sheet:', e);
       }
@@ -1116,10 +1146,196 @@ export async function transferBookBalance(
 
 // In-memory cache untuk transaksi web (key: bookName, value: { data: WebFinanceData, timestamp: number })
 const webFinanceCache = new Map<string, { data: WebFinanceData; timestamp: number }>();
-const WEB_CACHE_TTL_MS = 20_000; // 20 detik
+const WEB_CACHE_TTL_MS = 30_000; // 30 detik
+// In-memory fallback tahan banting (menyimpan data sukses terakhir agar web TIDAK PERNAH blank saat kuota Google Sheets limit)
+const lastKnownWebData = new Map<string, WebFinanceData>();
+
+/**
+ * Membangun info budget bulanan & harian langsung dari baris sheet _Budget dan transaksi in-memory
+ * Tanpa perlu memanggil Google Sheets API berulang kali
+ */
+export function buildBudgetFromRowsAndTx(
+  bookName: string,
+  budgetRows: any[][],
+  transactions: WebTransactionItem[],
+  targetMonth?: string
+): BudgetInfo {
+  const d = new Date();
+  const currentMonthKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(d).slice(0, 7);
+
+  const month = targetMonth || currentMonthKey;
+  const [y, m] = month.split('-');
+  const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+  const monthLabel = new Intl.DateTimeFormat('id-ID', {
+    year: 'numeric',
+    month: 'long',
+  }).format(dateObj);
+
+  const cleanBook = sanitizeBookName(bookName) || DEFAULT_BOOK_NAME;
+
+  let budgetAmount = 0;
+  let exactMatch: number | null = null;
+  let defaultMatch: number | null = null;
+  let dailyAmount = 0;
+
+  for (const row of budgetRows) {
+    const [b, mStr, nominal] = row;
+    if (!b || !mStr || !nominal) continue;
+    const rowBook = String(b).trim().toLowerCase();
+    const rowMonth = String(mStr).trim().toLowerCase();
+    const num = parseFloat(String(nominal).replace(/[^0-9.-]+/g, '')) || 0;
+
+    if (rowBook === cleanBook.toLowerCase()) {
+      if (rowMonth === 'harian' || rowMonth === 'daily') {
+        dailyAmount = num;
+      } else if (rowMonth === month.toLowerCase()) {
+        exactMatch = num;
+      } else if (rowMonth === 'semua' || rowMonth === 'default') {
+        defaultMatch = num;
+      }
+    }
+  }
+
+  budgetAmount = exactMatch !== null ? exactMatch : (defaultMatch || 0);
+
+  // Hitung pengeluaran bulan ini dari transaksi yang sudah ada di memori
+  let spent = 0;
+  transactions.forEach((tx) => {
+    if (tx.type === 'Pengeluaran' && !tx.isTransfer && tx.date.startsWith(month)) {
+      spent += tx.amount;
+    }
+  });
+
+  const remaining = budgetAmount - spent;
+  const percentage = budgetAmount > 0 ? Math.round((spent / budgetAmount) * 100) : 0;
+
+  let status: BudgetInfo['status'] = 'none';
+  if (budgetAmount > 0) {
+    if (percentage >= 100) status = 'overbudget';
+    else if (percentage >= 80) status = 'warning';
+    else if (percentage >= 50) status = 'half';
+    else status = 'safe';
+  }
+
+  // Hitung pengeluaran harian (hari ini)
+  const nowJakartaDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+  const [nowY, nowM, nowD] = nowJakartaDate.split('-');
+  const todaySlash = `${nowD}/${nowM}/${nowY}`;
+  const todayDash = `${nowY}-${nowM}-${nowD}`;
+
+  let dailySpent = 0;
+  transactions.forEach((tx) => {
+    if (tx.type === 'Pengeluaran' && !tx.isTransfer) {
+      const dStr = tx.date.trim();
+      if (dStr.startsWith(todayDash) || dStr.startsWith(todaySlash)) {
+        dailySpent += tx.amount;
+      }
+    }
+  });
+
+  const dailyRemaining = dailyAmount - dailySpent;
+  const dailyPercentage = dailyAmount > 0 ? Math.round((dailySpent / dailyAmount) * 100) : 0;
+
+  let dailyStatus: BudgetInfo['dailyStatus'] = 'none';
+  if (dailyAmount > 0) {
+    if (dailyPercentage >= 100) dailyStatus = 'overbudget';
+    else if (dailyPercentage >= 80) dailyStatus = 'warning';
+    else if (dailyPercentage >= 50) dailyStatus = 'half';
+    else dailyStatus = 'safe';
+  }
+
+  return {
+    book: cleanBook,
+    month,
+    monthLabel,
+    amount: budgetAmount,
+    spent,
+    remaining,
+    percentage,
+    status,
+    dailyAmount,
+    dailySpent,
+    dailyRemaining,
+    dailyPercentage,
+    dailyStatus,
+  };
+}
+
+/**
+ * Mem-parsing baris sheet _Debts langsung dari memori tanpa API call tambahan
+ */
+export function buildDebtsFromRows(rows: any[][], bookName?: string): DebtItem[] {
+  const items: DebtItem[] = [];
+  const normBook = bookName && bookName !== 'Semua' ? bookName.trim().toLowerCase() : '';
+
+  for (const r of rows) {
+    const [id, book, date, type, person, nominalRaw, sisaRaw, status, desc, settledDate, wallet, createdAt] = r;
+    if (!id || !type || !nominalRaw) continue;
+
+    const itemBook = String(book || '').trim();
+    if (normBook && itemBook.toLowerCase() !== normBook) {
+      continue;
+    }
+
+    const amount = parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
+    const remainingAmount = sisaRaw !== undefined && sisaRaw !== ''
+      ? parseFloat(String(sisaRaw).replace(/[^0-9.-]+/g, '')) || 0
+      : (String(status).toLowerCase().includes('lunas') ? 0 : amount);
+
+    const isLunas = String(status || '').trim().toLowerCase() === 'lunas' || remainingAmount <= 0;
+
+    items.push({
+      id: String(id).trim(),
+      book: itemBook || DEFAULT_BOOK_NAME,
+      date: String(date || '').trim(),
+      type: String(type).trim() as DebtType,
+      person: String(person || 'Tanpa Nama').trim(),
+      amount,
+      remainingAmount: isLunas ? 0 : remainingAmount,
+      status: isLunas ? 'Lunas' : 'Belum Lunas',
+      description: cleanDescription(String(desc || '-')),
+      settledDate: settledDate && settledDate !== '-' ? String(settledDate).trim() : undefined,
+      wallet: wallet ? String(wallet).trim() : undefined,
+      createdAt: createdAt ? String(createdAt).trim() : undefined,
+    });
+  }
+
+  return items.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export function buildDebtsSummary(items: DebtItem[]): DebtsSummary {
+  let totalUtangBelumLunas = 0;
+  let totalPiutangBelumLunas = 0;
+
+  for (const it of items) {
+    if (it.status === 'Belum Lunas') {
+      if (it.type === 'Utang') {
+        totalUtangBelumLunas += it.remainingAmount;
+      } else if (it.type === 'Piutang') {
+        totalPiutangBelumLunas += it.remainingAmount;
+      }
+    }
+  }
+
+  return {
+    totalUtangBelumLunas,
+    totalPiutangBelumLunas,
+    items,
+  };
+}
 
 /**
  * Mengambil seluruh data transaksi dan agregasi statistik untuk ditampilkan di Website Dashboard Keuangan
+ * Menggunakan batchGet tunggal untuk menghemat kuota Google Sheets API (1 request per render)
  */
 export async function getAllTransactionsForWeb(
   targetBook: string = 'Tabungan',
@@ -1136,191 +1352,236 @@ export async function getAllTransactionsForWeb(
     }
   }
 
-  const books = await getAllSheetBooks(forceRefresh);
-  const auth = getGoogleAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
-  const spreadsheetId = getSpreadsheetId();
+  try {
+    const books = await getAllSheetBooks(forceRefresh);
+    const auth = getGoogleAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = getSpreadsheetId();
 
-  const isAll = normalizedTarget === 'semua' || normalizedTarget === 'all' || normalizedTarget === '';
+    const isAll = normalizedTarget === 'semua' || normalizedTarget === 'all' || normalizedTarget === '';
 
-  // Pastikan targetBook selalu ada di daftar buku yang akan dicari
-  if (!isAll) {
-    const hasTarget = books.some((b) => b.toLowerCase() === normalizedTarget);
-    if (!hasTarget) {
-      books.push(targetBook);
+    // Pastikan targetBook selalu ada di daftar buku yang akan dicari
+    if (!isAll) {
+      const hasTarget = books.some((b) => b.toLowerCase() === normalizedTarget);
+      if (!hasTarget) {
+        books.push(targetBook);
+      }
     }
-  }
 
-  const booksToFetch = isAll
-    ? books
-    : books.filter((b) => b.toLowerCase() === normalizedTarget);
+    const booksToFetch = isAll
+      ? books
+      : books.filter((b) => b.toLowerCase() === normalizedTarget);
 
-  const allBookPromises = booksToFetch.map(async (book) => {
+    // Kumpulkan seluruh range yang dibutuhkan dalam 1 batch get tunggal!
+    // Ranges: tiap book !A2:H, plus _Budget!A2:D, plus _Debts!A2:L
+    const ranges: string[] = [
+      ...booksToFetch.map((b) => `'${b}'!A2:H`),
+      `'${BUDGET_SHEET_NAME}'!A2:D`,
+      `'${DEBT_SHEET_NAME}'!A2:L`,
+    ];
+
+    let allBookResults: { book: string; rows: any[][] }[] = [];
+    let budgetRows: any[][] = [];
+    let debtRows: any[][] = [];
+
     try {
-      const res = await sheets.spreadsheets.values.get({
+      const batchRes = await sheets.spreadsheets.values.batchGet({
         spreadsheetId,
-        range: `'${book}'!A2:H`,
+        ranges,
       });
-      return { book, rows: res.data.values || [] };
-    } catch (e) {
-      console.warn(`Gagal fetch transactions untuk web dari ${book}:`, e);
-      return { book, rows: [] };
-    }
-  });
-
-  const allBookResults = await Promise.all(allBookPromises);
-
-  // Hitung saldo masing-masing pos buku untuk label tab web
-  const bookBalances: Record<string, number> = {};
-  for (const { book, rows } of allBookResults) {
-    let inc = 0;
-    let exp = 0;
-    for (const r of rows) {
-      const [tglRaw, jenisRaw, , nominalRaw] = r;
-      if (!tglRaw || !nominalRaw) continue;
-      const cleanNom =
-        typeof nominalRaw === 'number'
-          ? nominalRaw
-          : parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
-      if (cleanNom <= 0) continue;
-      if (String(jenisRaw || '').toLowerCase().includes('pemasukan')) {
-        inc += cleanNom;
-      } else {
-        exp += cleanNom;
-      }
-    }
-    bookBalances[book] = inc - exp;
-  }
-
-  const results = isAll
-    ? allBookResults
-    : allBookResults.filter((b) => b.book.toLowerCase() === normalizedTarget);
-
-  const allItems: WebTransactionItem[] = [];
-  let totalPemasukan = 0;
-  let totalPengeluaran = 0;
-  const categoryExpenses: Record<string, number> = {};
-  const categoryIncome: Record<string, number> = {};
-  const walletBalances: WalletBalances = {
-    Bank: 0,
-    'E-Wallet': 0,
-    Cash: 0,
-    total: 0,
-  };
-
-  let globalId = 1;
-
-  for (const { book, rows } of results) {
-    for (let rIdx = 0; rIdx < rows.length; rIdx++) {
-      const row = rows[rIdx];
-      const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw, dompetRaw] = row;
-      if (!tglRaw || !nominalRaw) continue;
-
-      const cleanNominal =
-        typeof nominalRaw === 'number'
-          ? nominalRaw
-          : parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
-
-      if (cleanNominal <= 0) continue;
-
-      const jenis = String(jenisRaw || '').toLowerCase().includes('pemasukan')
-        ? ('Pemasukan' as const)
-        : ('Pengeluaran' as const);
-
-      const kategori = katRaw ? String(katRaw).trim() : 'Lain-lain';
-      const keterangan = keteranganRaw ? String(keteranganRaw).trim() : '';
-      const cleanDate = String(tglRaw).trim().replace(/^'/, '');
-      const noteLink = noteLinkRaw && String(noteLinkRaw).startsWith('http') ? String(noteLinkRaw).trim() : undefined;
-      const inputTime = waktuRaw ? String(waktuRaw).trim() : undefined;
-      let wallet = dompetRaw ? String(dompetRaw).trim() : (jenis === 'Pemasukan' ? 'Bank' : 'Cash');
-      if (!['Bank', 'E-Wallet', 'Cash'].includes(wallet)) {
-        wallet = 'Bank';
-      }
-      const walletKey = wallet as 'Bank' | 'E-Wallet' | 'Cash';
-
-      // Ekstrak PIC jika ada di keterangan, e.g. (PIC: @username) atau (PIC: nama)
-      let pic: string | undefined;
-      const picMatch = keterangan.match(/[\(\[]\s*PIC\s*:\s*([^\]\)]+)[\)\]]/i);
-      if (picMatch) {
-        pic = picMatch[1].trim();
-      }
-
-      const isTransfer =
-        kategori.toLowerCase().includes('pindah') ||
-        kategori.toLowerCase().includes('transfer') ||
-        keterangan.toLowerCase().includes('pindah');
-
-      if (jenis === 'Pemasukan') {
-        walletBalances[walletKey] += cleanNominal;
-        if (!isTransfer) {
-          totalPemasukan += cleanNominal;
-          categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
-        }
-      } else {
-        walletBalances[walletKey] -= cleanNominal;
-        if (!isTransfer) {
-          totalPengeluaran += cleanNominal;
-          categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
-        }
-      }
-
-      allItems.push({
-        id: `${book}-${rIdx + 2}-${globalId++}`,
+      const valueRanges = batchRes.data.valueRanges || [];
+      allBookResults = booksToFetch.map((book, idx) => ({
         book,
-        date: cleanDate,
-        type: jenis,
-        category: kategori,
-        amount: cleanNominal,
-        description: cleanDescription(keterangan),
-        noteLink,
-        pic,
-        inputTime,
-        wallet,
-        isTransfer,
+        rows: valueRanges[idx]?.values || [],
+      }));
+      budgetRows = valueRanges[booksToFetch.length]?.values || [];
+      debtRows = valueRanges[booksToFetch.length + 1]?.values || [];
+    } catch (batchErr: any) {
+      console.warn('[getAllTransactionsForWeb] batchGet fallback to individual calls:', batchErr?.message);
+      const allBookPromises = booksToFetch.map(async (book) => {
+        try {
+          const res = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `'${book}'!A2:H`,
+          });
+          return { book, rows: res.data.values || [] };
+        } catch (e) {
+          console.warn(`Gagal fetch transactions untuk web dari ${book}:`, e);
+          return { book, rows: [] };
+        }
       });
+      allBookResults = await Promise.all(allBookPromises);
     }
+
+    // Hitung saldo masing-masing pos buku untuk label tab web
+    const bookBalances: Record<string, number> = {};
+    for (const { book, rows } of allBookResults) {
+      let inc = 0;
+      let exp = 0;
+      for (const r of rows) {
+        const [tglRaw, jenisRaw, , nominalRaw] = r;
+        if (!tglRaw || !nominalRaw) continue;
+        const cleanNom =
+          typeof nominalRaw === 'number'
+            ? nominalRaw
+            : parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
+        if (cleanNom <= 0) continue;
+        if (String(jenisRaw || '').toLowerCase().includes('pemasukan')) {
+          inc += cleanNom;
+        } else {
+          exp += cleanNom;
+        }
+      }
+      bookBalances[book] = inc - exp;
+    }
+
+    const results = isAll
+      ? allBookResults
+      : allBookResults.filter((b) => b.book.toLowerCase() === normalizedTarget);
+
+    const allItems: WebTransactionItem[] = [];
+    let totalPemasukan = 0;
+    let totalPengeluaran = 0;
+    const categoryExpenses: Record<string, number> = {};
+    const categoryIncome: Record<string, number> = {};
+    const walletBalances: WalletBalances = {
+      Bank: 0,
+      'E-Wallet': 0,
+      Cash: 0,
+      total: 0,
+    };
+
+    let globalId = 1;
+
+    for (const { book, rows } of results) {
+      for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+        const row = rows[rIdx];
+        const [tglRaw, jenisRaw, katRaw, nominalRaw, keteranganRaw, noteLinkRaw, waktuRaw, dompetRaw] = row;
+        if (!tglRaw || !nominalRaw) continue;
+
+        const cleanNominal =
+          typeof nominalRaw === 'number'
+            ? nominalRaw
+            : parseFloat(String(nominalRaw).replace(/[^0-9.-]+/g, '')) || 0;
+
+        if (cleanNominal <= 0) continue;
+
+        const jenis = String(jenisRaw || '').toLowerCase().includes('pemasukan')
+          ? ('Pemasukan' as const)
+          : ('Pengeluaran' as const);
+
+        const kategori = katRaw ? String(katRaw).trim() : 'Lain-lain';
+        const keterangan = keteranganRaw ? String(keteranganRaw).trim() : '';
+        const cleanDate = String(tglRaw).trim().replace(/^'/, '');
+        const noteLink = noteLinkRaw && String(noteLinkRaw).startsWith('http') ? String(noteLinkRaw).trim() : undefined;
+        const inputTime = waktuRaw ? String(waktuRaw).trim() : undefined;
+        let wallet = dompetRaw ? String(dompetRaw).trim() : (jenis === 'Pemasukan' ? 'Bank' : 'Cash');
+        if (!['Bank', 'E-Wallet', 'Cash'].includes(wallet)) {
+          wallet = 'Bank';
+        }
+        const walletKey = wallet as 'Bank' | 'E-Wallet' | 'Cash';
+
+        // Ekstrak PIC jika ada di keterangan, e.g. (PIC: @username) atau (PIC: nama)
+        let pic: string | undefined;
+        const picMatch = keterangan.match(/[\(\[]\s*PIC\s*:\s*([^\]\)]+)[\)\]]/i);
+        if (picMatch) {
+          pic = picMatch[1].trim();
+        }
+
+        const isTransfer =
+          kategori.toLowerCase().includes('pindah') ||
+          kategori.toLowerCase().includes('transfer') ||
+          keterangan.toLowerCase().includes('pindah');
+
+        if (jenis === 'Pemasukan') {
+          walletBalances[walletKey] += cleanNominal;
+          if (!isTransfer) {
+            totalPemasukan += cleanNominal;
+            categoryIncome[kategori] = (categoryIncome[kategori] || 0) + cleanNominal;
+          }
+        } else {
+          walletBalances[walletKey] -= cleanNominal;
+          if (!isTransfer) {
+            totalPengeluaran += cleanNominal;
+            categoryExpenses[kategori] = (categoryExpenses[kategori] || 0) + cleanNominal;
+          }
+        }
+
+        allItems.push({
+          id: `${book}-${rIdx + 2}-${globalId++}`,
+          book,
+          date: cleanDate,
+          type: jenis,
+          category: kategori,
+          amount: cleanNominal,
+          description: cleanDescription(keterangan),
+          noteLink,
+          pic,
+          inputTime,
+          wallet,
+          isTransfer,
+        });
+      }
+    }
+
+    walletBalances.total = walletBalances.Bank + walletBalances['E-Wallet'] + walletBalances.Cash;
+
+    // Urutkan transaksi dari tanggal terbaru ke terlama
+    allItems.sort((a, b) => {
+      return b.date.localeCompare(a.date);
+    });
+
+    const nowJakarta = new Intl.DateTimeFormat('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date());
+
+    const monthlyComparison = buildMonthlyComparison(allItems);
+    const activeBookForBudget = isAll ? DEFAULT_BOOK_NAME : (books.find((b) => b.toLowerCase() === normalizedTarget) || DEFAULT_BOOK_NAME);
+    
+    // Hitung budget dan hutang-piutang langsung in-memory
+    const budget = buildBudgetFromRowsAndTx(activeBookForBudget, budgetRows, allItems);
+    const debtItems = buildDebtsFromRows(debtRows, isAll ? undefined : normalizedTarget);
+    const debts = buildDebtsSummary(debtItems);
+
+    const data: WebFinanceData = {
+      books,
+      activeBook: books.find((b) => b.toLowerCase() === normalizedTarget) || books[0] || DEFAULT_BOOK_NAME,
+      bookBalances,
+      transactions: allItems,
+      stats: {
+        totalPemasukan,
+        totalPengeluaran,
+        saldo: totalPemasukan - totalPengeluaran,
+        count: allItems.length,
+        categoryExpenses,
+        categoryIncome,
+        walletBalances,
+      },
+      budget,
+      debts,
+      monthlyComparison,
+      lastUpdated: nowJakarta,
+    };
+
+    webFinanceCache.set(cacheKey, { data, timestamp: now });
+    lastKnownWebData.set(cacheKey, data);
+    return data;
+  } catch (err: any) {
+    console.error(`[getAllTransactionsForWeb] Error fetching data for ${cacheKey}:`, err?.message || err);
+    // STALE FALLBACK: Jika limit Google Sheets terlampaui (429/Quota exceeded) atau koneksi timeout,
+    // jangan kembalikan error yang membuat web Rp 0! Kembalikan data terakhir yang berhasil dimuat!
+    const fallback = lastKnownWebData.get(cacheKey) || webFinanceCache.get(cacheKey)?.data;
+    if (fallback) {
+      console.warn(`[getAllTransactionsForWeb] Menyajikan data fallback cache untuk ${cacheKey}`);
+      return {
+        ...fallback,
+        lastUpdated: `${fallback.lastUpdated} (Mode Hemat Kuota)`,
+      };
+    }
+    throw err;
   }
-
-  walletBalances.total = walletBalances.Bank + walletBalances['E-Wallet'] + walletBalances.Cash;
-
-  // Urutkan transaksi dari tanggal terbaru ke terlama
-  allItems.sort((a, b) => {
-    return b.date.localeCompare(a.date);
-  });
-
-  const nowJakarta = new Intl.DateTimeFormat('id-ID', {
-    timeZone: 'Asia/Jakarta',
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date());
-
-  const monthlyComparison = buildMonthlyComparison(allItems);
-  const activeBookForBudget = isAll ? DEFAULT_BOOK_NAME : (books.find((b) => b.toLowerCase() === normalizedTarget) || DEFAULT_BOOK_NAME);
-  const budget = await getBudgetInfo(activeBookForBudget);
-  const debts = await getDebtsSummary(isAll ? undefined : normalizedTarget);
-
-  const data: WebFinanceData = {
-    books,
-    activeBook: books.find((b) => b.toLowerCase() === normalizedTarget) || books[0] || DEFAULT_BOOK_NAME,
-    bookBalances,
-    transactions: allItems,
-    stats: {
-      totalPemasukan,
-      totalPengeluaran,
-      saldo: totalPemasukan - totalPengeluaran,
-      count: allItems.length,
-      categoryExpenses,
-      categoryIncome,
-      walletBalances,
-    },
-    budget,
-    debts,
-    monthlyComparison,
-    lastUpdated: nowJakarta,
-  };
-
-  webFinanceCache.set(cacheKey, { data, timestamp: now });
-  return data;
 }
 
 export interface RecentTransactionItem {
@@ -1590,6 +1851,9 @@ const WALLETS_CACHE_TTL_MS = 60000; // 60 detik
  * Memastikan sheet _Dompet tersedia untuk menyimpan daftar akun Bank & E-Wallet
  */
 export async function ensureDompetSheet(): Promise<void> {
+  if (knownSpecialSheets.has(DOMPET_SHEET_NAME.toLowerCase())) {
+    return;
+  }
   const auth = getGoogleAuth();
   const sheets = google.sheets({ version: 'v4', auth });
   const spreadsheetId = getSpreadsheetId();
@@ -1643,6 +1907,7 @@ export async function ensureDompetSheet(): Promise<void> {
       console.warn('ensureDompetSheet notice:', e?.message);
     }
   }
+  knownSpecialSheets.add(DOMPET_SHEET_NAME.toLowerCase());
 }
 
 /**
@@ -2086,6 +2351,9 @@ function buildMonthlyComparison(items: WebTransactionItem[]): MonthlyComparisonR
 // ============================================================
 
 async function ensureBudgetSheet(sheets: any, spreadsheetId: string) {
+  if (knownSpecialSheets.has(BUDGET_SHEET_NAME.toLowerCase())) {
+    return;
+  }
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
     const exists = meta.data.sheets?.some(
@@ -2116,6 +2384,7 @@ async function ensureBudgetSheet(sheets: any, spreadsheetId: string) {
         },
       });
     }
+    knownSpecialSheets.add(BUDGET_SHEET_NAME.toLowerCase());
   } catch (err) {
     console.warn('Gagal ensureBudgetSheet:', err);
   }
@@ -2446,6 +2715,9 @@ const DEBT_COLUMNS = [
 ];
 
 async function ensureDebtSheet(sheets: any, spreadsheetId: string) {
+  if (knownSpecialSheets.has(DEBT_SHEET_NAME.toLowerCase())) {
+    return;
+  }
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
     const exists = meta.data.sheets?.some(
@@ -2505,6 +2777,7 @@ async function ensureDebtSheet(sheets: any, spreadsheetId: string) {
         });
       } catch (_) {}
     }
+    knownSpecialSheets.add(DEBT_SHEET_NAME.toLowerCase());
   } catch (err) {
     console.warn('Gagal ensureDebtSheet:', err);
   }
