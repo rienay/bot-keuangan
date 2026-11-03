@@ -770,13 +770,25 @@ export default function FinanceDashboardPage() {
   const activeBalMonthItem = monthlyTrendData.months[activeMonthlyBalIdx] || monthlyTrendData.months[0];
   const activeBalMonthPoint = monthlyTrendData.balancePoints[activeMonthlyBalIdx] || { x: 30, y: 70 };
 
-  // 2. Kategori pengeluaran sorted descending untuk Donut Chart (sesuai tahun aktif)
+  // 2. Kategori pengeluaran sorted descending untuk Donut Chart (sesuai tahun aktif dan bulan yang dipilih di dropdown)
   const categoryExpensesList = useMemo(() => {
     if (filteredTransactions.length === 0) return [];
     const catMap: Record<string, number> = {};
     let totalExp = 0;
     filteredTransactions.forEach((tx) => {
       if (isTransferTx(tx)) return;
+
+      // Filter juga berdasarkan bulan yang dipilih di dropdown Arus Kas (jika bukan 'all')
+      if (selectedMonthPill !== 'all') {
+        const d = parseTxDate(tx.date);
+        if (d) {
+          const mNum = String(d.getMonth() + 1).padStart(2, '0');
+          if (mNum !== selectedMonthPill) return;
+        } else if (!tx.date.includes(`-${selectedMonthPill}-`) && !tx.date.includes(`/${selectedMonthPill}/`)) {
+          return;
+        }
+      }
+
       if (tx.type === 'Pengeluaran') {
         catMap[tx.category] = (catMap[tx.category] || 0) + tx.amount;
         totalExp += tx.amount;
@@ -806,7 +818,7 @@ export default function FinanceDashboardPage() {
         config: cfg,
       };
     });
-  }, [filteredTransactions]);
+  }, [filteredTransactions, selectedMonthPill]);
 
   // Kalkulasi data SVG Donut Chart (Radius = 65, Circumference ~ 408.4)
   const donutData = useMemo(() => {
@@ -1688,7 +1700,11 @@ export default function FinanceDashboardPage() {
             <div className="crm-card-header">
               <div>
                 <h2 className="crm-card-title">Distribusi Kategori</h2>
-                <div className="crm-card-subtitle">Proporsi pengeluaran berdasarkan kategori</div>
+                <div className="crm-card-subtitle">
+                  {selectedMonthPill !== 'all'
+                    ? `Proporsi pengeluaran bulan ${MONTH_NAMES_ID[parseInt(selectedMonthPill, 10) - 1]?.full || selectedMonthPill}`
+                    : 'Proporsi pengeluaran berdasarkan kategori'}
+                </div>
               </div>
               {categoryExpensesList.length > 5 && (
                 <button
@@ -1702,7 +1718,11 @@ export default function FinanceDashboardPage() {
 
             {categoryExpensesList.length === 0 ? (
               <div className="crm-chart-empty">
-                <span>🍩 Belum ada data pengeluaran untuk divisualisasikan ke dalam donut chart.</span>
+                <span>
+                  {selectedMonthPill !== 'all'
+                    ? `🍩 Belum ada pengeluaran pada bulan ${MONTH_NAMES_ID[parseInt(selectedMonthPill, 10) - 1]?.full || selectedMonthPill}.`
+                    : '🍩 Belum ada data pengeluaran untuk divisualisasikan ke dalam donut chart.'}
+                </span>
               </div>
             ) : (
               <div className={`crm-donut-content ${showAllCategories ? 'expanded' : ''}`}>
