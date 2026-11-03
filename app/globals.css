@@ -685,6 +685,69 @@ button:active, a:active {
   border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
+.crm-daily-growth-badge.income {
+  background: #EFF6FF;
+  color: #2563EB;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* Monthly Trend Dual Card Additions */
+.crm-monthly-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.crm-dual-amount-row {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin: 0.45rem 0 0.35rem;
+  flex-wrap: wrap;
+}
+
+.crm-dual-amount {
+  display: flex;
+  flex-direction: column;
+}
+
+.crm-dual-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--crm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.crm-dual-val {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.crm-dual-amount.income .crm-dual-val {
+  color: #2563EB;
+}
+
+.crm-dual-amount.expense .crm-dual-val {
+  color: #7C3AED;
+}
+
+.crm-daily-days-row.monthly-pills {
+  padding: 0 15px;
+  overflow-x: auto;
+  gap: 0.2rem;
+  justify-content: space-between;
+}
+
+.crm-daily-days-row.monthly-pills .crm-day-pill {
+  padding: 0.25rem 0.35rem;
+  min-width: 34px;
+}
+
 /* ============================================================
    3. CHARTS ROW: DUAL BAR CHART + DONUT CHART
    ============================================================ */
@@ -2332,6 +2395,20 @@ button:active, a:active {
   }
   .crm-day-pill {
     padding: 0.2rem 0.25rem;
+  }
+  .crm-dual-amount-row {
+    gap: 0.85rem;
+  }
+  .crm-dual-val {
+    font-size: 1.05rem;
+  }
+  .crm-daily-days-row.monthly-pills {
+    padding: 0 5px;
+    gap: 0.15rem;
+  }
+  .crm-daily-days-row.monthly-pills .crm-day-pill {
+    min-width: 28px;
+    padding: 0.2rem 0.15rem;
   }
 
   /* 5. Chart Cards & Monthly Cards */
