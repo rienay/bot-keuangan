@@ -2267,11 +2267,8 @@ function buildTransactionDateBlocks(items: ExpenseDetail[], defaultType: string)
       const cat = escapeTelegramMarkdown(item.category);
       const nominal = formatRupiah(item.nominal);
 
-      if (desc && desc.toLowerCase() !== cat.toLowerCase()) {
-        block += ` • ${desc} _(${cat})_: ${nominal}\n`;
-      } else {
-        block += ` • ${cat || defaultType}: ${nominal}\n`;
-      }
+      const label = desc || cat || defaultType;
+      block += ` • ${label}: ${nominal}\n`;
     }
     blocks.push(block.trimEnd());
   }
@@ -2311,23 +2308,21 @@ async function sendRekap(ctx: any, queryText: string = '') {
     if (summary.openingBalance !== undefined && summary.openingBalance > 0) {
       headerMsg += `💼 *Saldo Pindahan Bulan Lalu:* ${formatRupiah(summary.openingBalance)}\n`;
     }
-    headerMsg += `🟢 *Pemasukan Bulan Ini:* +${formatRupiah(summary.totalPemasukan)}\n`;
-    headerMsg += `🔴 *Pengeluaran Bulan Ini:* -${formatRupiah(summary.totalPengeluaran)}\n`;
+    headerMsg += `🟢 *Pemasukan:* +${formatRupiah(summary.totalPemasukan)}\n`;
+    headerMsg += `🔴 *Pengeluaran:* -${formatRupiah(summary.totalPengeluaran)}\n`;
     headerMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    headerMsg += `💰 *Saldo Kas Akhir:* *${formatRupiah(summary.saldo)}*\n`;
-    if (summary.openingBalance !== undefined && summary.openingBalance > 0) {
-      const net = summary.saldoBulanIni ?? (summary.totalPemasukan - summary.totalPengeluaran);
-      const selisihLabel = net >= 0 ? '🟢 *Surplus Bulan Ini:*' : '🔻 *Defisit Bulan Ini:*';
-      headerMsg += `${selisihLabel} ${formatRupiah(net)}\n`;
+    headerMsg += `💰 *Saldo Kas Akhir:* ${formatRupiah(summary.saldo)}\n`;
+    const net = summary.saldoBulanIni ?? (summary.totalPemasukan - summary.totalPengeluaran);
+    if (net >= 0) {
+      headerMsg += `🟢 *Surplus:* +${formatRupiah(net)}\n`;
     } else {
-      const selisihLabel = summary.saldo >= 0 ? '🟢 *Sisa Uang (Surplus):*' : '🔻 *Defisit:*';
-      headerMsg += `${selisihLabel} ${formatRupiah(summary.saldo)}\n`;
+      headerMsg += `🔻 *Defisit:* -${formatRupiah(Math.abs(net))}\n`;
     }
-    headerMsg += `📝 *Jumlah Transaksi:* ${summary.count} transaksi\n`;
+    headerMsg += `📝 *Jumlah Transaksi:* ${summary.count} \n`;
 
     const incomeKeys = Object.keys(summary.categoryIncome || {});
     if (incomeKeys.length > 0) {
-      headerMsg += `\n📥 *Ringkasan Kategori Pemasukan:*`;
+      headerMsg += `\n📥 *Pemasukan:*`;
       for (const kat of incomeKeys.sort((a, b) => summary.categoryIncome[b] - summary.categoryIncome[a])) {
         headerMsg += `\n • ${escapeTelegramMarkdown(kat)}: ${formatRupiah(summary.categoryIncome[kat])}`;
       }
@@ -2335,7 +2330,7 @@ async function sendRekap(ctx: any, queryText: string = '') {
 
     const expKeys = Object.keys(summary.categoryExpenses || {});
     if (expKeys.length > 0) {
-      headerMsg += `\n\n📤 *Ringkasan Kategori Pengeluaran:*`;
+      headerMsg += `\n\n📤 *Pengeluaran:*`;
       for (const kat of expKeys.sort((a, b) => summary.categoryExpenses[b] - summary.categoryExpenses[a])) {
         headerMsg += `\n • ${escapeTelegramMarkdown(kat)}: ${formatRupiah(summary.categoryExpenses[kat])}`;
       }
@@ -2353,14 +2348,14 @@ async function sendRekap(ctx: any, queryText: string = '') {
     const chunks: string[] = [];
     let currentChunk = headerMsg;
 
-    // Bagian Rincian Pemasukan per Tanggal
+    // Bagian Pemasukan per Tanggal
     if (incomeDateBlocks.length > 0) {
-      const sectionDivider = `\n\n━━━━━━━━━━━━━━━━━━━━━\n📥 *Rincian Pemasukan per Tanggal:*\n`;
+      const sectionDivider = `\n\n━━━━━━━━━━━━━━━━━━━━━\n📥 *Pemasukan per Tanggal:*\n\n`;
       if ((currentChunk + sectionDivider).length <= 3500) {
         currentChunk += sectionDivider;
       } else {
         chunks.push(currentChunk.trim());
-        currentChunk = `📥 *Rincian Pemasukan per Tanggal:*\n`;
+        currentChunk = `📥 *Pemasukan per Tanggal:*\n\n`;
       }
 
       for (const block of incomeDateBlocks) {
@@ -2368,19 +2363,19 @@ async function sendRekap(ctx: any, queryText: string = '') {
           chunks.push(currentChunk.trim());
           currentChunk = block;
         } else {
-          currentChunk += (currentChunk.endsWith('\n') ? '\n' : '\n\n') + block;
+          currentChunk += (currentChunk.endsWith('\n\n') ? '' : currentChunk.endsWith('\n') ? '\n' : '\n\n') + block;
         }
       }
     }
 
     // Bagian Rincian Pengeluaran per Tanggal
     if (expenseDateBlocks.length > 0) {
-      const sectionDivider = `\n\n━━━━━━━━━━━━━━━━━━━━━\n📤 *Rincian Pengeluaran per Tanggal:*\n`;
+      const sectionDivider = `\n\n━━━━━━━━━━━━━━━━━━━━━\n📤 *Rincian Pengeluaran per Tanggal:*\n\n`;
       if ((currentChunk + sectionDivider).length <= 3500) {
         currentChunk += sectionDivider;
       } else {
         chunks.push(currentChunk.trim());
-        currentChunk = `📤 *Rincian Pengeluaran per Tanggal:*\n`;
+        currentChunk = `📤 *Rincian Pengeluaran per Tanggal:*\n\n`;
       }
 
       for (const block of expenseDateBlocks) {
@@ -2388,7 +2383,7 @@ async function sendRekap(ctx: any, queryText: string = '') {
           chunks.push(currentChunk.trim());
           currentChunk = block;
         } else {
-          currentChunk += (currentChunk.endsWith('\n') ? '\n' : '\n\n') + block;
+          currentChunk += (currentChunk.endsWith('\n\n') ? '' : currentChunk.endsWith('\n') ? '\n' : '\n\n') + block;
         }
       }
     }
