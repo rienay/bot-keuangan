@@ -1437,48 +1437,48 @@ export default function FinanceDashboardPage() {
             </div>
           </div>
 
-          {/* B. KARTU KANAN: TREKING SALDO KAS HARIAN */}
+          {/* B. KARTU KANAN: TREN SALDO KAS BULANAN */}
           <div className="crm-card crm-daily-card balance">
             <div className="crm-daily-header">
               <div>
-                <div className="crm-daily-title">💰 Saldo Kas • Treking Harian</div>
-                <div className="crm-daily-amount">{formatRupiah(activeBalDay.balance)}</div>
+                <div className="crm-daily-title">💰 Saldo Kas • Tren Bulanan</div>
+                <div className="crm-daily-amount">{formatRupiah(activeBalMonthItem.balance)}</div>
                 <div className="crm-daily-subrow">
                   <span className="crm-daily-growth-badge balance">
-                    🟢 Akumulasi Real-Time
+                    🟢 Saldo Kas Akhir Bulan
                   </span>
                   <span className="crm-daily-date-label">
-                    {activeBalDay.dayNameId}, {activeBalDay.dateFormatted}
+                    Bulan {parseInt(activeBalMonthItem.monthNum, 10)} — {activeBalMonthItem.monthFull} {monthlyTrendData.targetYear}
                   </span>
-                  {activeBalDay.isToday && (
+                  {activeBalMonthItem.isCurrentMonth && (
                     <span className="crm-badge-tag tag-high" style={{ background: '#ECFDF5', color: '#059669' }}>
-                      Hari Ini
+                      Bulan Berjalan
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* SVG Smooth Curve Area Chart untuk Saldo Kas Harian */}
+            {/* SVG Smooth Curve Area Chart untuk Saldo Kas Bulanan */}
             <div className="crm-daily-chart-wrap">
               <svg className="crm-daily-svg" viewBox="0 0 540 140" preserveAspectRatio="none">
                 <defs>
-                  <linearGradient id="dailyBalAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="monthlyBalAreaGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
                     <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
                   </linearGradient>
-                  <filter id="badgeGlowBalDaily" x="-20%" y="-20%" width="140%" height="140%">
+                  <filter id="badgeGlowBal" x="-20%" y="-20%" width="140%" height="140%">
                     <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.1" />
                   </filter>
                 </defs>
 
-                {dailyTracking.balance.areaPath && (
-                  <path d={dailyTracking.balance.areaPath} fill="url(#dailyBalAreaGrad)" />
+                {monthlyTrendData.balanceArea && (
+                  <path d={monthlyTrendData.balanceArea} fill="url(#monthlyBalAreaGrad)" />
                 )}
 
-                {dailyTracking.balance.curvePast && (
+                {monthlyTrendData.balanceCurve && (
                   <path
-                    d={dailyTracking.balance.curvePast}
+                    d={monthlyTrendData.balanceCurve}
                     fill="none"
                     stroke="#10B981"
                     strokeWidth="3.5"
@@ -1487,21 +1487,10 @@ export default function FinanceDashboardPage() {
                   />
                 )}
 
-                {dailyTracking.balance.curveFuture && (
-                  <path
-                    d={dailyTracking.balance.curveFuture}
-                    fill="none"
-                    stroke="#CBD5E1"
-                    strokeWidth="2"
-                    strokeDasharray="4,4"
-                    strokeLinecap="round"
-                  />
-                )}
-
                 <line
-                  x1={activeBalPoint.x}
-                  y1={activeBalPoint.y}
-                  x2={activeBalPoint.x}
+                  x1={activeBalMonthPoint.x}
+                  y1={activeBalMonthPoint.y}
+                  x2={activeBalMonthPoint.x}
                   y2="135"
                   stroke="#94A3B8"
                   strokeDasharray="3,3"
@@ -1509,16 +1498,16 @@ export default function FinanceDashboardPage() {
                 />
 
                 <circle
-                  cx={activeBalPoint.x}
-                  cy={activeBalPoint.y}
+                  cx={activeBalMonthPoint.x}
+                  cy={activeBalMonthPoint.y}
                   r="7"
                   fill="#FFFFFF"
                   stroke="#10B981"
                   strokeWidth="3.5"
                 />
-                <circle cx={activeBalPoint.x} cy={activeBalPoint.y} r="2.5" fill="#10B981" />
+                <circle cx={activeBalMonthPoint.x} cy={activeBalMonthPoint.y} r="2.5" fill="#10B981" />
 
-                <g transform={`translate(${activeBalPoint.x}, ${Math.max(20, activeBalPoint.y - 26)})`}>
+                <g transform={`translate(${activeBalMonthPoint.x}, ${Math.max(20, activeBalMonthPoint.y - 26)})`}>
                   <rect
                     x="-46"
                     y="-14"
@@ -1527,7 +1516,7 @@ export default function FinanceDashboardPage() {
                     rx="8"
                     fill="#FFFFFF"
                     stroke="#E2E8F0"
-                    filter="url(#badgeGlowBalDaily)"
+                    filter="url(#badgeGlowBal)"
                   />
                   <text
                     textAnchor="middle"
@@ -1537,26 +1526,25 @@ export default function FinanceDashboardPage() {
                     fill="#0F172A"
                     letterSpacing="-0.02em"
                   >
-                    {formatRupiah(activeBalDay.balance)}
+                    {formatRupiah(activeBalMonthItem.balance)}
                   </text>
                 </g>
               </svg>
 
-              {/* 7 Hari Row untuk Saldo Kas */}
-              <div className="crm-daily-days-row">
-                {dailyTracking.days.map((d) => {
-                  const isSelected = activeBalIdx === d.idx;
-                  const displayVal = d.isPastOrToday ? formatRupiahShort(d.balance) : '-';
+              {/* 12 Bulan Row untuk Saldo Kas */}
+              <div className="crm-daily-days-row monthly-pills">
+                {monthlyTrendData.months.map((m) => {
+                  const isSelected = activeMonthlyBalIdx === m.idx;
                   return (
                     <button
-                      key={d.dayName}
-                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${d.isToday ? 'is-today' : ''}`}
-                      onClick={() => setHoveredBalIdx(d.idx)}
-                      onMouseEnter={() => setHoveredBalIdx(d.idx)}
-                      title={`${d.dayNameId}, ${d.dateFormatted}`}
+                      key={m.monthNum}
+                      className={`crm-day-pill ${isSelected ? 'active' : ''} ${m.isCurrentMonth ? 'is-today' : ''}`}
+                      onClick={() => setHoveredMonthlyBalIdx(m.idx)}
+                      onMouseEnter={() => setHoveredMonthlyBalIdx(m.idx)}
+                      title={`${m.monthFull} ${monthlyTrendData.targetYear}`}
                     >
-                      <span className="crm-day-abbr">{d.dayName}</span>
-                      <span className="crm-day-val">{displayVal}</span>
+                      <span className="crm-day-abbr">{parseInt(m.monthNum, 10)} {m.monthShort}</span>
+                      {m.hasData && <span className="crm-month-dot" />}
                     </button>
                   );
                 })}
