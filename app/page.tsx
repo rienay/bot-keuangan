@@ -1204,6 +1204,76 @@ export default function Page() {
                     <div className="kv"><span>Rata-rata keluar per bulan</span><b className="num">{rp(data.monthlyComparison.averageMonthlyExpense)}</b></div>
                   </section>
                 )}
+
+                {(() => {
+                  const evalIdx = pick !== null ? pick : new Date().getMonth();
+                  const cur = months[evalIdx];
+                  if (!cur || (cur.inc === 0 && cur.exp === 0)) return null;
+                  const prev = evalIdx > 0 ? months[evalIdx - 1] : null;
+                  const net = cur.inc - cur.exp;
+                  const saveRate = cur.inc > 0 ? Math.round((net / cur.inc) * 100) : 0;
+                  const expDiffPct = prev && prev.exp > 0 ? Math.round(((cur.exp - prev.exp) / prev.exp) * 100) : null;
+                  const byCat: Record<string, number> = {};
+                  const yTarget = year === ALL ? String(new Date().getFullYear()) : year;
+                  yTx.forEach((t) => {
+                    const d = parseDate(t.date);
+                    if (!isTransfer(t) && t.type === 'Pengeluaran' && d && String(d.getFullYear()) === yTarget && d.getMonth() === evalIdx) {
+                      byCat[t.category] = (byCat[t.category] || 0) + t.amount;
+                    }
+                  });
+                  const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+                  const topPct = topCat && cur.exp > 0 ? Math.round((topCat[1] / cur.exp) * 100) : 0;
+                  const isHealthy = net >= 0 && (cur.inc === 0 || saveRate >= 10);
+
+                  return (
+                    <section className="card">
+                      <div className="card-h">
+                        <h3>Evaluasi {cur.name}</h3>
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: 99,
+                          background: net >= 0 ? 'rgba(23,133,90,0.12)' : 'rgba(207,68,55,0.12)',
+                          color: net >= 0 ? 'var(--in)' : 'var(--out)',
+                        }}>
+                          {net >= 0 ? (saveRate >= 20 ? 'Sangat Sehat' : 'Surplus') : 'Defisit'}
+                        </span>
+                      </div>
+                      <div className="kv">
+                        <span>Selisih bersih</span>
+                        <b className={`num ${net >= 0 ? 'in' : 'out'}`}>{net >= 0 ? '+' : '-'}{rp(Math.abs(net))}</b>
+                      </div>
+                      {cur.inc > 0 && (
+                        <div className="kv">
+                          <span>Rasio tabungan</span>
+                          <b className="num">{saveRate}% dari pemasukan</b>
+                        </div>
+                      )}
+                      {expDiffPct !== null && prev && (
+                        <div className="kv">
+                          <span>Dibanding {prev.name}</span>
+                          <b className={`num ${expDiffPct <= 0 ? 'in' : 'out'}`}>
+                            {expDiffPct === 0 ? 'Sama' : expDiffPct < 0 ? `Lebih hemat ${-expDiffPct}%` : `Naik ${expDiffPct}%`}
+                          </b>
+                        </div>
+                      )}
+                      {topCat && (
+                        <div className="kv">
+                          <span>Pos paling boros</span>
+                          <b>{topCat[0]} ({topPct}%)</b>
+                        </div>
+                      )}
+                      <p className="mute" style={{ marginTop: 2 }}>
+                        {net < 0
+                          ? `Pengeluaran ${cur.name} lebih besar dari pemasukan${topCat ? `, terutama di kategori ${topCat[0]}` : ''}. Coba rem sedikit di bulan berikutnya.`
+                          : isHealthy
+                            ? `Keuangan ${cur.name} terjaga baik! Kamu berhasil menyisihkan ${saveRate}% pemasukan.`
+                            : `Cashflow ${cur.name} positif, tapi sisa tabungan masih tipis. Pertahankan kontrol di kategori ${topCat ? topCat[0] : 'utama'}.`}
+                      </p>
+                    </section>
+                  );
+                })()}
               </>
             )}
 
