@@ -11,7 +11,7 @@ const HUES = ['#0F766E', '#4F46E5', '#A21CAF', '#B45309', '#1D6FD8', '#BE185D', 
 function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
   const s = (category || '').toLowerCase();
   if (/makan|minum|konsumsi|resto|cafe|food|jajan|kopi/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
         <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
@@ -22,7 +22,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/hadiah|donasi|sedekah|amal|kado|kasih/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <polyline points="20 12 20 22 4 22 4 12" />
         <rect x="2" y="7" width="20" height="5" rx="1" />
@@ -33,7 +33,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/belanja|shopping|pasar|supermarket|baju|kebutuhan/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
         <line x1="3" y1="6" x2="21" y2="6" />
@@ -42,7 +42,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/transport|bensin|parkir|ojek|grab|gojek|kereta/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="2" y="11" width="20" height="7" rx="2" />
         <path d="m5 11 2-5h10l2 5" />
@@ -52,14 +52,14 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/tagihan|listrik|wifi|pulsa|langganan|internet/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
       </svg>
     );
   }
   if (/hiburan|date|nonton|kencan|wisata|liburan/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M2 9a3 3 0 0 1 0 6v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a3 3 0 0 1 0-6V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" />
         <line x1="9" y1="3" x2="9" y2="21" strokeDasharray="2 2" />
@@ -67,14 +67,14 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/cantik|skincare|salon|makeup/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z" />
       </svg>
     );
   }
   if (/sehat|obat|dokter|apotek|klinik/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="3" y="3" width="18" height="18" rx="5" />
         <line x1="12" y1="8" x2="12" y2="16" />
@@ -83,7 +83,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/didik|buku|kursus|kuliah|sekolah/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
         <line x1="8" y1="7" x2="16" y2="7" />
@@ -92,7 +92,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/rumah|kos|keluarga|sewa/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
         <polyline points="9 22 9 12 15 12 15 22" />
@@ -100,7 +100,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/gaji|bonus|tabung|invest/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect width="20" height="14" x="2" y="7" rx="2" />
         <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
@@ -108,7 +108,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
     );
   }
   if (/pindah|transfer/.test(s)) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="m17 2 4 4-4 4" />
         <path d="M3 6h18" />
@@ -129,7 +129,7 @@ function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
 
 function BookIcon({ book, size = 18 }: { book: string; size?: number }) {
   if (book === MAIN) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="3" y="3" width="18" height="18" rx="3" />
         <circle cx="12" cy="12" r="3.5" />
@@ -140,7 +140,7 @@ function BookIcon({ book, size = 18 }: { book: string; size?: number }) {
     );
   }
   if (book === ALL) {
-    return (
+  return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <polygon points="12 2 2 7 12 12 22 7 12 2" />
         <polyline points="2 17 12 22 22 17" />
@@ -153,7 +153,7 @@ function BookIcon({ book, size = 18 }: { book: string; size?: number }) {
   const idx = h % 7;
   switch (idx) {
     case 0:
-      return (
+  return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <circle cx="12" cy="12" r="5" />
@@ -161,41 +161,41 @@ function BookIcon({ book, size = 18 }: { book: string; size?: number }) {
         </svg>
       );
     case 1:
-      return (
+  return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <polygon points="15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5 15.5 8.5" fill="none" />
         </svg>
       );
     case 2:
-      return (
+  return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
           <line x1="4" y1="22" x2="4" y2="15" />
         </svg>
       );
     case 3:
-      return (
+  return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect width="18" height="13" x="3" y="7" rx="2" />
           <path d="M8 7V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3" />
         </svg>
       );
     case 4:
-      return (
+  return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10Z" />
           <path d="M2 21c0-3 1.85-5.4 5.1-6 2.4-.4 4.9-1.9 5.9-2.9" />
         </svg>
       );
     case 5:
-      return (
+  return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
       );
     default:
-      return (
+  return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M6 3h12l4 6-10 12L2 9z" />
           <path d="M11 3 8 9l4 12 4-12-3-6" />
@@ -486,7 +486,7 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   useEffect(() => {
     const f = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', f);
-    return () => window.removeEventListener('keydown', f);
+  return () => window.removeEventListener('keydown', f);
   }, [onClose]);
   return (
     <div className="ov" onClick={onClose}>
@@ -499,8 +499,11 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export default function Page() {
-  const [book, setBook] = useState(MAIN);
+  const [book, setBook] = useState('');
   const [ready, setReady] = useState(false);
+  const [loginInput, setLoginInput] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginErr, setLoginErr] = useState('');
   const [tab, setTab] = useState<Tab>('home');
   const [data, setData] = useState<WebFinanceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -604,7 +607,7 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !book) return;
     load(book);
     loadGoals(book);
     loadMissions(book);
@@ -621,7 +624,7 @@ export default function Page() {
     fetch('/api/transactions').then((r) => r.json()).then((j) => j.success && setMeta(j.wallets)).catch(() => {});
     const f = (e: any) => { e.preventDefault(); setInstallEv(e); };
     window.addEventListener('beforeinstallprompt', f);
-    return () => window.removeEventListener('beforeinstallprompt', f);
+  return () => window.removeEventListener('beforeinstallprompt', f);
   }, []);
 
   const st = bookStyle(book);
@@ -916,9 +919,82 @@ export default function Page() {
       )}
     </li>
   );
+  const logout = () => {
+    try {
+      localStorage.removeItem('last_active_book');
+      const u = new URL(location.href);
+      u.searchParams.delete('buku');
+      u.searchParams.delete('book');
+      history.replaceState(null, '', u);
+    } catch { /* */ }
+    setSheet(null);
+    setShowMisi(false);
+    setData(null);
+    setGoals([]);
+    setMissions([]);
+    setBook('');
+    setLoginInput('');
+    setLoginErr('');
+  };
+  const doLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginInput.trim() || loginBusy) return;
+    setLoginBusy(true);
+    setLoginErr('');
+    try {
+      const r = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: loginInput.trim() }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || 'Pos tidak ditemukan');
+      setBook(j.bookName);
+      setTab('home');
+    } catch (er: any) {
+      setLoginErr(er.message || 'Gagal masuk');
+    } finally {
+      setLoginBusy(false);
+    }
+  };
   const Empty = ({ children }: { children: React.ReactNode }) => <p className="empty">{children}</p>;
   const pm = pick !== null ? months[pick] : null;
   const books = (data?.books ?? [book]).filter((b) => !b.startsWith('_'));
+
+  if (ready && !book) {
+    return (
+      <div className="app" style={{ '--accent': '#0F766E', display: 'grid', placeItems: 'center', minHeight: '100dvh', padding: 20 } as React.CSSProperties}>
+        <section className="card" style={{ width: '100%', maxWidth: 360, padding: '26px 22px', gap: 14 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'color-mix(in srgb, var(--accent) 12%, #fff)', color: 'var(--accent)', display: 'inline-grid', placeItems: 'center', marginBottom: 10 }}>
+              <BookIcon book={MAIN} size={26} />
+            </div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Keuangan Kita</h1>
+            <p className="mute" style={{ margin: 0 }}>Masukkan nama pos tabunganmu untuk masuk</p>
+          </div>
+          <form onSubmit={doLogin} className="form" style={{ gap: 12 }}>
+            <label className="fld">
+              Nama Pos
+              <input
+                value={loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
+                placeholder="Contoh: SulisNie"
+                autoFocus
+                required
+              />
+            </label>
+            {loginErr && <p className="out" style={{ fontSize: 13, margin: 0 }}>{loginErr}</p>}
+            <button type="submit" className="btn" disabled={loginBusy}>
+              {loginBusy ? 'Memeriksa...' : 'Masuk'}
+            </button>
+          </form>
+          <p className="mute" style={{ textAlign: 'center', fontSize: 12, margin: 0 }}>
+            Cek nama pos kamu di <a href="https://t.me/nabung_date_bot" target="_blank" rel="noopener noreferrer">bot Telegram</a> (/buku)
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="app" style={{ '--accent': st.c } as React.CSSProperties}>
@@ -934,12 +1010,12 @@ export default function Page() {
             {(() => {
               const p = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
               if (p) {
-                return (
+  return (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={`/stiker/${p.stiker}`} alt={p.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 );
               }
-              return (
+  return (
                 <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
@@ -1006,7 +1082,7 @@ export default function Page() {
                   {(() => {
                     const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
                     if (!partner) return null;
-                    return (
+  return (
                       <div style={{ position: 'absolute', right: 14, bottom: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                         {partnerBubble && (
                           <div style={{
@@ -1066,7 +1142,7 @@ export default function Page() {
                   <div className="card-h"><h3>Target tabungan</h3><button className="link" onClick={() => { setGf({ id: '', name: '', target: '', due: '', amount: '' }); setSheet('goal'); }}>Tambah target</button></div>
                   {goals.length === 0 ? <Empty>Belum ada target di pos ini. Contoh: Liburan Rp 10.000.000.</Empty> : goals.map((g) => {
                     const pc = Math.min(100, Math.round((g.saved / (g.target || 1)) * 100));
-                    return (
+  return (
                       <button className="goal" key={g.id} onClick={() => { setGf({ id: g.id, name: g.name, target: '', due: '', amount: '' }); setSheet('deposit'); }} aria-label={`${g.name}, ${pc}%. Ketuk untuk menyetor`}>
                         <span className="card-h"><b>{g.name}</b><b className="num">{pc}%</b></span>
                         <span className="prog"><i style={{ width: `${pc}%` }} /></span>
@@ -1112,7 +1188,7 @@ export default function Page() {
               const cycleNext = () => { setWalletIdx((i) => i + 1); setWSel(null); };
               const cyclePrev = () => { setWalletIdx((i) => i - 1); setWSel(null); };
 
-              return (
+  return (
                 <>
                   {/* Tumpukan Kartu Dompet (ketuk / geser untuk pindah kartu depan ke belakang) */}
                   <div
@@ -1134,7 +1210,7 @@ export default function Page() {
                       const idx = (frontIdx + offset) % count;
                       const w = wal[idx];
                       const isFront = offset === 0;
-                      return (
+  return (
                         <div
                           key={w.key}
                           className="wcard"
@@ -1335,7 +1411,7 @@ export default function Page() {
                 fontSize: 14.5,
               });
 
-              return (
+  return (
                 <div style={{ background: 'var(--card)', margin: '-4px -14px 0', padding: '12px 16px 24px', minHeight: 'calc(100dvh - 130px)' }}>
                   {/* 3 Tab Mode persis Money Manager */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
@@ -1345,7 +1421,7 @@ export default function Page() {
                       { id: 'Transfer', label: 'Transfer', col: '#1F2937' },
                     ] as const).map((m) => {
                       const active = catatMode === m.id;
-                      return (
+  return (
                         <button
                           key={m.id}
                           type="button"
@@ -1678,7 +1754,7 @@ export default function Page() {
                         {walletOpts.map((w) => {
                           const curVal = catatField === 'from' ? curFrom : catatField === 'to' ? curTo : (form.wallet || 'Cash');
                           const active = curVal === w;
-                          return (
+  return (
                             <button
                               key={w}
                               type="button"
@@ -1718,20 +1794,20 @@ export default function Page() {
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: '1px solid #E5E7EB' }}>
                         {['1', '2', '3', 'del', '4', '5', '6', '000', '7', '8', '9', '', '00', '0', ',', 'done'].map((k, idx) => {
                           if (k === 'done') {
-                            return (
+  return (
                               <button key={idx} type="button" onClick={() => pressKey('done')} style={{ height: 52, background: '#EF6C45', color: '#fff', fontWeight: 700, fontSize: 14, borderRight: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
                                 Selesai
                               </button>
                             );
                           }
                           if (k === 'del') {
-                            return (
+  return (
                               <button key={idx} type="button" onClick={() => pressKey('del')} style={{ height: 52, background: '#fff', fontSize: 16, borderRight: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }} aria-label="Hapus">
                                 ⌫
                               </button>
                             );
                           }
-                          return (
+  return (
                             <button
                               key={idx}
                               type="button"
@@ -1873,7 +1949,7 @@ export default function Page() {
                   const topCat = topCats[0];
                   const isHealthy = net >= 0 && (cur.inc === 0 || saveRate >= 10);
 
-                  return (
+  return (
                     <section className="card">
                       <div className="card-h">
                         <h3>Statistik &amp; Evaluasi {cur.name}</h3>
@@ -1935,7 +2011,7 @@ export default function Page() {
                           <small style={{ fontWeight: 700, color: 'var(--ink)' }}>Top Pengeluaran {cur.name}</small>
                           {topCats.map(([name, amt], idx) => {
                             const pct = cur.exp > 0 ? Math.round((amt / cur.exp) * 100) : 0;
-                            return (
+  return (
                               <div key={name}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                                   <span>{name}</span>
@@ -1973,7 +2049,7 @@ export default function Page() {
               const rankPct = rank.lv === 8 ? 100 : Math.min(100, Math.round(((activeXp - rank.min) / (rank.max - rank.min)) * 100));
               const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
 
-              return (
+  return (
                 <>
                   {/* Player Rank Hero Card */}
                   <section className="card hero" style={{ padding: '18px 18px 16px' }}>
@@ -2057,7 +2133,7 @@ export default function Page() {
                           const isReady = m.unlocked && !claimedSet.has(m.id);
                           const isPartner = partnerId === m.id;
                           const rar = RARITY_CFG[m.rarity] || RARITY_CFG.common;
-                          return (
+  return (
                             <button
                               key={m.id}
                               type="button"
@@ -2140,7 +2216,7 @@ export default function Page() {
                               const rar = RARITY_CFG[m.rarity] || RARITY_CFG.common;
                               const isClaimed = group.key === 'done';
                               const isReady = group.key === 'ready';
-                              return (
+  return (
                                 <li
                                   key={m.id}
                                   onClick={() => isReady ? claimMission(m) : setMisiSel(m)}
@@ -2327,7 +2403,7 @@ export default function Page() {
         const rank = getRank(activeXp);
         const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
 
-        return (
+  return (
           <Sheet title="Profil & Pintasan" onClose={() => setSheet(null)}>
             {/* Kartu Profil Mini */}
             <div style={{
@@ -2388,6 +2464,7 @@ export default function Page() {
               <li><button onClick={printReport}>Cetak laporan atau simpan PDF</button></li>
               <li><button onClick={install}>Pasang di layar utama</button></li>
               <li><a href="https://t.me/nabung_date_bot" target="_blank" rel="noopener noreferrer">Buka bot Telegram</a></li>
+              <li><button onClick={logout} style={{ color: '#DC2626', fontWeight: 600 }}>Keluar / Ganti Pos</button></li>
             </ul>
           </Sheet>
         );
@@ -2400,7 +2477,7 @@ export default function Page() {
         const isClaimed = misiSel.unlocked && claimedIds.includes(misiSel.id);
         const isPartner = partnerId === misiSel.id;
         const rar = RARITY_CFG[misiSel.rarity] || RARITY_CFG.common;
-        return (
+  return (
           <div className="ov" onClick={() => setMisiSel(null)}>
             <div className="sheet" role="dialog" aria-modal="true" aria-label={misiSel.title} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340, margin: '0 auto' }}>
               <div style={{ textAlign: 'center', padding: '24px 20px 20px' }}>
@@ -2500,7 +2577,7 @@ export default function Page() {
       {newUnlocks.length > 0 && (() => {
         const m = missions.find((x) => x.id === newUnlocks[0]);
         if (!m) return null;
-        return (
+  return (
           <div
             style={{
               position: 'fixed',
