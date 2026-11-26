@@ -209,8 +209,14 @@ const TABS = [
   { id: 'tx', label: 'Transaksi', d: 'M4 6h16M4 12h16M4 18h10' },
   { id: 'report', label: 'Laporan', d: 'M5 20V10m7 10V4m7 16v-7' },
   { id: 'debt', label: 'Utang', d: 'M7 7h11l-3-3m3 3-3 3M17 17H6l3 3m-3-3 3-3' },
+  { id: 'misi', label: 'Misi', d: 'M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
+
+interface MissionData {
+  id: string; title: string; desc: string; stiker: string; stikerAlt: string;
+  xp: number; unlocked: boolean; progress?: number; progressLabel?: string;
+}
 
 interface Goal { id: string; name: string; target: number; saved: number; due: string }
 const kindOf = (w: string) => { const s = (w || '').toLowerCase(); return s.startsWith('e-wallet') ? 'E-Wallet' : s.startsWith('cash') || s.includes('tunai') ? 'Cash' : 'Bank'; };
@@ -502,6 +508,11 @@ export default function Page() {
   const [budIn, setBudIn] = useState('');
   const [debtTab, setDebtTab] = useState<'active' | 'settled'>('active');
   const [df, setDf] = useState({ type: 'Piutang', person: '', amount: '', desc: '' });
+  const [missions, setMissions] = useState<MissionData[]>([]);
+  const [missionXp, setMissionXp] = useState(0);
+  const [missionLoading, setMissionLoading] = useState(false);
+  const [misiSel, setMisiSel] = useState<MissionData | null>(null);
+  const [newUnlocks, setNewUnlocks] = useState<string[]>([]);
 
   useEffect(() => {
     try {
@@ -531,10 +542,30 @@ export default function Page() {
     fetch(`/api/goals?book=${encodeURIComponent(b)}`, { cache: 'no-store' }).then((r) => r.json()).then((j) => j.success && setGoals(j.goals)).catch(() => {});
   }, []);
 
+  const loadMissions = useCallback((b: string) => {
+    setMissionLoading(true);
+    fetch(`/api/missions?book=${encodeURIComponent(b)}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.success) {
+          setMissions((prev) => {
+            const prevUnlocked = new Set(prev.filter((m) => m.unlocked).map((m) => m.id));
+            const freshUnlocks = (j.missions as MissionData[]).filter((m) => m.unlocked && !prevUnlocked.has(m.id)).map((m) => m.id);
+            if (freshUnlocks.length > 0 && prev.length > 0) setNewUnlocks(freshUnlocks);
+            return j.missions;
+          });
+          setMissionXp(j.totalXp);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setMissionLoading(false));
+  }, []);
+
   useEffect(() => {
     if (!ready) return;
     load(book);
     loadGoals(book);
+    loadMissions(book);
     try {
       localStorage.setItem('last_active_book', book);
       const u = new URL(location.href);
@@ -542,7 +573,7 @@ export default function Page() {
       history.replaceState(null, '', u);
     } catch { /* abaikan */ }
     document.title = `${book === ALL ? 'Semua pos' : book} - Keuangan Kita`;
-  }, [book, ready, load, loadGoals]);
+  }, [book, ready, load, loadGoals, loadMissions]);
 
   useEffect(() => {
     fetch('/api/transactions').then((r) => r.json()).then((j) => j.success && setMeta(j.wallets)).catch(() => {});
@@ -786,7 +817,7 @@ export default function Page() {
         {error && <div className="err" role="alert"><span>{error}</span><button onClick={() => load(book)}>Coba lagi</button></div>}
         {loading && !data ? <><div className="skel h" /><div className="skel" /><div className="skel" /></> : (
           <>
-            {tab !== 'debt' && tab !== 'wallet' && yearChips}
+            {tab !== 'debt' && tab !== 'wallet' && tab !== 'misi' && yearChips}
 
             {tab === 'home' && (
               <>
@@ -804,6 +835,50 @@ export default function Page() {
                   <section className="card">
                     <h3>Yang perlu diperhatikan</h3>
                     <ul className="notes">{insights.map((s) => <li key={s}>{s}</li>)}</ul>
+                  </section>
+                )}
+
+                {/* Misi teaser di home */}
+                {missions.length > 0 && (
+                  <section className="card" style={{ cursor: 'pointer' }} onClick={() => setTab('misi')}>
+                    <div className="card-h">
+                      <h3>⭐ Misi & Koleksi Stiker</h3>
+                      <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{missionXp} XP</span>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ height: 6, borderRadius: 6, background: 'var(--line)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 6, background: 'var(--accent)',
+                          width: `${missions.length ? Math.round((missions.filter((m) => m.unlocked).length / missions.length) * 100) : 0}%`,
+                          transition: 'width 0.5s ease',
+                        }} />
+                      </div>
+                      <small style={{ color: 'var(--mute)', marginTop: 4, display: 'block' }}>
+                        {missions.filter((m) => m.unlocked).length}/{missions.length} misi selesai
+                      </small>
+                    </div>
+                    {missions.filter((m) => m.unlocked).length > 0 ? (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {missions.filter((m) => m.unlocked).slice(0, 6).map((m) => (
+                          <div key={m.id} style={{
+                            width: 40, height: 40, borderRadius: 8, overflow: 'hidden',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                          }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={`/stiker/${m.stiker}`} alt={m.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                        ))}
+                        {missions.filter((m) => m.unlocked).length > 6 && (
+                          <div style={{
+                            width: 40, height: 40, borderRadius: 8, background: 'var(--line)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 11, fontWeight: 700, color: 'var(--mute)',
+                          }}>+{missions.filter((m) => m.unlocked).length - 6}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mute" style={{ fontSize: 13 }}>Belum ada stiker terkumpul. Selesaikan misi untuk dapat stiker lucu! 🐱</p>
+                    )}
                   </section>
                 )}
 
@@ -1049,6 +1124,173 @@ export default function Page() {
                 <button className="btn" onClick={() => setSheet('debt')}>Catat utang atau piutang</button>
               </>
             )}
+
+            {tab === 'misi' && (
+              <>
+                {/* Header XP */}
+                <section className="card hero" style={{ textAlign: 'center', paddingBottom: 20 }}>
+                  <div style={{ fontSize: 36, marginBottom: 4 }}>⭐</div>
+                  <div className="big" style={{ fontSize: 28 }}>{missionXp} XP</div>
+                  <small style={{ opacity: 0.7 }}>
+                    {missions.filter((m) => m.unlocked).length}/{missions.length} misi selesai
+                  </small>
+                  <div style={{
+                    marginTop: 12,
+                    height: 8,
+                    borderRadius: 8,
+                    background: 'var(--line)',
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      borderRadius: 8,
+                      background: 'var(--accent)',
+                      width: `${missions.length ? Math.round((missions.filter((m) => m.unlocked).length / missions.length) * 100) : 0}%`,
+                      transition: 'width 0.6s ease',
+                    }} />
+                  </div>
+                </section>
+
+                {/* Stiker koleksi — yang sudah unlocked */}
+                {missions.filter((m) => m.unlocked).length > 0 && (
+                  <section className="card">
+                    <div className="card-h"><h3>Koleksi Stiker 🎁</h3></div>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                      padding: '8px 0 4px',
+                    }}>
+                      {missions.filter((m) => m.unlocked).map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => setMisiSel(m)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            borderRadius: 12,
+                            overflow: 'hidden',
+                            width: 68,
+                            height: 68,
+                            flexShrink: 0,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                            transition: 'transform 0.15s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                          title={m.title}
+                          aria-label={`Stiker ${m.title}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/stiker/${m.stiker}`}
+                            alt={m.stikerAlt}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Daftar semua misi */}
+                {missionLoading ? (
+                  <><div className="skel h" /><div className="skel" /></>
+                ) : (
+                  <>
+                    {(['unlocked', 'locked'] as const).map((group) => (
+                      <section key={group} className="card flush">
+                        <div className="card-h" style={{ padding: '12px 16px 8px' }}>
+                          <h3>{group === 'unlocked' ? '✅ Sudah Selesai' : '🔒 Belum Tercapai'}</h3>
+                        </div>
+                        {missions.filter((m) => group === 'unlocked' ? m.unlocked : !m.unlocked).length === 0 ? (
+                          <p className="empty" style={{ padding: '0 16px 16px' }}>
+                            {group === 'unlocked' ? 'Belum ada misi selesai.' : 'Semua misi sudah selesai!'}
+                          </p>
+                        ) : (
+                          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                            {missions.filter((m) => group === 'unlocked' ? m.unlocked : !m.unlocked).map((m) => (
+                              <li
+                                key={m.id}
+                                onClick={() => setMisiSel(m)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 12,
+                                  padding: '10px 16px',
+                                  borderBottom: '1px solid var(--line)',
+                                  cursor: 'pointer',
+                                  opacity: m.unlocked ? 1 : 0.65,
+                                  transition: 'background 0.15s',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--line)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                              >
+                                {/* Thumbnail stiker */}
+                                <div style={{
+                                  width: 52,
+                                  height: 52,
+                                  borderRadius: 10,
+                                  overflow: 'hidden',
+                                  flexShrink: 0,
+                                  background: m.unlocked ? 'transparent' : 'var(--line)',
+                                  filter: m.unlocked ? 'none' : 'grayscale(100%) blur(1.5px)',
+                                  boxShadow: m.unlocked ? '0 2px 6px rgba(0,0,0,0.15)' : 'none',
+                                }}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={`/stiker/${m.stiker}`}
+                                    alt={m.stikerAlt}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                </div>
+                                {/* Info */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                    <b style={{ fontSize: 14 }}>{m.title}</b>
+                                    <span style={{
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      color: m.unlocked ? 'var(--accent)' : 'var(--mute)',
+                                      whiteSpace: 'nowrap',
+                                    }}>+{m.xp} XP</span>
+                                  </div>
+                                  <p style={{ margin: '2px 0 4px', fontSize: 12, color: 'var(--mute)', lineHeight: 1.4 }}>{m.desc}</p>
+                                  {/* Progress bar */}
+                                  {!m.unlocked && m.progress !== undefined && (
+                                    <div>
+                                      <div style={{ height: 4, borderRadius: 4, background: 'var(--line)', overflow: 'hidden' }}>
+                                        <div style={{
+                                          height: '100%',
+                                          borderRadius: 4,
+                                          background: 'var(--accent)',
+                                          width: `${m.progress}%`,
+                                          transition: 'width 0.5s ease',
+                                        }} />
+                                      </div>
+                                      {m.progressLabel && (
+                                        <small style={{ fontSize: 10, color: 'var(--mute)', marginTop: 2, display: 'block' }}>
+                                          {m.progressLabel}
+                                        </small>
+                                      )}
+                                    </div>
+                                  )}
+                                  {m.unlocked && m.progressLabel && (
+                                    <small style={{ fontSize: 11, color: 'var(--accent)' }}>✓ {m.progressLabel}</small>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
       </main>
@@ -1166,6 +1408,126 @@ export default function Page() {
       )}
 
       {toast && <div className="toast" role="status">{toast}</div>}
+
+      {/* Modal detail misi / stiker */}
+      {misiSel && (
+        <div className="ov" onClick={() => setMisiSel(null)}>
+          <div
+            className="sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={misiSel.title}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 340, margin: '0 auto' }}
+          >
+            <div style={{ textAlign: 'center', padding: '24px 20px 20px' }}>
+              {/* Stiker besar */}
+              <div style={{
+                width: 140,
+                height: 140,
+                borderRadius: 20,
+                overflow: 'hidden',
+                margin: '0 auto 16px',
+                boxShadow: misiSel.unlocked ? '0 8px 24px rgba(0,0,0,0.18)' : 'none',
+                filter: misiSel.unlocked ? 'none' : 'grayscale(100%) blur(3px)',
+                background: 'var(--line)',
+              }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/stiker/${misiSel.stiker}`}
+                  alt={misiSel.stikerAlt}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+              {misiSel.unlocked && (
+                <div style={{ fontSize: 28, marginBottom: 4 }}>🎉</div>
+              )}
+              <h2 style={{ margin: '0 0 6px', fontSize: 18 }}>{misiSel.title}</h2>
+              <p style={{ color: 'var(--mute)', fontSize: 14, margin: '0 0 12px' }}>{misiSel.desc}</p>
+              <div style={{
+                display: 'inline-block',
+                background: misiSel.unlocked ? 'var(--accent)' : 'var(--line)',
+                color: misiSel.unlocked ? '#fff' : 'var(--mute)',
+                borderRadius: 20,
+                padding: '4px 14px',
+                fontSize: 13,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}>
+                {misiSel.unlocked ? `✓ Selesai · +${misiSel.xp} XP` : `${misiSel.xp} XP · Belum selesai`}
+              </div>
+              {misiSel.progressLabel && (
+                <p style={{ fontSize: 12, color: 'var(--mute)', margin: '8px 0 0' }}>{misiSel.progressLabel}</p>
+              )}
+              {!misiSel.unlocked && misiSel.progress !== undefined && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ height: 6, borderRadius: 6, background: 'var(--line)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      borderRadius: 6,
+                      background: 'var(--accent)',
+                      width: `${misiSel.progress}%`,
+                    }} />
+                  </div>
+                  <small style={{ fontSize: 11, color: 'var(--mute)', marginTop: 4, display: 'block' }}>
+                    Progress {misiSel.progress}%
+                  </small>
+                </div>
+              )}
+              <button
+                className="btn"
+                style={{ marginTop: 20, width: '100%' }}
+                onClick={() => setMisiSel(null)}
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notif stiker baru unlock */}
+      {newUnlocks.length > 0 && (() => {
+        const m = missions.find((x) => x.id === newUnlocks[0]);
+        if (!m) return null;
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 80,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 200,
+              background: 'var(--card)',
+              borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              maxWidth: 320,
+              width: 'calc(100vw - 32px)',
+              cursor: 'pointer',
+              border: '1.5px solid var(--accent)',
+            }}
+            onClick={() => { setNewUnlocks((prev) => prev.slice(1)); setMisiSel(m); setTab('misi'); }}
+          >
+            <div style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/stiker/${m.stiker}`} alt={m.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            <div>
+              <b style={{ fontSize: 13 }}>🎊 Misi selesai!</b>
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--mute)' }}>{m.title} · +{m.xp} XP</p>
+            </div>
+            <button
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', opacity: 0.5, flexShrink: 0 }}
+              onClick={(e) => { e.stopPropagation(); setNewUnlocks((prev) => prev.slice(1)); }}
+              aria-label="Tutup notifikasi"
+            >×</button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
