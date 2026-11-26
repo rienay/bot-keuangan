@@ -811,7 +811,7 @@ export default function Page() {
           style={{ cursor: 'pointer', textAlign: 'left', border: 'none' }}
         >
           <span className="bk-emoji" style={{ color: st.c }}><BookIcon book={book} size={18} /></span>
-          <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{showMisi ? '← Kembali' : `${kind} · ⭐ Misi`}</small></span>
+          <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{showMisi ? '← Kembali' : kind}</small></span>
         </button>
         <button className={`icbtn ${busy ? 'spin' : ''}`} onClick={() => load(book, true)} disabled={busy} aria-label="Muat ulang dari Google Sheets">
           <Ic d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
