@@ -483,7 +483,7 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
-  const [sheet, setSheet] = useState<null | 'books' | 'budget' | 'debt' | 'tx' | 'goal' | 'deposit' | 'more' | 'transfer'>(null);
+  const [sheet, setSheet] = useState<null | 'budget' | 'debt' | 'tx' | 'goal' | 'deposit' | 'more' | 'transfer'>(null);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [q, setQ] = useState('');
   const [typeF, setTypeF] = useState<'all' | 'Pemasukan' | 'Pengeluaran'>('all');
@@ -685,7 +685,6 @@ export default function Page() {
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'Gagal menyimpan');
   };
-  const pickBook = (b: string) => { if (b !== book) { setData(null); setLoading(true); setBook(b); setPick(null); setMonthF('all'); setQ(''); setWSel(null); } setSheet(null); };
   const saveBudget = async () => {
     const n = parseInt(budIn.replace(/\D/g, ''), 10);
     if (isNaN(n)) return say('Isi nominal budget dulu');
@@ -773,11 +772,10 @@ export default function Page() {
   return (
     <div className="app" style={{ '--accent': st.c } as React.CSSProperties}>
       <header className="top">
-        <button className="bookbtn" onClick={() => setSheet('books')} aria-label={`Pos aktif ${book}. Ganti pos`}>
+        <div className="bookbtn" aria-label={`Pos aktif: ${book}`}>
           <span className="bk-emoji" style={{ color: st.c }}><BookIcon book={book} size={18} /></span>
           <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{kind}</small></span>
-          <Ic d="M6 9l6 6 6-6" />
-        </button>
+        </div>
         <button className={`icbtn ${busy ? 'spin' : ''}`} onClick={() => load(book, true)} disabled={busy} aria-label="Muat ulang dari Google Sheets">
           <Ic d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
         </button>
@@ -1062,26 +1060,6 @@ export default function Page() {
           </button>
         ))}
       </nav>
-
-      {sheet === 'books' && (
-        <Sheet title="Pilih pos" onClose={() => setSheet(null)}>
-          <ul className="booklist">
-            {[...books, ALL].map((b) => {
-              const s = bookStyle(b);
-              return (
-                <li key={b}>
-                  <button className={b === book ? 'on' : ''} onClick={() => pickBook(b)} style={{ '--accent': s.c } as React.CSSProperties}>
-                    <span className="bk-emoji" style={{ color: s.c }}><BookIcon book={b} size={18} /></span>
-                    <span className="bk-t"><b>{b === ALL ? 'Semua pos' : b}</b><small>{b === MAIN ? 'Kas utama' : b === ALL ? 'Gabungan semua pos' : 'Pos kegiatan'}</small></span>
-                    {b !== ALL && data?.bookBalances?.[b] !== undefined && <span className="num">{rp(data.bookBalances[b])}</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <a className="btn ghost" href="https://t.me/nabung_date_bot" target="_blank" rel="noopener noreferrer">Buka bot Telegram</a>
-        </Sheet>
-      )}
 
       {sheet === 'budget' && (
         <Sheet title={`Budget ${budMode === 'monthly' ? 'bulanan' : 'harian'}, ${writeBook}`} onClose={() => setSheet(null)}>
