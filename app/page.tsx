@@ -66,6 +66,212 @@ function bookStyle(b: string) {
 const Ic = ({ d }: { d: string }) => (
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
 );
+const CardChip = () => (
+  <svg width="34" height="26" viewBox="0 0 34 26" fill="none" className="wc-chip" aria-hidden="true">
+    <defs>
+      <linearGradient id="wcGoldChip" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#FDE68A" />
+        <stop offset="50%" stopColor="#D97706" />
+        <stop offset="100%" stopColor="#92400E" />
+      </linearGradient>
+    </defs>
+    <rect width="34" height="26" rx="4.5" fill="url(#wcGoldChip)" />
+    <rect x="0.5" y="0.5" width="33" height="25" rx="4" stroke="rgba(0,0,0,0.2)" />
+    <path d="M0 9h12v8H0M34 9H22v8h12M12 0v26M22 0v26M12 13h10" stroke="rgba(0,0,0,0.3)" strokeWidth="0.8" />
+  </svg>
+);
+
+const ContactlessWave = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" opacity="0.65" aria-hidden="true">
+    <path d="M8.5 16.5a5 5 0 0 1 0-7" />
+    <path d="M12 19a8.5 8.5 0 0 0 0-12" />
+    <path d="M15.5 21.5a12 12 0 0 0 0-17" />
+  </svg>
+);
+
+function getWalletTheme(key: string, label: string) {
+  const s = `${key} ${label}`.toLowerCase();
+
+  if (s.includes('jago')) {
+    return {
+      gradient: 'linear-gradient(135deg, #2D3342 0%, #1A1E27 60%, #111319 100%)',
+      accent: '#FFB703',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#FFB703', padding: '3px 7px', color: '#161922', fontWeight: 800, fontSize: '11px', letterSpacing: '-0.02em', borderRadius: '6px' }}>
+          jago
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('gopay') || s.includes('go-pay') || s.includes('gojek')) {
+    return {
+      gradient: 'linear-gradient(135deg, #00AED6 0%, #0084A8 60%, #00566E 100%)',
+      accent: '#E0F7FA',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#FFFFFF', padding: '3px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}>
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none">
+            <circle cx="8" cy="8" r="7" stroke="#00AED6" strokeWidth="2.5" />
+            <circle cx="8" cy="8" r="3.2" fill="#00AED6" />
+          </svg>
+          <span style={{ color: '#00AED6', fontWeight: 800, fontSize: '10.5px' }}>gopay</span>
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('shopee') || s.includes('shopeepay')) {
+    return {
+      gradient: 'linear-gradient(135deg, #EE4D2D 0%, #CF3817 60%, #992308 100%)',
+      accent: '#FFE0B2',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#FFFFFF', padding: '3px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}>
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none">
+            <path d="M3.5 5h9l-1 9.5H4.5L3.5 5z" fill="#EE4D2D" />
+            <path d="M6 5V3.5a2 2 0 1 1 4 0V5" stroke="#EE4D2D" strokeWidth="1.2" />
+            <path d="M8.5 7.5c-.5-.3-1.1-.3-1.5 0-.4.3-.3.8.2 1.1.7.3 1.1.6.9 1.2-.2.6-.8 1-1.5.8" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+          <span style={{ color: '#EE4D2D', fontWeight: 800, fontSize: '10px' }}>ShopeePay</span>
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('bca')) {
+    return {
+      gradient: 'linear-gradient(135deg, #005EAD 0%, #003B75 60%, #00224A 100%)',
+      accent: '#93C5FD',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#005EAD', border: '1px solid rgba(255,255,255,0.4)', padding: '2px 7px', color: '#FFFFFF', fontWeight: 900, fontSize: '11px', letterSpacing: '0.05em', borderRadius: '5px' }}>
+          BCA
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('mandiri')) {
+    return {
+      gradient: 'linear-gradient(135deg, #003366 0%, #002040 60%, #001226 100%)',
+      accent: '#FDB913',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#002B54', border: '1px solid rgba(253,185,19,0.5)', padding: '2px 6px', color: '#FFFFFF', fontWeight: 800, fontSize: '10px', borderRadius: '5px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+          <span style={{ color: '#FDB913' }}>~</span> mandırı
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('bri')) {
+    return {
+      gradient: 'linear-gradient(135deg, #00529C 0%, #003366 60%, #001F3F 100%)',
+      accent: '#F37024',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#00529C', border: '1px solid rgba(255,255,255,0.3)', padding: '2px 6px', color: '#FFFFFF', fontWeight: 900, fontSize: '11px', borderRadius: '5px' }}>
+          BRI <span style={{ color: '#F37024' }}>•</span>
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('bni')) {
+    return {
+      gradient: 'linear-gradient(135deg, #005E6A 0%, #003E46 60%, #00252A 100%)',
+      accent: '#F15A24',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#005E6A', border: '1px solid rgba(255,255,255,0.3)', padding: '2px 6px', color: '#FFFFFF', fontWeight: 900, fontSize: '11px', borderRadius: '5px' }}>
+          BNI <span style={{ color: '#F15A24' }}>46</span>
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('bsi') || s.includes('syariah')) {
+    return {
+      gradient: 'linear-gradient(135deg, #00A39D 0%, #00706C 60%, #004240 100%)',
+      accent: '#F4B400',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#00837E', border: '1px solid rgba(244,180,0,0.5)', padding: '2px 6px', color: '#FFFFFF', fontWeight: 900, fontSize: '10.5px', borderRadius: '5px' }}>
+          BSI ✦
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('dana')) {
+    return {
+      gradient: 'linear-gradient(135deg, #118EEA 0%, #0D6DB3 60%, #084978 100%)',
+      accent: '#BBDEFB',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#118EEA', border: '1px solid rgba(255,255,255,0.4)', padding: '2px 7px', color: '#FFFFFF', fontWeight: 900, fontSize: '10px', letterSpacing: '0.06em', borderRadius: '5px' }}>
+          DANA
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('ovo')) {
+    return {
+      gradient: 'linear-gradient(135deg, #4C3494 0%, #36226B 60%, #221247 100%)',
+      accent: '#D1C4E9',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#4C3494', border: '1px solid rgba(255,255,255,0.4)', padding: '2px 7px', color: '#FFFFFF', fontWeight: 900, fontSize: '10px', letterSpacing: '0.08em', borderRadius: '5px' }}>
+          OVO
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('seabank') || s.includes('sea bank')) {
+    return {
+      gradient: 'linear-gradient(135deg, #F25C05 0%, #C94600 60%, #8A2D00 100%)',
+      accent: '#FFE082',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#F25C05', border: '1px solid rgba(255,255,255,0.4)', padding: '2px 6px', color: '#FFFFFF', fontWeight: 800, fontSize: '10px', borderRadius: '5px' }}>
+          SeaBank
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('tunai') || s.includes('cash')) {
+    return {
+      gradient: 'linear-gradient(135deg, #1B4D3E 0%, #113329 60%, #0A1F18 100%)',
+      accent: '#6EE7B7',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#10B981', padding: '2px 6px', color: '#FFFFFF', fontWeight: 800, fontSize: '10px', borderRadius: '5px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+          <svg viewBox="0 0 16 12" width="12" height="9" fill="none">
+            <rect x="0.5" y="0.5" width="15" height="11" rx="1.5" stroke="#FFFFFF" />
+            <circle cx="8" cy="6" r="2.5" fill="#FFFFFF" />
+          </svg>
+          CASH
+        </span>
+      ),
+    };
+  }
+
+  if (s.includes('bank')) {
+    return {
+      gradient: 'linear-gradient(135deg, #1E3A5F 0%, #132742 60%, #0A1626 100%)',
+      accent: '#93C5FD',
+      badge: (
+        <span className="w-brand-badge" style={{ background: '#2563EB', padding: '2px 6px', color: '#FFFFFF', fontWeight: 800, fontSize: '10px', borderRadius: '5px' }}>
+          BANK
+        </span>
+      ),
+    };
+  }
+
+  return {
+    gradient: 'linear-gradient(135deg, #374151 0%, #1F2937 60%, #111827 100%)',
+    accent: '#D1D5DB',
+    badge: (
+      <span className="w-brand-badge" style={{ background: '#4B5563', padding: '2px 6px', color: '#FFFFFF', fontWeight: 700, fontSize: '10px', borderRadius: '5px' }}>
+        DOMPET
+      </span>
+    ),
+  };
+}
+
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   useEffect(() => {
     const f = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -220,7 +426,8 @@ export default function Page() {
     const cnt: Record<string, number> = {};
     return Array.from(g.entries()).map(([key, list]) => {
       const kind = kindOf(key);
-      const idx = (cnt[kind] = (cnt[kind] ?? -1) + 1);
+      const label = wLabel(key);
+      const theme = getWalletTheme(key, label);
       list.sort((a, b) => (parseDate(b.date)?.getTime() || 0) - (parseDate(a.date)?.getTime() || 0));
       let bal = 0, inM = 0, outM = 0;
       list.forEach((t) => {
@@ -229,7 +436,7 @@ export default function Page() {
         const d = parseDate(t.date);
         if (!isTransfer(t) && d && d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear()) c > 0 ? (inM += c) : (outM -= c);
       });
-      return { key, kind, label: wLabel(key), c: WCOL[kind][idx % WCOL[kind].length], e: kind === 'Bank' ? '🏦' : kind === 'E-Wallet' ? '📱' : '💵', list, bal, inM, outM };
+      return { key, kind, label, theme, list, bal, inM, outM };
     }).sort((a, b) => b.bal - a.bal);
   }, [txs]);
   const walTotal = wal.reduce((s, w) => s + w.bal, 0);
@@ -480,23 +687,81 @@ export default function Page() {
               return (
                 <>
                   <div className={`wstack ${sel ? 'sel' : ''}`}>
-                    {ordered.map((w, i) => (
-                      <button key={w.key} className={`wcard ${(sel ? i === 0 : i === ordered.length - 1) ? 'full' : ''}`} style={{ background: w.c }} onClick={() => setWSel(sel?.key === w.key ? null : w.key)} aria-expanded={sel?.key === w.key} aria-label={`${w.label}, saldo ${rp(w.bal)}`}>
-                        <span className="wc-top"><span>{w.e} {w.label}</span><b className="num wc-mini">{rp(w.bal)}</b></span>
-                        <span className="wc-bal">{rp(w.bal)}</span>
-                        <span className="wc-foot"><span>Masuk bulan ini<b className="num">+{rp(w.inM)}</b></span><span>Keluar bulan ini<b className="num">-{rp(w.outM)}</b></span></span>
-                      </button>
-                    ))}
+                    {ordered.map((w) => {
+                      const isExpanded = sel?.key === w.key;
+                      return (
+                        <div
+                          key={w.key}
+                          className={`wcard ${isExpanded ? 'is-sel' : ''}`}
+                          style={{ background: w.theme.gradient }}
+                          onClick={() => setWSel(isExpanded ? null : w.key)}
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={isExpanded}
+                          aria-label={`${w.label}, saldo ${rp(w.bal)}`}
+                        >
+                          {isExpanded ? (
+                            <div className="wc-inner">
+                              <div className="wc-header">
+                                <div className="wc-brand">
+                                  {w.theme.badge}
+                                  <span className="wc-name">{w.label}</span>
+                                </div>
+                                <div className="wc-header-right">
+                                  <ContactlessWave />
+                                </div>
+                              </div>
+
+                              <div className="wc-mid">
+                                <CardChip />
+                                <div className="wc-bal-wrap">
+                                  <span className="wc-bal-label">Saldo Saat Ini</span>
+                                  <span className="wc-bal">{rp(w.bal)}</span>
+                                </div>
+                              </div>
+
+                              <div className="wc-foot">
+                                <div className="wc-pill in">
+                                  <span>Masuk</span>
+                                  <b className="num">+{rp(w.inM)}</b>
+                                </div>
+                                <div className="wc-pill out">
+                                  <span>Keluar</span>
+                                  <b className="num">-{rp(w.outM)}</b>
+                                </div>
+                                <div className="wc-card-no">
+                                  •••• {Math.abs(w.key.split('').reduce((a, b) => a + b.charCodeAt(0), 1000) % 9000 + 1000)}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="wc-peek">
+                              <div className="wc-brand">
+                                {w.theme.badge}
+                                <span className="wc-name">{w.label}</span>
+                              </div>
+                              <div className="wc-peek-right">
+                                <b className="num wc-mini">{rp(w.bal)}</b>
+                                <span className="wc-chevron">›</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   {sel ? (
                     <section className="card flush">
-                      <h3 className="day">Transaksi {sel.label}</h3>
+                      <div className="card-h" style={{ padding: '8px 16px' }}>
+                        <h3 className="day" style={{ padding: 0 }}>Mutasi {sel.label}</h3>
+                        <button className="link" onClick={() => setWSel(null)} style={{ fontSize: '13px' }}>Tutup kartu ✕</button>
+                      </div>
                       {sel.list.length ? <ul className="txs">{sel.list.slice(0, 30).map(row)}</ul> : <div className="pad"><Empty>Belum ada transaksi di dompet ini.</Empty></div>}
                     </section>
                   ) : (
                     <section className="card">
                       <div className="kv"><span>Total semua dompet</span><b className="num">{rp(walTotal)}</b></div>
-                      <p className="mute">Ketuk kartu untuk melihat transaksi tiap dompet.</p>
+                      <p className="mute">Ketuk salah satu kartu untuk melihat rincian mutasi dompet.</p>
                       <button className="btn ghost" onClick={openTransfer}>Pindah uang antar dompet</button>
                     </section>
                   )}
