@@ -554,6 +554,16 @@ export default function Page() {
   const [newCatInput, setNewCatInput] = useState('');
 
   useEffect(() => {
+    const locked = !!(sheet || misiSel || rewardReveal);
+    document.body.style.overflow = locked ? 'hidden' : '';
+    document.documentElement.style.overflow = locked ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    };
+  }, [sheet, misiSel, rewardReveal]);
+
+  useEffect(() => {
     try {
       const p = new URLSearchParams(location.search);
       const b = p.get('buku') || p.get('book') || localStorage.getItem('last_active_book');
