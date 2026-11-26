@@ -714,9 +714,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const book = searchParams.get('book') || 'Tabungan';
 
-    // Ambil data transaksi
+    // Ambil data transaksi (mulai tahun 2026 ke atas)
     const data = await getAllTransactionsForWeb(book, false);
-    const txs = data.transactions ?? [];
+    const txs = (data.transactions ?? []).filter((t: any) => (parseDate(t.date)?.getFullYear() || 0) >= 2026);
 
     // Ambil goals & debts dari API
     let goals: any[] = [];
@@ -730,7 +730,7 @@ export async function GET(request: Request) {
       const gJson = await gRes.json();
       const dJson = await dRes.json();
       if (gJson.success) goals = gJson.goals ?? [];
-      if (dJson.success) debts = dJson.items ?? [];
+      if (dJson.success) debts = (dJson.items ?? []).filter((d: any) => (parseDate(d.date)?.getFullYear() || 0) >= 2026);
     } catch { /* goals/debts opsional */ }
 
     const missions = computeMissions(txs, goals, debts);
