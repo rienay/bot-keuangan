@@ -8,15 +8,201 @@ const ALL = 'Semua';
 const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 const PAL = ['#4F46E5', '#E0642B', '#0E9F6E', '#D6336C', '#1D8FD8', '#B7791F', '#8B5CF6', '#0F766E', '#6B7280'];
 const HUES = ['#0F766E', '#4F46E5', '#A21CAF', '#B45309', '#1D6FD8', '#BE185D', '#4D7C0F'];
-const EMO = ['🌿', '🎯', '🎉', '🧳', '🏠', '🎓', '🛠️'];
-const CAT: [RegExp, string][] = [
-  [/makan|minum|konsumsi|resto|cafe|food|jajan|kopi/, '🍽️'], [/hadiah|donasi|sedekah|amal|kado|kasih/, '🎁'],
-  [/belanja|shopping|pasar|supermarket|baju|kebutuhan/, '🛍️'], [/transport|bensin|parkir|ojek|grab|gojek|kereta/, '🚗'],
-  [/tagihan|listrik|wifi|pulsa|langganan|internet/, '⚡'], [/hiburan|date|nonton|kencan|wisata|liburan/, '🍿'],
-  [/cantik|skincare|salon|makeup/, '💄'], [/sehat|obat|dokter|apotek|klinik/, '💊'],
-  [/didik|buku|kursus|kuliah|sekolah/, '📚'], [/rumah|kos|keluarga|sewa/, '🏡'],
-  [/gaji|bonus|tabung|invest/, '💼'], [/pindah|transfer/, '🔁'],
-];
+function CatIcon({ category, size = 18 }: { category: string; size?: number }) {
+  const s = (category || '').toLowerCase();
+  if (/makan|minum|konsumsi|resto|cafe|food|jajan|kopi/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
+        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+        <line x1="6" y1="1" x2="6" y2="4" />
+        <line x1="10" y1="1" x2="10" y2="4" />
+        <line x1="14" y1="1" x2="14" y2="4" />
+      </svg>
+    );
+  }
+  if (/hadiah|donasi|sedekah|amal|kado|kasih/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polyline points="20 12 20 22 4 22 4 12" />
+        <rect x="2" y="7" width="20" height="5" rx="1" />
+        <line x1="12" y1="22" x2="12" y2="7" />
+        <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+        <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+      </svg>
+    );
+  }
+  if (/belanja|shopping|pasar|supermarket|baju|kebutuhan/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <path d="M16 10a4 4 0 0 1-8 0" />
+      </svg>
+    );
+  }
+  if (/transport|bensin|parkir|ojek|grab|gojek|kereta/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="2" y="11" width="20" height="7" rx="2" />
+        <path d="m5 11 2-5h10l2 5" />
+        <circle cx="7" cy="18" r="2" />
+        <circle cx="17" cy="18" r="2" />
+      </svg>
+    );
+  }
+  if (/tagihan|listrik|wifi|pulsa|langganan|internet/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      </svg>
+    );
+  }
+  if (/hiburan|date|nonton|kencan|wisata|liburan/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M2 9a3 3 0 0 1 0 6v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a3 3 0 0 1 0-6V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" />
+        <line x1="9" y1="3" x2="9" y2="21" strokeDasharray="2 2" />
+      </svg>
+    );
+  }
+  if (/cantik|skincare|salon|makeup/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z" />
+      </svg>
+    );
+  }
+  if (/sehat|obat|dokter|apotek|klinik/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="5" />
+        <line x1="12" y1="8" x2="12" y2="16" />
+        <line x1="8" y1="12" x2="16" y2="12" />
+      </svg>
+    );
+  }
+  if (/didik|buku|kursus|kuliah|sekolah/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
+        <line x1="8" y1="7" x2="16" y2="7" />
+        <line x1="8" y1="11" x2="14" y2="11" />
+      </svg>
+    );
+  }
+  if (/rumah|kos|keluarga|sewa/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <polyline points="9 22 9 12 15 12 15 22" />
+      </svg>
+    );
+  }
+  if (/gaji|bonus|tabung|invest/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect width="20" height="14" x="2" y="7" rx="2" />
+        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+      </svg>
+    );
+  }
+  if (/pindah|transfer/.test(s)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m17 2 4 4-4 4" />
+        <path d="M3 6h18" />
+        <path d="m7 22-4-4 4-4" />
+        <path d="M21 18H3" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="11" x2="16" y2="11" />
+      <line x1="8" y1="15" x2="13" y2="15" />
+    </svg>
+  );
+}
+
+function BookIcon({ book, size = 18 }: { book: string; size?: number }) {
+  if (book === MAIN) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+        <circle cx="12" cy="12" r="3.5" />
+        <path d="M12 8.5V12l2 1.5" />
+        <line x1="3" y1="8" x2="5" y2="8" />
+        <line x1="3" y1="16" x2="5" y2="16" />
+      </svg>
+    );
+  }
+  if (book === ALL) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+        <polyline points="2 17 12 22 22 17" />
+        <polyline points="2 12 12 17 22 12" />
+      </svg>
+    );
+  }
+  let h = 0;
+  for (const ch of book) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const idx = h % 7;
+  switch (idx) {
+    case 0:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="5" />
+          <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+        </svg>
+      );
+    case 1:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <polygon points="15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5 15.5 8.5" fill="none" />
+        </svg>
+      );
+    case 2:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+          <line x1="4" y1="22" x2="4" y2="15" />
+        </svg>
+      );
+    case 3:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect width="18" height="13" x="3" y="7" rx="2" />
+          <path d="M8 7V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3" />
+        </svg>
+      );
+    case 4:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10Z" />
+          <path d="M2 21c0-3 1.85-5.4 5.1-6 2.4-.4 4.9-1.9 5.9-2.9" />
+        </svg>
+      );
+    case 5:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      );
+    default:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 3h12l4 6-10 12L2 9z" />
+          <path d="M11 3 8 9l4 12 4-12-3-6" />
+        </svg>
+      );
+  }
+}
 const TABS = [
   { id: 'home', label: 'Ringkasan', d: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
   { id: 'wallet', label: 'Dompet', d: 'M3 7a2 2 0 0 1 2-2h13v4M3 7v10a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2zM16 14h2' },
@@ -41,7 +227,7 @@ const goalNote = (g: Goal) => {
 };
 const rp = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 const short = (v: number) => { const a = Math.abs(v); return a >= 1e6 ? `${(a / 1e6).toFixed(1).replace('.0', '')}jt` : a >= 1e3 ? `${Math.round(a / 1e3)}rb` : a ? String(a) : '-'; };
-const icon = (c: string) => CAT.find(([r]) => r.test((c || '').toLowerCase()))?.[1] ?? '🧾';
+const icon = (c: string) => <CatIcon category={c} />;
 const isTransfer = (t: WebTransactionItem) => {
   const s = `${t.category} ${t.description}`.toLowerCase();
   return !!t.isTransfer || /pindah uang|pindah saldo|transfer saldo/.test(s);
@@ -57,11 +243,11 @@ function parseDate(s: string): Date | null {
 }
 const dayLabel = (s: string) => { const d = parseDate(s); return d ? new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long' }).format(d) : s; };
 function bookStyle(b: string) {
-  if (b === MAIN) return { c: HUES[0], e: '💰' };
-  if (b === ALL) return { c: '#334155', e: '📚' };
+  if (b === MAIN) return { c: HUES[0] };
+  if (b === ALL) return { c: '#334155' };
   let h = 0;
   for (const ch of b) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return { c: HUES[1 + (h % (HUES.length - 1))], e: EMO[h % EMO.length] };
+  return { c: HUES[1 + (h % (HUES.length - 1))] };
 }
 const Ic = ({ d }: { d: string }) => (
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
@@ -281,7 +467,7 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div className="ov" onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-h"><h2>{title}</h2><button className="icbtn" onClick={onClose} aria-label="Tutup">✕</button></div>
+        <div className="sheet-h"><h2>{title}</h2><button className="icbtn" onClick={onClose} aria-label="Tutup"><Ic d="M18 6L6 18M6 6l12 12" /></button></div>
         {children}
       </div>
     </div>
@@ -588,7 +774,7 @@ export default function Page() {
     <div className="app" style={{ '--accent': st.c } as React.CSSProperties}>
       <header className="top">
         <button className="bookbtn" onClick={() => setSheet('books')} aria-label={`Pos aktif ${book}. Ganti pos`}>
-          <span className="bk-emoji">{st.e}</span>
+          <span className="bk-emoji" style={{ color: st.c }}><BookIcon book={book} size={18} /></span>
           <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{kind}</small></span>
           <Ic d="M6 9l6 6 6-6" />
         </button>
@@ -754,7 +940,7 @@ export default function Page() {
                     <section className="card flush">
                       <div className="card-h" style={{ padding: '8px 16px' }}>
                         <h3 className="day" style={{ padding: 0 }}>Mutasi {sel.label}</h3>
-                        <button className="link" onClick={() => setWSel(null)} style={{ fontSize: '13px' }}>Tutup kartu ✕</button>
+                        <button className="link" onClick={() => setWSel(null)} style={{ fontSize: '13px' }}>Tutup kartu</button>
                       </div>
                       {sel.list.length ? <ul className="txs">{sel.list.slice(0, 30).map(row)}</ul> : <div className="pad"><Empty>Belum ada transaksi di dompet ini.</Empty></div>}
                     </section>
@@ -822,7 +1008,7 @@ export default function Page() {
                         {cats.list.map((c) => (
                           <li key={c.name}>
                             <span className="dot" style={{ background: c.color }} />
-                            <span className="cn">{icon(c.name)} {c.name}</span>
+                            <span className="cn"><CatIcon category={c.name} size={15} /> <span>{c.name}</span></span>
                             <b className="num">{rp(c.amt)}</b><small>{c.pct}%</small>
                           </li>
                         ))}
@@ -885,7 +1071,7 @@ export default function Page() {
               return (
                 <li key={b}>
                   <button className={b === book ? 'on' : ''} onClick={() => pickBook(b)} style={{ '--accent': s.c } as React.CSSProperties}>
-                    <span className="bk-emoji">{s.e}</span>
+                    <span className="bk-emoji" style={{ color: s.c }}><BookIcon book={b} size={18} /></span>
                     <span className="bk-t"><b>{b === ALL ? 'Semua pos' : b}</b><small>{b === MAIN ? 'Kas utama' : b === ALL ? 'Gabungan semua pos' : 'Pos kegiatan'}</small></span>
                     {b !== ALL && data?.bookBalances?.[b] !== undefined && <span className="num">{rp(data.bookBalances[b])}</span>}
                   </button>
