@@ -209,7 +209,6 @@ const TABS = [
   { id: 'tx', label: 'Transaksi', d: 'M4 6h16M4 12h16M4 18h10' },
   { id: 'report', label: 'Laporan', d: 'M5 20V10m7 10V4m7 16v-7' },
   { id: 'debt', label: 'Utang', d: 'M7 7h11l-3-3m3 3-3 3M17 17H6l3 3m-3-3 3-3' },
-  { id: 'misi', label: 'Misi', d: 'M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 
@@ -513,6 +512,7 @@ export default function Page() {
   const [missionLoading, setMissionLoading] = useState(false);
   const [misiSel, setMisiSel] = useState<MissionData | null>(null);
   const [newUnlocks, setNewUnlocks] = useState<string[]>([]);
+  const [showMisi, setShowMisi] = useState(false);
 
   useEffect(() => {
     try {
@@ -803,10 +803,16 @@ export default function Page() {
   return (
     <div className="app" style={{ '--accent': st.c } as React.CSSProperties}>
       <header className="top">
-        <div className="bookbtn" aria-label={`Pos aktif: ${book}`}>
+        <button
+          type="button"
+          className="bookbtn"
+          onClick={() => { setShowMisi((v) => !v); window.scrollTo({ top: 0 }); }}
+          aria-label={`Pos aktif: ${book}. Ketuk untuk buka misi`}
+          style={{ cursor: 'pointer', textAlign: 'left', border: 'none' }}
+        >
           <span className="bk-emoji" style={{ color: st.c }}><BookIcon book={book} size={18} /></span>
-          <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{kind}</small></span>
-        </div>
+          <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{showMisi ? '← Kembali' : `${kind} · ⭐ Misi`}</small></span>
+        </button>
         <button className={`icbtn ${busy ? 'spin' : ''}`} onClick={() => load(book, true)} disabled={busy} aria-label="Muat ulang dari Google Sheets">
           <Ic d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
         </button>
@@ -817,9 +823,9 @@ export default function Page() {
         {error && <div className="err" role="alert"><span>{error}</span><button onClick={() => load(book)}>Coba lagi</button></div>}
         {loading && !data ? <><div className="skel h" /><div className="skel" /><div className="skel" /></> : (
           <>
-            {tab !== 'debt' && tab !== 'wallet' && tab !== 'misi' && yearChips}
+            {!showMisi && tab !== 'debt' && tab !== 'wallet' && yearChips}
 
-            {tab === 'home' && (
+            {!showMisi && tab === 'home' && (
               <>
                 <section className="card hero">
                   <small>Saldo {year === ALL ? 'semua tahun' : year}</small>
@@ -835,50 +841,6 @@ export default function Page() {
                   <section className="card">
                     <h3>Yang perlu diperhatikan</h3>
                     <ul className="notes">{insights.map((s) => <li key={s}>{s}</li>)}</ul>
-                  </section>
-                )}
-
-                {/* Misi teaser di home */}
-                {missions.length > 0 && (
-                  <section className="card" style={{ cursor: 'pointer' }} onClick={() => setTab('misi')}>
-                    <div className="card-h">
-                      <h3>⭐ Misi & Koleksi Stiker</h3>
-                      <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{missionXp} XP</span>
-                    </div>
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ height: 6, borderRadius: 6, background: 'var(--line)', overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%', borderRadius: 6, background: 'var(--accent)',
-                          width: `${missions.length ? Math.round((missions.filter((m) => m.unlocked).length / missions.length) * 100) : 0}%`,
-                          transition: 'width 0.5s ease',
-                        }} />
-                      </div>
-                      <small style={{ color: 'var(--mute)', marginTop: 4, display: 'block' }}>
-                        {missions.filter((m) => m.unlocked).length}/{missions.length} misi selesai
-                      </small>
-                    </div>
-                    {missions.filter((m) => m.unlocked).length > 0 ? (
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {missions.filter((m) => m.unlocked).slice(0, 6).map((m) => (
-                          <div key={m.id} style={{
-                            width: 40, height: 40, borderRadius: 8, overflow: 'hidden',
-                            boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                          }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={`/stiker/${m.stiker}`} alt={m.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        ))}
-                        {missions.filter((m) => m.unlocked).length > 6 && (
-                          <div style={{
-                            width: 40, height: 40, borderRadius: 8, background: 'var(--line)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 11, fontWeight: 700, color: 'var(--mute)',
-                          }}>+{missions.filter((m) => m.unlocked).length - 6}</div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="mute" style={{ fontSize: 13 }}>Belum ada stiker terkumpul. Selesaikan misi untuk dapat stiker lucu! 🐱</p>
-                    )}
                   </section>
                 )}
 
@@ -940,7 +902,7 @@ export default function Page() {
               </>
             )}
 
-            {tab === 'wallet' && (() => {
+            {!showMisi && tab === 'wallet' && (() => {
               const sel = wal.find((w) => w.key === wSel) || null;
               const ordered = sel ? [sel, ...wal.filter((w) => w !== sel)] : wal;
               return (
@@ -1028,7 +990,7 @@ export default function Page() {
               );
             })()}
 
-            {tab === 'tx' && (
+            {!showMisi && tab === 'tx' && (
               <>
                 <div className="filters">
                   <input type="search" placeholder="Cari keterangan atau kategori" value={q} onChange={(e) => { setQ(e.target.value); setLimit(40); }} aria-label="Cari transaksi" />
@@ -1051,7 +1013,7 @@ export default function Page() {
               </>
             )}
 
-            {tab === 'report' && (
+            {!showMisi && tab === 'report' && (
               <>
                 <section className="card">
                   <div className="card-h">
@@ -1102,7 +1064,7 @@ export default function Page() {
               </>
             )}
 
-            {tab === 'debt' && (
+            {!showMisi && tab === 'debt' && (
               <>
                 <div className="pair tiles">
                   <div className="card"><small>Piutang (uang kita di orang)</small><b className="num in">{rp(sumD('Piutang'))}</b></div>
@@ -1125,8 +1087,19 @@ export default function Page() {
               </>
             )}
 
-            {tab === 'misi' && (
+            {showMisi && (
               <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    style={{ width: 'auto', padding: '6px 12px', fontSize: 13 }}
+                    onClick={() => setShowMisi(false)}
+                  >
+                    ← Kembali
+                  </button>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>⭐ Misi & Stiker</span>
+                </div>
                 {/* Header XP */}
                 <section className="card hero" style={{ textAlign: 'center', paddingBottom: 20 }}>
                   <div style={{ fontSize: 36, marginBottom: 4 }}>⭐</div>
@@ -1297,7 +1270,7 @@ export default function Page() {
 
       <nav className="nav" aria-label="Menu utama">
         {TABS.map((t) => (
-          <button key={t.id} aria-current={tab === t.id ? 'page' : undefined} onClick={() => { setTab(t.id); window.scrollTo({ top: 0 }); }}>
+          <button key={t.id} aria-current={!showMisi && tab === t.id ? 'page' : undefined} onClick={() => { setShowMisi(false); setTab(t.id); window.scrollTo({ top: 0 }); }}>
             <Ic d={t.d} /><span>{t.label}</span>
           </button>
         ))}
@@ -1510,7 +1483,7 @@ export default function Page() {
               cursor: 'pointer',
               border: '1.5px solid var(--accent)',
             }}
-            onClick={() => { setNewUnlocks((prev) => prev.slice(1)); setMisiSel(m); setTab('misi'); }}
+            onClick={() => { setNewUnlocks((prev) => prev.slice(1)); setMisiSel(m); setShowMisi(true); }}
           >
             <div style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
