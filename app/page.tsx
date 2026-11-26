@@ -528,6 +528,7 @@ export default function Page() {
   const [txMode, setTxMode] = useState<'riwayat' | 'utang'>('riwayat');
   const [catatMode, setCatatMode] = useState<'Pemasukan' | 'Pengeluaran' | 'Transfer'>('Pengeluaran');
   const [catatBusy, setCatatBusy] = useState(false);
+  const [catatField, setCatatField] = useState<null | 'total' | 'category' | 'asset' | 'from' | 'to'>(null);
   const [df, setDf] = useState({ type: 'Piutang', person: '', amount: '', desc: '' });
   const [missions, setMissions] = useState<MissionData[]>([]);
   const [missionXp, setMissionXp] = useState(0);
@@ -542,6 +543,9 @@ export default function Page() {
   const [rewardReveal, setRewardReveal] = useState<MissionData | null>(null);
   const [newBookName, setNewBookName] = useState('');
   const [bookBusy, setBookBusy] = useState(false);
+  const [customCats, setCustomCats] = useState<string[]>([]);
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState('');
 
   useEffect(() => {
     try {
@@ -554,6 +558,8 @@ export default function Page() {
       if (c) setClaimedIds(JSON.parse(c));
       const pt = localStorage.getItem('misi_partner_id');
       if (pt) setPartnerId(pt);
+      const cc = localStorage.getItem('custom_categories');
+      if (cc) setCustomCats(JSON.parse(cc));
     } catch { /* abaikan */ }
     setReady(true);
   }, []);
@@ -759,9 +765,20 @@ export default function Page() {
   const walletOpts = useMemo(() => Array.from(new Set(['Cash', ...meta, ...wal.map((w) => w.key)])), [meta, wal]);
   const catOpts = useMemo(() => {
     const m: Record<string, number> = {};
-    txs.forEach((t) => { if (!isTransfer(t)) m[t.category] = (m[t.category] || 0) + 1; });
-    return Object.keys(m).sort((a, b) => m[b] - m[a]);
-  }, [txs]);
+    txs.forEach((t) => { if (!isTransfer(t) && t.category) m[t.category] = (m[t.category] || 0) + 1; });
+    return Array.from(new Set([...Object.keys(m).sort((a, b) => m[b] - m[a]), ...customCats]));
+  }, [txs, customCats]);
+  const saveCustomCat = (rawName: string, selectIt = true) => {
+    const clean = rawName.trim();
+    if (!clean) return;
+    setCustomCats((prev) => {
+      if (prev.some((c) => c.toLowerCase() === clean.toLowerCase())) return prev;
+      const next = [clean, ...prev];
+      try { localStorage.setItem('custom_categories', JSON.stringify(next)); } catch { /* */ }
+      return next;
+    });
+    if (selectIt) setForm((f) => ({ ...f, category: clean }));
+  };
 
   const say = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3200); };
   const post = async (url: string, body: object) => {
@@ -1157,34 +1174,48 @@ export default function Page() {
             })()}
 
             {!showMisi && tab === 'catat' && (() => {
-              const modeColor = catatMode === 'Pemasukan' ? '#2563EB' : catatMode === 'Pengeluaran' ? '#EA580C' : '#1F2937';
+              const modeColor = catatMode === 'Pemasukan' ? '#2563EB' : catatMode === 'Pengeluaran' ? '#EF6C45' : '#1F2937';
               const curDate = form.date || ymd(new Date());
               const curFrom = tf.from || walletOpts[0] || 'Cash';
               const curTo = tf.to || walletOpts[1] || '';
               const curToBook = tf.toBook || books.find((b) => b !== writeBook) || '';
+              const rawAmt = catatMode === 'Transfer' ? tf.amount : form.amount;
+              const numAmt = parseInt(rawAmt.replace(/\D/g, ''), 10) || 0;
+              const setAmt = (v: string) => {
+                const digits = v.replace(/\D/g, '');
+                if (catatMode === 'Transfer') setTf({ ...tf, amount: digits });
+                else setForm({ ...form, amount: digits });
+              };
+              const pressKey = (k: string) => {
+                if (k === 'del') setAmt(rawAmt.slice(0, -1));
+                else if (k === 'done') setCatatField(null);
+                else setAmt((rawAmt === '0' ? '' : rawAmt) + k);
+              };
+              const dateObj = parseDate(curDate) || new Date();
+              const dateNice = new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit', weekday: 'short' }).format(dateObj);
 
               const submitCatat = async (keepOpen: boolean) => {
                 if (catatBusy) return;
                 setCatatBusy(true);
                 try {
                   if (catatMode === 'Transfer') {
-                    const n = parseInt(tf.amount.replace(/\D/g, ''), 10);
-                    if (!n) { say('Isi total nominal dulu'); return; }
+                    if (!numAmt) { say('Isi total nominal dulu'); return; }
                     if (tf.mode === 'wallet' && (!curTo || curTo === curFrom)) { say('Pilih dompet asal dan tujuan yang berbeda'); return; }
                     if (tf.mode === 'book' && !curToBook) { say('Pilih pos tujuan'); return; }
-                    await post('/api/transfer', { mode: tf.mode, book: writeBook, from: curFrom, to: curTo, toBook: curToBook, amount: n, description: tf.desc });
+                    await post('/api/transfer', { mode: tf.mode, book: writeBook, from: curFrom, to: curTo, toBook: curToBook, amount: numAmt, description: tf.desc });
                     say('Transfer berhasil dicatat');
                     setTf({ ...tf, amount: '', desc: '' });
                   } else {
-                    const n = parseInt(form.amount.replace(/\D/g, ''), 10);
-                    if (!n) { say('Isi total nominal dulu'); return; }
+                    if (!numAmt) { say('Isi total nominal dulu'); return; }
+                    const chosenCat = form.category.trim() || (catatMode === 'Pemasukan' ? 'Pemasukan' : 'Lain-lain');
+                    if (form.category.trim()) saveCustomCat(form.category.trim(), false);
                     await post('/api/transactions', {
                       action: 'add',
                       book: writeBook,
                       row: 0,
                       type: catatMode,
-                      category: form.category || (catatMode === 'Pemasukan' ? 'Pemasukan' : 'Lain-lain'),
-                      amount: n,
+                      category: chosenCat,
+                      amount: numAmt,
                       description: form.desc,
                       date: curDate,
                       wallet: form.wallet || 'Cash',
@@ -1192,6 +1223,7 @@ export default function Page() {
                     say('Transaksi dicatat');
                     setForm({ ...form, amount: '', desc: '', category: '' });
                   }
+                  setCatatField(null);
                   load(book, true);
                   if (!keepOpen) setTab('tx');
                 } catch (er: any) {
@@ -1201,13 +1233,29 @@ export default function Page() {
                 }
               };
 
+              const rowStyle = (active: boolean): React.CSSProperties => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                minHeight: 46,
+              });
+              const valStyle = (active: boolean): React.CSSProperties => ({
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                alignItems: 'center',
+                minHeight: 42,
+                borderBottom: active ? `1.5px solid ${modeColor}` : '1px solid #E5E7EB',
+                fontSize: 14.5,
+              });
+
               return (
-                <>
-                  {/* 3 Tab Mode seperti Money Manager */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                <div style={{ background: 'var(--card)', margin: '-4px -14px 0', padding: '12px 16px 24px', minHeight: 'calc(100dvh - 130px)' }}>
+                  {/* 3 Tab Mode persis Money Manager */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
                     {([
                       { id: 'Pemasukan', label: 'Pendapatan', col: '#2563EB' },
-                      { id: 'Pengeluaran', label: 'Pengeluaran', col: '#EA580C' },
+                      { id: 'Pengeluaran', label: 'Pengeluaran', col: '#EF6C45' },
                       { id: 'Transfer', label: 'Transfer', col: '#1F2937' },
                     ] as const).map((m) => {
                       const active = catatMode === m.id;
@@ -1215,15 +1263,15 @@ export default function Page() {
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => setCatatMode(m.id)}
+                          onClick={() => { setCatatMode(m.id); setCatatField(null); }}
                           style={{
-                            minHeight: 42,
-                            borderRadius: 10,
-                            fontSize: 13.5,
-                            fontWeight: active ? 700 : 500,
-                            background: active ? 'var(--card)' : 'var(--bg)',
-                            color: active ? m.col : 'var(--mute)',
-                            border: active ? `1.5px solid ${m.col}` : '1px solid var(--line)',
+                            minHeight: 38,
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: active ? 650 : 500,
+                            background: active ? '#fff' : '#F3F4F6',
+                            color: active ? m.col : '#6B7280',
+                            border: active ? `1.2px solid ${m.col}` : '1px solid #E5E7EB',
                             cursor: 'pointer',
                           }}
                         >
@@ -1234,135 +1282,324 @@ export default function Page() {
                   </div>
 
                   {/* Form Baris demi Baris */}
-                  <section className="card" style={{ gap: 0, padding: '4px 16px' }}>
+                  <div style={{ display: 'grid', gap: 2 }}>
+                    <div style={rowStyle(false)}>
+                      <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Tanggal</span>
+                      <div style={{ ...valStyle(false), position: 'relative' }}>
+                        <span style={{ fontSize: 14 }}>{dateNice}</span>
+                        <input
+                          type="date"
+                          value={curDate}
+                          onChange={(e) => setForm({ ...form, date: e.target.value })}
+                          aria-label="Tanggal"
+                          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}
+                        />
+                      </div>
+                    </div>
+
+                    {catatMode === 'Transfer' && (
+                      <div style={rowStyle(false)}>
+                        <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Jenis</span>
+                        <div style={{ ...valStyle(false), gap: 6, padding: '4px 0' }}>
+                          <button type="button" onClick={() => setTf({ ...tf, mode: 'wallet' })} style={{ fontSize: 12.5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--line)', background: tf.mode === 'wallet' ? '#1F2937' : '#F3F4F6', color: tf.mode === 'wallet' ? '#fff' : '#6B7280' }}>Antar dompet</button>
+                          <button type="button" onClick={() => setTf({ ...tf, mode: 'book' })} style={{ fontSize: 12.5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--line)', background: tf.mode === 'book' ? '#1F2937' : '#F3F4F6', color: tf.mode === 'book' ? '#fff' : '#6B7280' }}>Antar pos</button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={rowStyle(catatField === 'total')}>
+                      <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Total</span>
+                      <button
+                        type="button"
+                        onClick={() => setCatatField(catatField === 'total' ? null : 'total')}
+                        style={{ ...valStyle(catatField === 'total'), textAlign: 'left', fontWeight: 700, fontSize: 16, color: numAmt ? modeColor : '#9CA3AF', background: 'none', borderTop: 0, borderLeft: 0, borderRight: 0, cursor: 'pointer' }}
+                      >
+                        {numAmt ? rp(numAmt) : 'Rp 0'}
+                      </button>
+                    </div>
+
                     {catatMode !== 'Transfer' ? (
                       <>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Tanggal</span>
-                          <input type="date" value={curDate} onChange={(e) => setForm({ ...form, date: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }} />
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Total</span>
-                          <input
-                            inputMode="numeric"
-                            value={form.amount}
-                            onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                            placeholder="Rp 0"
-                            style={{ flex: 1, border: 0, background: 'transparent', fontSize: 16, fontWeight: 700, outline: 'none', color: modeColor }}
-                          />
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Kategori</span>
-                          <input
-                            list="catat-cats"
-                            value={form.category}
-                            onChange={(e) => setForm({ ...form, category: e.target.value })}
-                            placeholder={catatMode === 'Pemasukan' ? 'Gaji, Bonus, Tabungan' : 'Makan, Transport, Belanja'}
-                            style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}
-                          />
-                          <datalist id="catat-cats">{catOpts.map((c) => <option key={c} value={c} />)}</datalist>
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Aset</span>
-                          <select value={form.wallet || 'Cash'} onChange={(e) => setForm({ ...form, wallet: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
-                            {walletOpts.map((w) => <option key={w} value={w}>{wLabel(w)}</option>)}
-                          </select>
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Catatan</span>
-                          <input value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} placeholder="Deskripsi (opsional)" style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }} />
-                        </label>
+                        <div style={rowStyle(catatField === 'category')}>
+                          <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Kategori</span>
+                          <button
+                            type="button"
+                            onClick={() => setCatatField(catatField === 'category' ? null : 'category')}
+                            style={{ ...valStyle(catatField === 'category'), textAlign: 'left', color: form.category ? 'var(--ink)' : '#9CA3AF', background: 'none', borderTop: 0, borderLeft: 0, borderRight: 0, cursor: 'pointer' }}
+                          >
+                            {form.category || 'Pilih kategori'}
+                          </button>
+                        </div>
+
+                        <div style={rowStyle(catatField === 'asset')}>
+                          <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Aset</span>
+                          <button
+                            type="button"
+                            onClick={() => setCatatField(catatField === 'asset' ? null : 'asset')}
+                            style={{ ...valStyle(catatField === 'asset'), textAlign: 'left', color: 'var(--ink)', background: 'none', borderTop: 0, borderLeft: 0, borderRight: 0, cursor: 'pointer' }}
+                          >
+                            {wLabel(form.wallet || 'Cash')}
+                          </button>
+                        </div>
+
+                        <div style={rowStyle(false)}>
+                          <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Catatan</span>
+                          <div style={valStyle(false)}>
+                            <input
+                              value={form.desc}
+                              onFocus={() => setCatatField(null)}
+                              onChange={(e) => setForm({ ...form, desc: e.target.value })}
+                              placeholder=""
+                              style={{ width: '100%', border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}
+                            />
+                          </div>
+                        </div>
                       </>
                     ) : (
                       <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Jenis</span>
-                          <div className="seg" style={{ flex: 1 }}>
-                            <button type="button" className={tf.mode === 'wallet' ? 'on' : ''} style={{ flex: 1 }} onClick={() => setTf({ ...tf, mode: 'wallet' })}>Antar dompet</button>
-                            <button type="button" className={tf.mode === 'book' ? 'on' : ''} style={{ flex: 1 }} onClick={() => setTf({ ...tf, mode: 'book' })}>Antar pos</button>
+                        {tf.mode === 'wallet' ? (
+                          <div style={{ position: 'relative' }}>
+                            <div style={rowStyle(catatField === 'from')}>
+                              <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Uang keluar</span>
+                              <button
+                                type="button"
+                                onClick={() => setCatatField(catatField === 'from' ? null : 'from')}
+                                style={{ ...valStyle(catatField === 'from'), paddingRight: 32, textAlign: 'left', color: 'var(--ink)', background: 'none', borderTop: 0, borderLeft: 0, borderRight: 0, cursor: 'pointer' }}
+                              >
+                                {wLabel(curFrom)}
+                              </button>
+                            </div>
+                            <div style={rowStyle(catatField === 'to')}>
+                              <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Uang masuk</span>
+                              <button
+                                type="button"
+                                onClick={() => setCatatField(catatField === 'to' ? null : 'to')}
+                                style={{ ...valStyle(catatField === 'to'), paddingRight: 32, textAlign: 'left', color: curTo ? 'var(--ink)' : '#9CA3AF', background: 'none', borderTop: 0, borderLeft: 0, borderRight: 0, cursor: 'pointer' }}
+                              >
+                                {curTo ? wLabel(curTo) : 'Pilih dompet'}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              aria-label="Tukar dompet"
+                              onClick={() => setTf({ ...tf, from: curTo || curFrom, to: curFrom })}
+                              style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, display: 'grid', placeItems: 'center', color: '#8E8E93', background: 'none', border: 0, cursor: 'pointer' }}
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4" /></svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={rowStyle(false)}>
+                            <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Ke pos</span>
+                            <div style={valStyle(false)}>
+                              <select value={curToBook} onChange={(e) => setTf({ ...tf, toBook: e.target.value })} style={{ width: '100%', border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
+                                {books.filter((b) => b !== writeBook).map((b) => <option key={b}>{b}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                        <div style={rowStyle(false)}>
+                          <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Catatan</span>
+                          <div style={valStyle(false)}>
+                            <input
+                              value={tf.desc}
+                              onFocus={() => setCatatField(null)}
+                              onChange={(e) => setTf({ ...tf, desc: e.target.value })}
+                              placeholder=""
+                              style={{ width: '100%', border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}
+                            />
                           </div>
                         </div>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Total</span>
-                          <input
-                            inputMode="numeric"
-                            value={tf.amount}
-                            onChange={(e) => setTf({ ...tf, amount: e.target.value })}
-                            placeholder="Rp 0"
-                            style={{ flex: 1, border: 0, background: 'transparent', fontSize: 16, fontWeight: 700, outline: 'none' }}
-                          />
-                        </label>
-                        {tf.mode === 'wallet' ? (
-                          <>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                              <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Uang keluar</span>
-                              <select value={curFrom} onChange={(e) => setTf({ ...tf, from: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
-                                {walletOpts.map((w) => <option key={w} value={w}>{wLabel(w)}</option>)}
-                              </select>
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                              <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Uang masuk</span>
-                              <select value={curTo} onChange={(e) => setTf({ ...tf, to: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
-                                <option value="">Pilih dompet tujuan</option>
-                                {walletOpts.map((w) => <option key={w} value={w}>{wLabel(w)}</option>)}
-                              </select>
-                            </label>
-                          </>
-                        ) : (
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
-                            <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Ke pos</span>
-                            <select value={curToBook} onChange={(e) => setTf({ ...tf, toBook: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
-                              {books.filter((b) => b !== writeBook).map((b) => <option key={b}>{b}</option>)}
-                            </select>
-                          </label>
-                        )}
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
-                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Catatan</span>
-                          <input value={tf.desc} onChange={(e) => setTf({ ...tf, desc: e.target.value })} placeholder="Deskripsi (opsional)" style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }} />
-                        </label>
                       </>
                     )}
-                  </section>
+                  </div>
 
-                  {/* Quick category chips */}
-                  {catatMode !== 'Transfer' && catOpts.length > 0 && (
-                    <div className="chips">
-                      {catOpts.slice(0, 8).map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          className={form.category === c ? 'on' : ''}
-                          onClick={() => setForm({ ...form, category: c })}
-                          style={{ fontSize: 12.5, minHeight: 34, padding: '0 12px' }}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {/* Pemisah abu-abu tipis seperti di screenshot */}
+                  <div style={{ height: 10, background: '#F3F4F6', margin: '18px -16px 14px' }} />
 
-                  {/* Tombol Simpan & Lanjut */}
+                  {/* Deskripsi */}
+                  <div style={{ padding: '4px 0 18px' }}>
+                    <input
+                      value={catatMode === 'Transfer' ? tf.desc : form.desc}
+                      onFocus={() => setCatatField(null)}
+                      onChange={(e) => catatMode === 'Transfer' ? setTf({ ...tf, desc: e.target.value }) : setForm({ ...form, desc: e.target.value })}
+                      placeholder="Deskripsi"
+                      style={{ width: '100%', border: 0, borderBottom: '1px solid #E5E7EB', padding: '10px 0', background: 'transparent', fontSize: 14, outline: 'none' }}
+                    />
+                  </div>
+
+                  {/* Tombol Menyimpan & Lanjut */}
                   <div style={{ display: 'flex', gap: 10 }}>
                     <button
                       type="button"
                       className="btn"
                       disabled={catatBusy}
                       onClick={() => submitCatat(false)}
-                      style={{ flex: 1, background: modeColor }}
+                      style={{ flex: 1, minHeight: 46, borderRadius: 10, background: modeColor, fontSize: 14.5 }}
                     >
-                      {catatBusy ? 'Menyimpan...' : 'Simpan'}
+                      {catatBusy ? 'Menyimpan...' : 'Menyimpan'}
                     </button>
                     <button
                       type="button"
                       className="btn ghost"
                       disabled={catatBusy}
                       onClick={() => submitCatat(true)}
-                      style={{ width: 'auto', padding: '0 20px', background: 'var(--card)', color: 'var(--ink)', border: '1px solid var(--line)' }}
+                      style={{ width: 'auto', minHeight: 46, borderRadius: 10, padding: '0 22px', background: '#fff', color: '#1F2937', border: '1px solid #D1D5DB', fontSize: 14.5 }}
                     >
                       Lanjut
                     </button>
                   </div>
-                </>
+
+                  {/* Picker Kategori / Aset / Numpad ala Money Manager */}
+                  {catatField === 'category' && (
+                    <div style={{ marginTop: 18, borderTop: '1px solid #E5E7EB', paddingTop: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <b style={{ fontSize: 13 }}>Pilih Kategori</b>
+                        <button type="button" onClick={() => setAddingCat((v) => !v)} style={{ fontSize: 12.5, fontWeight: 700, color: modeColor, background: 'none', border: 0, cursor: 'pointer' }}>
+                          {addingCat ? 'Batal' : '+ Tambah Kategori'}
+                        </button>
+                      </div>
+                      {addingCat && (
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                          <input
+                            value={newCatInput}
+                            onChange={(e) => setNewCatInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newCatInput.trim()) {
+                                e.preventDefault();
+                                saveCustomCat(newCatInput);
+                                setNewCatInput('');
+                                setAddingCat(false);
+                                setCatatField('asset');
+                                say('Kategori ditambahkan!');
+                              }
+                            }}
+                            placeholder="Nama kategori baru..."
+                            style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 13 }}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ width: 'auto', minHeight: 36, padding: '0 14px', borderRadius: 8, fontSize: 13, background: modeColor }}
+                            onClick={() => {
+                              if (!newCatInput.trim()) return say('Isi nama kategori dulu');
+                              saveCustomCat(newCatInput);
+                              setNewCatInput('');
+                              setAddingCat(false);
+                              setCatatField('asset');
+                              say('Kategori ditambahkan!');
+                            }}
+                          >
+                            Simpan
+                          </button>
+                        </div>
+                      )}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                        {catOpts.slice(0, 18).map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => { setForm({ ...form, category: c }); setCatatField('asset'); }}
+                            style={{
+                              padding: '10px 6px',
+                              borderRadius: 8,
+                              fontSize: 12.5,
+                              fontWeight: form.category === c ? 700 : 500,
+                              border: form.category === c ? `1.5px solid ${modeColor}` : '1px solid #E5E7EB',
+                              background: form.category === c ? '#F9FAFB' : '#fff',
+                              color: form.category === c ? modeColor : '#374151',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(catatField === 'asset' || catatField === 'from' || catatField === 'to') && (
+                    <div style={{ marginTop: 18, borderTop: '1px solid #E5E7EB', paddingTop: 12 }}>
+                      <b style={{ display: 'block', fontSize: 13, marginBottom: 10 }}>
+                        {catatField === 'from' ? 'Pilih Uang Keluar' : catatField === 'to' ? 'Pilih Uang Masuk' : 'Pilih Aset / Dompet'}
+                      </b>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                        {walletOpts.map((w) => {
+                          const curVal = catatField === 'from' ? curFrom : catatField === 'to' ? curTo : (form.wallet || 'Cash');
+                          const active = curVal === w;
+                          return (
+                            <button
+                              key={w}
+                              type="button"
+                              onClick={() => {
+                                if (catatField === 'from') { setTf({ ...tf, from: w }); setCatatField('to'); }
+                                else if (catatField === 'to') { setTf({ ...tf, to: w }); setCatatField(null); }
+                                else { setForm({ ...form, wallet: w }); setCatatField(null); }
+                              }}
+                              style={{
+                                padding: '10px 6px',
+                                borderRadius: 8,
+                                fontSize: 12.5,
+                                fontWeight: active ? 700 : 500,
+                                border: active ? `1.5px solid ${modeColor}` : '1px solid #E5E7EB',
+                                background: active ? '#F9FAFB' : '#fff',
+                                color: active ? modeColor : '#374151',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {wLabel(w)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {catatField === 'total' && (
+                    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(var(--bar) + env(safe-area-inset-bottom))', zIndex: 25, background: '#fff', boxShadow: '0 -6px 24px rgba(0,0,0,0.14)' }}>
+                      <div style={{ background: '#111111', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>Total: {numAmt ? rp(numAmt) : 'Rp 0'}</span>
+                        <button type="button" onClick={() => setCatatField(null)} style={{ color: '#fff', fontSize: 18, lineHeight: 1, padding: '0 4px' }} aria-label="Tutup papan angka">×</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: '1px solid #E5E7EB' }}>
+                        {['1', '2', '3', 'del', '4', '5', '6', '000', '7', '8', '9', '', '00', '0', ',', 'done'].map((k, idx) => {
+                          if (k === 'done') {
+                            return (
+                              <button key={idx} type="button" onClick={() => pressKey('done')} style={{ height: 52, background: '#EF6C45', color: '#fff', fontWeight: 700, fontSize: 14, borderRight: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
+                                Selesai
+                              </button>
+                            );
+                          }
+                          if (k === 'del') {
+                            return (
+                              <button key={idx} type="button" onClick={() => pressKey('del')} style={{ height: 52, background: '#fff', fontSize: 16, borderRight: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }} aria-label="Hapus">
+                                ⌫
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              disabled={!k || k === ','}
+                              onClick={() => k && k !== ',' && pressKey(k)}
+                              style={{ height: 52, background: '#fff', fontSize: 17, fontWeight: 500, color: '#111827', borderRight: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}
+                            >
+                              {k}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })()}
 
