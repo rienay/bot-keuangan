@@ -515,10 +515,12 @@ export default function Page() {
   const [limit, setLimit] = useState(40);
   const [open, setOpen] = useState<string | null>(null);
   const [wSel, setWSel] = useState<string | null>(null);
+  const [walletIdx, setWalletIdx] = useState(0);
+  const [touchX, setTouchX] = useState<number | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [gf, setGf] = useState({ id: '', name: '', target: '', due: '', amount: '' });
   const [form, setForm] = useState({ id: '', book: '', row: 0, type: 'Pengeluaran', category: '', amount: '', desc: '', date: '', wallet: 'Cash' });
-  const [tf, setTf] = useState({ mode: 'wallet', from: '', to: '', toBook: '', amount: '', desc: '' });
+  const [tf, setTf] = useState({ mode: 'wallet', from: '', to: '', toBook: '', toOther: '', amount: '', desc: '' });
   const [meta, setMeta] = useState<string[]>([]);
   const [installEv, setInstallEv] = useState<any>(null);
   const [pick, setPick] = useState<number | null>(null);
@@ -529,6 +531,7 @@ export default function Page() {
   const [catatMode, setCatatMode] = useState<'Pemasukan' | 'Pengeluaran' | 'Transfer'>('Pengeluaran');
   const [catatBusy, setCatatBusy] = useState(false);
   const [catatField, setCatatField] = useState<null | 'total' | 'category' | 'asset' | 'from' | 'to'>(null);
+  const [catatPhoto, setCatatPhoto] = useState<{ file: File; preview: string } | null>(null);
   const [df, setDf] = useState({ type: 'Piutang', person: '', amount: '', desc: '' });
   const [missions, setMissions] = useState<MissionData[]>([]);
   const [missionXp, setMissionXp] = useState(0);
@@ -819,7 +822,7 @@ export default function Page() {
     try { await post('/api/transactions', { action: 'delete', book: t.book, row: rowNo(t) }); say('Transaksi dihapus'); load(book, true); } catch (er: any) { say(er.message); }
   };
   const goalCall = async (body: object, ok: string) => { try { await post('/api/goals', body); setSheet(null); say(ok); loadGoals(book); } catch (er: any) { say(er.message); } };
-  const openTransfer = () => { setTf({ mode: 'wallet', from: walletOpts[0] || 'Cash', to: walletOpts[1] || '', toBook: books.find((b) => b !== writeBook) || '', amount: '', desc: '' }); setSheet('transfer'); };
+  const openTransfer = () => { setTf({ mode: 'wallet', from: walletOpts[0] || 'Cash', to: walletOpts[1] || '', toBook: books.find((b) => b !== writeBook) || '', toOther: '', amount: '', desc: '' }); setSheet('transfer'); };
   const doTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = parseInt(tf.amount.replace(/\D/g, ''), 10);
@@ -923,8 +926,8 @@ export default function Page() {
         <button
           type="button"
           className="bookbtn"
-          onClick={() => setSheet('books')}
-          aria-label={`Pos aktif: ${book}. Ketuk untuk ganti pos`}
+          onClick={() => { setShowMisi((v) => !v); window.scrollTo({ top: 0 }); }}
+          aria-label={`Pos aktif: ${book}. Ketuk untuk buka misi`}
           style={{ cursor: 'pointer', textAlign: 'left', border: 'none' }}
         >
           <span className="bk-emoji" style={{ color: st.c, overflow: 'hidden', padding: 2 }}>
@@ -1100,22 +1103,59 @@ export default function Page() {
             )}
 
             {!showMisi && tab === 'wallet' && (() => {
-              const sel = wal.find((w) => w.key === wSel) || null;
+              const count = wal.length;
+              if (!count) return <Empty>Belum ada dompet tercatat.</Empty>;
+              const frontIdx = ((walletIdx % count) + count) % count;
+              const frontW = wal[frontIdx];
+              const showMutasi = wSel === frontW.key;
+              const visibleOffsets = Array.from({ length: Math.min(4, count) }, (_, k) => k);
+              const cycleNext = () => { setWalletIdx((i) => i + 1); setWSel(null); };
+              const cyclePrev = () => { setWalletIdx((i) => i - 1); setWSel(null); };
+
               return (
                 <>
-                  <div className="wstack">
-                    {wal.map((w) => {
-                      const isSelected = sel?.key === w.key;
+                  {/* Tumpukan Kartu Dompet (ketuk / geser untuk pindah kartu depan ke belakang) */}
+                  <div
+                    style={{
+                      position: 'relative',
+                      height: 195 + (visibleOffsets.length - 1) * 12,
+                      margin: '4px 0 8px',
+                      touchAction: 'pan-y',
+                    }}
+                    onTouchStart={(e) => setTouchX(e.touches[0].clientX)}
+                    onTouchEnd={(e) => {
+                      if (touchX === null) return;
+                      const dx = e.changedTouches[0].clientX - touchX;
+                      setTouchX(null);
+                      if (Math.abs(dx) > 40) dx < 0 ? cycleNext() : cyclePrev();
+                    }}
+                  >
+                    {[...visibleOffsets].reverse().map((offset) => {
+                      const idx = (frontIdx + offset) % count;
+                      const w = wal[idx];
+                      const isFront = offset === 0;
                       return (
                         <div
                           key={w.key}
-                          className={`wcard ${isSelected ? 'is-sel' : ''}`}
-                          style={{ background: w.theme.gradient }}
-                          onClick={() => setWSel(isSelected ? null : w.key)}
+                          className="wcard"
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            maxWidth: 'none',
+                            width: '100%',
+                            background: w.theme.gradient,
+                            transform: `translateY(${offset * 12}px) scale(${1 - offset * 0.04})`,
+                            zIndex: 10 - offset,
+                            opacity: isFront ? 1 : Math.max(0.75, 1 - offset * 0.1),
+                            filter: isFront ? 'none' : 'brightness(0.9)',
+                            transition: 'transform 0.32s cubic-bezier(.2,.9,.3,1), opacity 0.3s ease, filter 0.3s ease',
+                          }}
+                          onClick={cycleNext}
                           role="button"
-                          tabIndex={0}
-                          aria-pressed={isSelected}
-                          aria-label={`${w.label}, saldo ${rp(w.bal)}`}
+                          tabIndex={isFront ? 0 : -1}
+                          aria-label={`${w.label}, saldo ${rp(w.bal)}. Ketuk untuk kartu berikutnya`}
                         >
                           <div className="wc-inner">
                             <div className="wc-header">
@@ -1154,18 +1194,36 @@ export default function Page() {
                       );
                     })}
                   </div>
-                  {sel ? (
+
+                  {/* Kontrol navigasi tumpukan kartu */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button type="button" className="icbtn" style={{ width: 36, height: 36 }} onClick={cyclePrev} aria-label="Kartu sebelumnya">‹</button>
+                      <span className="num mute" style={{ fontSize: 12.5, minWidth: 36, textAlign: 'center' }}>{frontIdx + 1} / {count}</span>
+                      <button type="button" className="icbtn" style={{ width: 36, height: 36 }} onClick={cycleNext} aria-label="Kartu berikutnya">›</button>
+                    </div>
+                    <button
+                      type="button"
+                      className="link"
+                      style={{ fontSize: 13, fontWeight: 600 }}
+                      onClick={() => setWSel(showMutasi ? null : frontW.key)}
+                    >
+                      {showMutasi ? 'Tutup mutasi' : `Lihat mutasi ${frontW.label}`}
+                    </button>
+                  </div>
+
+                  {showMutasi ? (
                     <section className="card flush">
                       <div className="card-h" style={{ padding: '8px 16px' }}>
-                        <h3 className="day" style={{ padding: 0 }}>Mutasi {sel.label}</h3>
-                        <button className="link" onClick={() => setWSel(null)} style={{ fontSize: '13px' }}>Tutup mutasi</button>
+                        <h3 className="day" style={{ padding: 0 }}>Mutasi {frontW.label}</h3>
+                        <button className="link" onClick={() => setWSel(null)} style={{ fontSize: '13px' }}>Tutup</button>
                       </div>
-                      {sel.list.length ? <ul className="txs">{sel.list.slice(0, 30).map(row)}</ul> : <div className="pad"><Empty>Belum ada transaksi di dompet ini.</Empty></div>}
+                      {frontW.list.length ? <ul className="txs">{frontW.list.slice(0, 30).map(row)}</ul> : <div className="pad"><Empty>Belum ada transaksi di dompet ini.</Empty></div>}
                     </section>
                   ) : (
                     <section className="card">
                       <div className="kv"><span>Total semua dompet</span><b className="num">{rp(walTotal)}</b></div>
-                      <p className="mute">Geser kartu ke samping untuk melihat dompet lain, ketuk kartu untuk melihat mutasi.</p>
+                      <p className="mute">Ketuk atau geser kartu untuk memindahkan kartu depan ke belakang.</p>
                       <button className="btn ghost" onClick={openTransfer}>Pindah uang antar dompet</button>
                     </section>
                   )}
@@ -1200,15 +1258,41 @@ export default function Page() {
                 try {
                   if (catatMode === 'Transfer') {
                     if (!numAmt) { say('Isi total nominal dulu'); return; }
-                    if (tf.mode === 'wallet' && (!curTo || curTo === curFrom)) { say('Pilih dompet asal dan tujuan yang berbeda'); return; }
-                    if (tf.mode === 'book' && !curToBook) { say('Pilih pos tujuan'); return; }
-                    await post('/api/transfer', { mode: tf.mode, book: writeBook, from: curFrom, to: curTo, toBook: curToBook, amount: numAmt, description: tf.desc });
-                    say('Transfer berhasil dicatat');
-                    setTf({ ...tf, amount: '', desc: '' });
+                    if (tf.mode === 'other') {
+                      if (!tf.toOther.trim()) { say('Isi nama penerima atau tujuan transfer'); return; }
+                      await post('/api/transactions', {
+                        action: 'add',
+                        book: writeBook,
+                        row: 0,
+                        type: 'Pengeluaran',
+                        category: 'Transfer',
+                        amount: numAmt,
+                        description: `Transfer ke ${tf.toOther.trim()}${tf.desc ? ` (${tf.desc})` : ''}`,
+                        date: curDate,
+                        wallet: curFrom,
+                      });
+                      say('Transfer ke orang lain dicatat');
+                      setTf({ ...tf, toOther: '', amount: '', desc: '' });
+                    } else {
+                      if (tf.mode === 'wallet' && (!curTo || curTo === curFrom)) { say('Pilih dompet asal dan tujuan yang berbeda'); return; }
+                      if (tf.mode === 'book' && !curToBook) { say('Pilih pos tujuan'); return; }
+                      await post('/api/transfer', { mode: tf.mode, book: writeBook, from: curFrom, to: curTo, toBook: curToBook, amount: numAmt, description: tf.desc });
+                      say('Transfer berhasil dicatat');
+                      setTf({ ...tf, amount: '', desc: '' });
+                    }
                   } else {
                     if (!numAmt) { say('Isi total nominal dulu'); return; }
                     const chosenCat = form.category.trim() || (catatMode === 'Pemasukan' ? 'Pemasukan' : 'Lain-lain');
                     if (form.category.trim()) saveCustomCat(form.category.trim(), false);
+                    let noteLink: string | undefined;
+                    if (catatPhoto) {
+                      const fd = new FormData();
+                      fd.append('file', catatPhoto.file);
+                      const up = await fetch('/api/upload', { method: 'POST', body: fd });
+                      const upJ = await up.json();
+                      if (!upJ.success) throw new Error(upJ.error || 'Gagal mengunggah foto');
+                      noteLink = upJ.url;
+                    }
                     await post('/api/transactions', {
                       action: 'add',
                       book: writeBook,
@@ -1219,9 +1303,11 @@ export default function Page() {
                       description: form.desc,
                       date: curDate,
                       wallet: form.wallet || 'Cash',
+                      ...(noteLink ? { noteLink } : {}),
                     });
                     say('Transaksi dicatat');
                     setForm({ ...form, amount: '', desc: '', category: '' });
+                    if (catatPhoto) { URL.revokeObjectURL(catatPhoto.preview); setCatatPhoto(null); }
                   }
                   setCatatField(null);
                   load(book, true);
@@ -1300,9 +1386,10 @@ export default function Page() {
                     {catatMode === 'Transfer' && (
                       <div style={rowStyle(false)}>
                         <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Jenis</span>
-                        <div style={{ ...valStyle(false), gap: 6, padding: '4px 0' }}>
+                        <div style={{ ...valStyle(false), gap: 6, padding: '4px 0', flexWrap: 'wrap' }}>
                           <button type="button" onClick={() => setTf({ ...tf, mode: 'wallet' })} style={{ fontSize: 12.5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--line)', background: tf.mode === 'wallet' ? '#1F2937' : '#F3F4F6', color: tf.mode === 'wallet' ? '#fff' : '#6B7280' }}>Antar dompet</button>
                           <button type="button" onClick={() => setTf({ ...tf, mode: 'book' })} style={{ fontSize: 12.5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--line)', background: tf.mode === 'book' ? '#1F2937' : '#F3F4F6', color: tf.mode === 'book' ? '#fff' : '#6B7280' }}>Antar pos</button>
+                          <button type="button" onClick={() => setTf({ ...tf, mode: 'other' })} style={{ fontSize: 12.5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--line)', background: tf.mode === 'other' ? '#1F2937' : '#F3F4F6', color: tf.mode === 'other' ? '#fff' : '#6B7280' }}>Lainnya</button>
                         </div>
                       </div>
                     )}
@@ -1388,7 +1475,7 @@ export default function Page() {
                               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4" /></svg>
                             </button>
                           </div>
-                        ) : (
+                        ) : tf.mode === 'book' ? (
                           <div style={rowStyle(false)}>
                             <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Ke pos</span>
                             <div style={valStyle(false)}>
@@ -1397,6 +1484,31 @@ export default function Page() {
                               </select>
                             </div>
                           </div>
+                        ) : (
+                          <>
+                            <div style={rowStyle(catatField === 'from')}>
+                              <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Uang keluar</span>
+                              <button
+                                type="button"
+                                onClick={() => setCatatField(catatField === 'from' ? null : 'from')}
+                                style={{ ...valStyle(catatField === 'from'), textAlign: 'left', color: 'var(--ink)', background: 'none', borderTop: 0, borderLeft: 0, borderRight: 0, cursor: 'pointer' }}
+                              >
+                                {wLabel(curFrom)}
+                              </button>
+                            </div>
+                            <div style={rowStyle(false)}>
+                              <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Penerima</span>
+                              <div style={valStyle(false)}>
+                                <input
+                                  value={tf.toOther}
+                                  onFocus={() => setCatatField(null)}
+                                  onChange={(e) => setTf({ ...tf, toOther: e.target.value })}
+                                  placeholder="Nama orang / rekening tujuan"
+                                  style={{ width: '100%', border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}
+                                />
+                              </div>
+                            </div>
+                          </>
                         )}
                         <div style={rowStyle(false)}>
                           <span style={{ width: 88, fontSize: 13, color: '#8E8E93', flexShrink: 0 }}>Catatan</span>
@@ -1417,15 +1529,50 @@ export default function Page() {
                   {/* Pemisah abu-abu tipis seperti di screenshot */}
                   <div style={{ height: 10, background: '#F3F4F6', margin: '18px -16px 14px' }} />
 
-                  {/* Deskripsi */}
+                  {/* Deskripsi + Tambah Foto */}
                   <div style={{ padding: '4px 0 18px' }}>
-                    <input
-                      value={catatMode === 'Transfer' ? tf.desc : form.desc}
-                      onFocus={() => setCatatField(null)}
-                      onChange={(e) => catatMode === 'Transfer' ? setTf({ ...tf, desc: e.target.value }) : setForm({ ...form, desc: e.target.value })}
-                      placeholder="Deskripsi"
-                      style={{ width: '100%', border: 0, borderBottom: '1px solid #E5E7EB', padding: '10px 0', background: 'transparent', fontSize: 14, outline: 'none' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #E5E7EB' }}>
+                      <input
+                        value={catatMode === 'Transfer' ? tf.desc : form.desc}
+                        onFocus={() => setCatatField(null)}
+                        onChange={(e) => catatMode === 'Transfer' ? setTf({ ...tf, desc: e.target.value }) : setForm({ ...form, desc: e.target.value })}
+                        placeholder="Deskripsi"
+                        style={{ flex: 1, minWidth: 0, border: 0, padding: '10px 0', background: 'transparent', fontSize: 14, outline: 'none' }}
+                      />
+                      {catatMode !== 'Transfer' && (
+                        <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, color: catatPhoto ? modeColor : '#8E8E93', cursor: 'pointer', flexShrink: 0 }} aria-label="Tambah foto nota">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                            <circle cx="12" cy="13" r="4" />
+                          </svg>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              if (catatPhoto) URL.revokeObjectURL(catatPhoto.preview);
+                              setCatatPhoto({ file: f, preview: URL.createObjectURL(f) });
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    {catatPhoto && catatMode !== 'Transfer' && (
+                      <div style={{ position: 'relative', display: 'inline-block', marginTop: 10 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={catatPhoto.preview} alt="Preview foto nota" style={{ width: 76, height: 76, objectFit: 'cover', borderRadius: 10, border: '1px solid #E5E7EB' }} />
+                        <button
+                          type="button"
+                          aria-label="Hapus foto"
+                          onClick={() => { URL.revokeObjectURL(catatPhoto.preview); setCatatPhoto(null); }}
+                          style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: '#1F2937', color: '#fff', fontSize: 13, lineHeight: 1, display: 'grid', placeItems: 'center' }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Tombol Menyimpan & Lanjut */}

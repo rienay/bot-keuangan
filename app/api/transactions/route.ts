@@ -30,6 +30,7 @@ export async function POST(req: Request) {
       description: String(b.description || '').trim().slice(0, 200),
       date: /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : today,
       wallet: String(b.wallet || 'Cash').trim().slice(0, 60),
+      ...(b.noteLink ? { noteLink: String(b.noteLink).trim() } : {}),
     };
     if (b.action === 'edit') await updateTransactionRow(book, row, tx);
     else await appendTransaction(tx, book);
