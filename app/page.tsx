@@ -214,8 +214,24 @@ type Tab = (typeof TABS)[number]['id'];
 
 interface MissionData {
   id: string; title: string; desc: string; stiker: string; stikerAlt: string;
-  xp: number; unlocked: boolean; progress?: number; progressLabel?: string;
+  xp: number; rarity: 'common' | 'rare' | 'epic' | 'legendary'; quote: string;
+  unlocked: boolean; progress?: number; progressLabel?: string;
 }
+
+const RANKS = [
+  { lv: 1, name: 'Pemula Hemat', min: 0, max: 50 },
+  { lv: 2, name: 'Penjaga Dompet', min: 50, max: 120 },
+  { lv: 3, name: 'Juragan Kucing', min: 120, max: 250 },
+  { lv: 4, name: 'Sultan Tabungan', min: 250, max: 450 },
+  { lv: 5, name: 'Grandmaster Keuangan', min: 450, max: 9999 },
+];
+const getRank = (xp: number) => RANKS.find((r) => xp < r.max) || RANKS[RANKS.length - 1];
+const RARITY_CFG: Record<string, { label: string; bg: string; color: string }> = {
+  common: { label: 'Common', bg: 'rgba(100,116,139,0.14)', color: '#475569' },
+  rare: { label: 'Rare', bg: 'rgba(29,143,216,0.14)', color: '#0369A1' },
+  epic: { label: 'Epic', bg: 'rgba(139,92,246,0.16)', color: '#6D28D9' },
+  legendary: { label: 'Legendary', bg: 'rgba(217,119,6,0.18)', color: '#B45309' },
+};
 
 interface Goal { id: string; name: string; target: number; saved: number; due: string }
 const kindOf = (w: string) => { const s = (w || '').toLowerCase(); return s.startsWith('e-wallet') ? 'E-Wallet' : s.startsWith('cash') || s.includes('tunai') ? 'Cash' : 'Bank'; };
@@ -513,6 +529,11 @@ export default function Page() {
   const [misiSel, setMisiSel] = useState<MissionData | null>(null);
   const [newUnlocks, setNewUnlocks] = useState<string[]>([]);
   const [showMisi, setShowMisi] = useState(false);
+  const [misiTab, setMisiTab] = useState<'quest' | 'album'>('quest');
+  const [claimedIds, setClaimedIds] = useState<string[]>([]);
+  const [partnerId, setPartnerId] = useState<string | null>(null);
+  const [partnerBubble, setPartnerBubble] = useState(false);
+  const [rewardReveal, setRewardReveal] = useState<MissionData | null>(null);
 
   useEffect(() => {
     try {
@@ -521,6 +542,10 @@ export default function Page() {
       if (b) setBook(b);
       const t = p.get('tab') as Tab | null;
       if (t && TABS.some((x) => x.id === t)) setTab(t);
+      const c = localStorage.getItem('misi_claimed_ids');
+      if (c) setClaimedIds(JSON.parse(c));
+      const pt = localStorage.getItem('misi_partner_id');
+      if (pt) setPartnerId(pt);
     } catch { /* abaikan */ }
     setReady(true);
   }, []);
@@ -772,6 +797,32 @@ export default function Page() {
   const install = async () => {
     if (installEv) { installEv.prompt(); setInstallEv(null); setSheet(null); } else say('iPhone: ketuk Bagikan lalu Tambah ke Layar Utama. Android: menu browser lalu Instal aplikasi.');
   };
+  const claimMission = (m: MissionData) => {
+    setClaimedIds((prev) => {
+      if (prev.includes(m.id)) return prev;
+      const next = [...prev, m.id];
+      try { localStorage.setItem('misi_claimed_ids', JSON.stringify(next)); } catch { /* */ }
+      return next;
+    });
+    setRewardReveal(m);
+  };
+  const claimAllMissions = (list: MissionData[]) => {
+    if (!list.length) return;
+    setClaimedIds((prev) => {
+      const next = Array.from(new Set([...prev, ...list.map((m) => m.id)]));
+      try { localStorage.setItem('misi_claimed_ids', JSON.stringify(next)); } catch { /* */ }
+      return next;
+    });
+    setRewardReveal(list[0]);
+    say(`${list.length} stiker berhasil diklaim!`);
+  };
+  const togglePartner = (m: MissionData) => {
+    const next = partnerId === m.id ? null : m.id;
+    setPartnerId(next);
+    setPartnerBubble(false);
+    try { next ? localStorage.setItem('misi_partner_id', next) : localStorage.removeItem('misi_partner_id'); } catch { /* */ }
+    say(next ? `${m.title} dipasang di halaman utama!` : 'Partner beranda dilepas');
+  };
 
   const row = (t: WebTransactionItem) => (
     <li key={t.id} className="tx">
@@ -831,7 +882,7 @@ export default function Page() {
 
             {!showMisi && tab === 'home' && (
               <>
-                <section className="card hero">
+                <section className="card hero" style={{ position: 'relative', overflow: 'visible' }}>
                   <small>Saldo {year === ALL ? 'semua tahun' : year}</small>
                   <div className="big">{rp(stats.s)}</div>
                   <div className="pair">
@@ -839,6 +890,38 @@ export default function Page() {
                     <div><small>Keluar</small><b className="num">-{rp(stats.e)}</b></div>
                   </div>
                   <small>{yTx.length} transaksi. Diperbarui {data?.lastUpdated}</small>
+                  {(() => {
+                    const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
+                    if (!partner) return null;
+                    return (
+                      <div style={{ position: 'absolute', right: 14, bottom: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        {partnerBubble && (
+                          <div style={{
+                            background: '#fff', color: '#111827', fontSize: 11, fontWeight: 600,
+                            padding: '6px 10px', borderRadius: 12, boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+                            marginBottom: 4, maxWidth: 165, textAlign: 'right', lineHeight: 1.35,
+                          }}>
+                            {partner.quote}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPartnerBubble((v) => !v)}
+                          aria-label={`Stiker partner ${partner.title}`}
+                          style={{
+                            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                            width: 62, height: 62, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.28))',
+                            transition: 'transform 0.15s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1) rotate(-4deg)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={`/stiker/${partner.stiker}`} alt={partner.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </section>
 
                 {insights.length > 0 && (
@@ -1091,200 +1174,254 @@ export default function Page() {
               </>
             )}
 
-            {showMisi && (
-              <>
-                {/* Header XP */}
-                <section className="card hero" style={{ textAlign: 'center', paddingBottom: 20 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: '50%', background: 'var(--line)', color: 'var(--accent)', marginBottom: 8 }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                  </div>
-                  <div className="big" style={{ fontSize: 28 }}>{missionXp} XP</div>
-                  <small style={{ opacity: 0.7 }}>
-                    {missions.filter((m) => m.unlocked).length}/{missions.length} misi selesai
-                  </small>
-                  <div style={{
-                    marginTop: 12,
-                    height: 8,
-                    borderRadius: 8,
-                    background: 'var(--line)',
-                    overflow: 'hidden',
-                  }}>
-                    <div style={{
-                      height: '100%',
-                      borderRadius: 8,
-                      background: 'var(--accent)',
-                      width: `${missions.length ? Math.round((missions.filter((m) => m.unlocked).length / missions.length) * 100) : 0}%`,
-                      transition: 'width 0.6s ease',
-                    }} />
-                  </div>
-                </section>
+            {showMisi && (() => {
+              const claimedSet = new Set(claimedIds);
+              const readyToClaim = missions.filter((m) => m.unlocked && !claimedSet.has(m.id));
+              const claimedList = missions.filter((m) => m.unlocked && claimedSet.has(m.id));
+              const lockedList = missions.filter((m) => !m.unlocked);
+              const activeXp = claimedList.reduce((s, m) => s + m.xp, 0);
+              const rank = getRank(activeXp);
+              const rankPct = rank.lv === 5 ? 100 : Math.min(100, Math.round(((activeXp - rank.min) / (rank.max - rank.min)) * 100));
+              const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
 
-                {/* Stiker koleksi — yang sudah unlocked */}
-                {missions.filter((m) => m.unlocked).length > 0 && (
-                  <section className="card">
-                    <div className="card-h">
-                      <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <polyline points="20 12 20 22 4 22 4 12" />
-                          <rect x="2" y="7" width="20" height="5" rx="1" />
-                          <line x1="12" y1="22" x2="12" y2="7" />
-                          <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
-                          <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
-                        </svg>
-                        Koleksi Stiker
-                      </h3>
+              return (
+                <>
+                  {/* Player Rank Hero Card */}
+                  <section className="card hero" style={{ padding: '18px 18px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.2)', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                          LEVEL {rank.lv}
+                        </div>
+                        <div className="big" style={{ fontSize: 22, lineHeight: 1.2 }}>{rank.name}</div>
+                        <small style={{ opacity: 0.9, display: 'block', marginTop: 4 }}>
+                          {activeXp} XP · {claimedList.length}/{missions.length} Stiker
+                        </small>
+                      </div>
+                      <div style={{ width: 68, height: 68, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {partner ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={`/stiker/${partner.stiker}`} alt={partner.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.3))' }} />
+                        ) : (
+                          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: 10,
-                      padding: '8px 0 4px',
-                    }}>
-                      {missions.filter((m) => m.unlocked).map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => setMisiSel(m)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            cursor: 'pointer',
-                            borderRadius: 12,
-                            overflow: 'hidden',
-                            width: 68,
-                            height: 68,
-                            flexShrink: 0,
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                            transition: 'transform 0.15s',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                          title={m.title}
-                          aria-label={`Stiker ${m.title}`}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`/stiker/${m.stiker}`}
-                            alt={m.stikerAlt}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        </button>
-                      ))}
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.85, marginBottom: 4 }}>
+                        <span>Progress Level</span>
+                        <span>{rank.lv === 5 ? 'MAX' : `${activeXp} / ${rank.max} XP`}</span>
+                      </div>
+                      <div style={{ height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.24)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', borderRadius: 8, background: '#FDE68A', width: `${rankPct}%`, transition: 'width 0.5s ease' }} />
+                      </div>
                     </div>
                   </section>
-                )}
 
-                {/* Daftar semua misi */}
-                {missionLoading ? (
-                  <><div className="skel h" /><div className="skel" /></>
-                ) : (
-                  <>
-                    {(['unlocked', 'locked'] as const).map((group) => (
-                      <section key={group} className="card flush">
-                        <div className="card-h" style={{ padding: '12px 16px 8px' }}>
-                          <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            {group === 'unlocked' ? (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <circle cx="12" cy="12" r="10" />
-                                <path d="m9 12 2 2 4-4" />
-                              </svg>
-                            ) : (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                              </svg>
-                            )}
-                            {group === 'unlocked' ? 'Sudah Selesai' : 'Belum Tercapai'}
-                          </h3>
+                  {/* Banner Klaim Hadiah */}
+                  {readyToClaim.length > 0 && (
+                    <section className="card" style={{ border: '1.5px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--line)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" rx="1" /><line x1="12" y1="22" x2="12" y2="7" />
+                            <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+                          </svg>
                         </div>
-                        {missions.filter((m) => group === 'unlocked' ? m.unlocked : !m.unlocked).length === 0 ? (
-                          <p className="empty" style={{ padding: '0 16px 16px' }}>
-                            {group === 'unlocked' ? 'Belum ada misi selesai.' : 'Semua misi sudah selesai!'}
-                          </p>
-                        ) : (
+                        <div>
+                          <b style={{ fontSize: 14 }}>{readyToClaim.length} Hadiah Siap Diklaim!</b>
+                          <p style={{ margin: 0, fontSize: 12, color: 'var(--mute)' }}>Buka stiker kucing barumu sekarang</p>
+                        </div>
+                      </div>
+                      <button type="button" className="btn" style={{ width: 'auto', padding: '8px 14px', fontSize: 13 }} onClick={() => claimAllMissions(readyToClaim)}>
+                        Klaim
+                      </button>
+                    </section>
+                  )}
+
+                  {/* Sub-tab Game: Misi vs Album Stiker */}
+                  <div className="seg wide">
+                    <button type="button" className={misiTab === 'quest' ? 'on' : ''} onClick={() => setMisiTab('quest')}>
+                      Daftar Misi ({missions.length})
+                    </button>
+                    <button type="button" className={misiTab === 'album' ? 'on' : ''} onClick={() => setMisiTab('album')}>
+                      Album Stiker ({claimedList.length}/{missions.length})
+                    </button>
+                  </div>
+
+                  {missionLoading ? (
+                    <><div className="skel h" /><div className="skel" /></>
+                  ) : misiTab === 'album' ? (
+                    <section className="card">
+                      <div className="card-h" style={{ marginBottom: 8 }}>
+                        <h3>Album Stiker</h3>
+                        <small className="mute">Ketuk stiker untuk pasang di beranda</small>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                        {missions.map((m) => {
+                          const isClaimed = m.unlocked && claimedSet.has(m.id);
+                          const isReady = m.unlocked && !claimedSet.has(m.id);
+                          const isPartner = partnerId === m.id;
+                          const rar = RARITY_CFG[m.rarity] || RARITY_CFG.common;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => isReady ? claimMission(m) : setMisiSel(m)}
+                              style={{
+                                position: 'relative',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                padding: '10px 6px 8px',
+                                borderRadius: 14,
+                                border: isPartner ? '2px solid var(--accent)' : isReady ? '1.5px dashed var(--accent)' : '1px solid var(--line)',
+                                background: isPartner ? 'rgba(15,118,110,0.06)' : 'var(--bg)',
+                                cursor: 'pointer',
+                                textAlign: 'center',
+                              }}
+                            >
+                              {isPartner && (
+                                <span style={{ position: 'absolute', top: 5, right: 5, fontSize: 9, fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '1px 5px', borderRadius: 6 }}>
+                                  AKTIF
+                                </span>
+                              )}
+                              {isReady && (
+                                <span style={{ position: 'absolute', top: 5, right: 5, fontSize: 9, fontWeight: 800, background: '#D97706', color: '#fff', padding: '1px 5px', borderRadius: 6 }}>
+                                  KLAIM
+                                </span>
+                              )}
+                              <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={`/stiker/${m.stiker}`}
+                                  alt={m.stikerAlt}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'contain',
+                                    filter: isClaimed ? 'drop-shadow(0 3px 6px rgba(0,0,0,0.16))' : 'brightness(0) opacity(0.18)',
+                                  }}
+                                />
+                              </div>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: isClaimed ? 'inherit' : 'var(--mute)', lineHeight: 1.2 }}>
+                                {isClaimed ? m.title : '???'}
+                              </span>
+                              <span style={{ marginTop: 4, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: rar.bg, color: rar.color }}>
+                                {rar.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : (
+                    <>
+                      {[
+                        { key: 'ready', label: 'Siap Diklaim', list: readyToClaim },
+                        { key: 'progress', label: 'Dalam Progress', list: lockedList },
+                        { key: 'done', label: 'Sudah Diklaim', list: claimedList },
+                      ].filter((g) => g.list.length > 0).map((group) => (
+                        <section key={group.key} className="card flush">
+                          <div className="card-h" style={{ padding: '12px 16px 8px' }}>
+                            <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              {group.key === 'ready' ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" rx="1" /><line x1="12" y1="22" x2="12" y2="7" />
+                                </svg>
+                              ) : group.key === 'done' ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
+                                </svg>
+                              ) : (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                                </svg>
+                              )}
+                              {group.label}
+                            </h3>
+                          </div>
                           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {missions.filter((m) => group === 'unlocked' ? m.unlocked : !m.unlocked).map((m) => (
-                              <li
-                                key={m.id}
-                                onClick={() => setMisiSel(m)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 12,
-                                  padding: '10px 16px',
-                                  borderBottom: '1px solid var(--line)',
-                                  cursor: 'pointer',
-                                  opacity: m.unlocked ? 1 : 0.65,
-                                  transition: 'background 0.15s',
-                                }}
-                                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--line)')}
-                                onMouseLeave={(e) => (e.currentTarget.style.background = '')}
-                              >
-                                {/* Thumbnail stiker */}
-                                <div style={{
-                                  width: 52,
-                                  height: 52,
-                                  borderRadius: 10,
-                                  overflow: 'hidden',
-                                  flexShrink: 0,
-                                  background: m.unlocked ? 'transparent' : 'var(--line)',
-                                  filter: m.unlocked ? 'none' : 'grayscale(100%) blur(1.5px)',
-                                  boxShadow: m.unlocked ? '0 2px 6px rgba(0,0,0,0.15)' : 'none',
-                                }}>
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={`/stiker/${m.stiker}`}
-                                    alt={m.stikerAlt}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  />
-                                </div>
-                                {/* Info */}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                                    <b style={{ fontSize: 14 }}>{m.title}</b>
-                                    <span style={{
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                      color: m.unlocked ? 'var(--accent)' : 'var(--mute)',
-                                      whiteSpace: 'nowrap',
-                                    }}>+{m.xp} XP</span>
+                            {group.list.map((m) => {
+                              const rar = RARITY_CFG[m.rarity] || RARITY_CFG.common;
+                              const isClaimed = group.key === 'done';
+                              const isReady = group.key === 'ready';
+                              return (
+                                <li
+                                  key={m.id}
+                                  onClick={() => isReady ? claimMission(m) : setMisiSel(m)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: '10px 16px',
+                                    borderBottom: '1px solid var(--line)',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <div style={{ width: 52, height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={`/stiker/${m.stiker}`}
+                                      alt={m.stikerAlt}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'contain',
+                                        filter: isClaimed ? 'drop-shadow(0 2px 5px rgba(0,0,0,0.15))' : isReady ? 'brightness(0.85)' : 'brightness(0) opacity(0.18)',
+                                      }}
+                                    />
                                   </div>
-                                  <p style={{ margin: '2px 0 4px', fontSize: 12, color: 'var(--mute)', lineHeight: 1.4 }}>{m.desc}</p>
-                                  {/* Progress bar */}
-                                  {!m.unlocked && m.progress !== undefined && (
-                                    <div>
-                                      <div style={{ height: 4, borderRadius: 4, background: 'var(--line)', overflow: 'hidden' }}>
-                                        <div style={{
-                                          height: '100%',
-                                          borderRadius: 4,
-                                          background: 'var(--accent)',
-                                          width: `${m.progress}%`,
-                                          transition: 'width 0.5s ease',
-                                        }} />
-                                      </div>
-                                      {m.progressLabel && (
-                                        <small style={{ fontSize: 10, color: 'var(--mute)', marginTop: 2, display: 'block' }}>
-                                          {m.progressLabel}
-                                        </small>
-                                      )}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                      <b style={{ fontSize: 14 }}>{m.title}</b>
+                                      <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: rar.bg, color: rar.color }}>
+                                        {rar.label}
+                                      </span>
                                     </div>
+                                    <p style={{ margin: '2px 0 4px', fontSize: 12, color: 'var(--mute)', lineHeight: 1.4 }}>{m.desc}</p>
+                                    {!m.unlocked && m.progress !== undefined && (
+                                      <div>
+                                        <div style={{ height: 4, borderRadius: 4, background: 'var(--line)', overflow: 'hidden' }}>
+                                          <div style={{ height: '100%', borderRadius: 4, background: 'var(--accent)', width: `${m.progress}%`, transition: 'width 0.5s ease' }} />
+                                        </div>
+                                        {m.progressLabel && <small style={{ fontSize: 10, color: 'var(--mute)', marginTop: 2, display: 'block' }}>{m.progressLabel}</small>}
+                                      </div>
+                                    )}
+                                    {isClaimed && m.progressLabel && (
+                                      <small style={{ fontSize: 11, color: 'var(--accent)' }}>+{m.xp} XP · {m.progressLabel}</small>
+                                    )}
+                                  </div>
+                                  {isReady ? (
+                                    <button
+                                      type="button"
+                                      className="btn"
+                                      style={{ width: 'auto', padding: '6px 12px', fontSize: 12, flexShrink: 0 }}
+                                      onClick={(e) => { e.stopPropagation(); claimMission(m); }}
+                                    >
+                                      Klaim +{m.xp}
+                                    </button>
+                                  ) : (
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: isClaimed ? 'var(--accent)' : 'var(--mute)', whiteSpace: 'nowrap' }}>
+                                      +{m.xp} XP
+                                    </span>
                                   )}
-                                  {m.unlocked && m.progressLabel && (
-                                    <small style={{ fontSize: 11, color: 'var(--accent)' }}>✓ {m.progressLabel}</small>
-                                  )}
-                                </div>
-                              </li>
-                            ))}
+                                </li>
+                              );
+                            })}
                           </ul>
-                        )}
-                      </section>
-                    ))}
-                  </>
-                )}
-              </>
-            )}
+                        </section>
+                      ))}
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
       </main>
@@ -1404,81 +1541,100 @@ export default function Page() {
       {toast && <div className="toast" role="status">{toast}</div>}
 
       {/* Modal detail misi / stiker */}
-      {misiSel && (
-        <div className="ov" onClick={() => setMisiSel(null)}>
-          <div
-            className="sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label={misiSel.title}
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 340, margin: '0 auto' }}
-          >
-            <div style={{ textAlign: 'center', padding: '24px 20px 20px' }}>
-              {/* Stiker besar */}
-              <div style={{
-                width: 140,
-                height: 140,
-                borderRadius: 20,
-                overflow: 'hidden',
-                margin: '0 auto 16px',
-                boxShadow: misiSel.unlocked ? '0 8px 24px rgba(0,0,0,0.18)' : 'none',
-                filter: misiSel.unlocked ? 'none' : 'grayscale(100%) blur(3px)',
-                background: 'var(--line)',
-              }}>
+      {misiSel && (() => {
+        const isClaimed = misiSel.unlocked && claimedIds.includes(misiSel.id);
+        const isPartner = partnerId === misiSel.id;
+        const rar = RARITY_CFG[misiSel.rarity] || RARITY_CFG.common;
+        return (
+          <div className="ov" onClick={() => setMisiSel(null)}>
+            <div className="sheet" role="dialog" aria-modal="true" aria-label={misiSel.title} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340, margin: '0 auto' }}>
+              <div style={{ textAlign: 'center', padding: '24px 20px 20px' }}>
+                <div style={{ width: 140, height: 140, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/stiker/${misiSel.stiker}`}
+                    alt={misiSel.stikerAlt}
+                    style={{
+                      width: '100%', height: '100%', objectFit: 'contain',
+                      filter: isClaimed ? 'drop-shadow(0 8px 18px rgba(0,0,0,0.22))' : 'brightness(0) opacity(0.2)',
+                    }}
+                  />
+                </div>
+                <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 10, background: rar.bg, color: rar.color, marginBottom: 8 }}>
+                  {rar.label} · +{misiSel.xp} XP
+                </span>
+                <h2 style={{ margin: '0 0 6px', fontSize: 18 }}>{misiSel.title}</h2>
+                <p style={{ color: 'var(--mute)', fontSize: 14, margin: '0 0 12px' }}>{misiSel.desc}</p>
+                {isClaimed && (
+                  <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--accent)', margin: '0 0 14px' }}>
+                    &ldquo;{misiSel.quote}&rdquo;
+                  </p>
+                )}
+                {!misiSel.unlocked && misiSel.progress !== undefined && (
+                  <div style={{ marginTop: 8, marginBottom: 12 }}>
+                    <div style={{ height: 6, borderRadius: 6, background: 'var(--line)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 6, background: 'var(--accent)', width: `${misiSel.progress}%` }} />
+                    </div>
+                    <small style={{ fontSize: 11, color: 'var(--mute)', marginTop: 4, display: 'block' }}>{misiSel.progressLabel}</small>
+                  </div>
+                )}
+                {isClaimed && (
+                  <button
+                    type="button"
+                    className={isPartner ? 'btn ghost' : 'btn'}
+                    style={{ width: '100%', marginBottom: 8 }}
+                    onClick={() => { togglePartner(misiSel); setMisiSel(null); }}
+                  >
+                    {isPartner ? 'Lepas dari Halaman Utama' : 'Pasang di Halaman Utama'}
+                  </button>
+                )}
+                {misiSel.unlocked && !isClaimed && (
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ width: '100%', marginBottom: 8 }}
+                    onClick={() => { setMisiSel(null); claimMission(misiSel); }}
+                  >
+                    Klaim Stiker (+{misiSel.xp} XP)
+                  </button>
+                )}
+                <button type="button" className="btn ghost" style={{ width: '100%' }} onClick={() => setMisiSel(null)}>
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal Reward Reveal saat klaim stiker */}
+      {rewardReveal && (
+        <div className="ov" onClick={() => setRewardReveal(null)}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="Hadiah Stiker Baru" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', padding: '26px 20px 22px' }}>
+              <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--accent)', marginBottom: 8 }}>
+                STIKER TERBUKA · +{rewardReveal.xp} XP
+              </span>
+              <div style={{ width: 150, height: 150, margin: '6px auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/stiker/${misiSel.stiker}`}
-                  alt={misiSel.stikerAlt}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  src={`/stiker/${rewardReveal.stiker}`}
+                  alt={rewardReveal.stikerAlt}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.25))' }}
                 />
               </div>
-              {misiSel.unlocked && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: 'var(--line)', color: 'var(--accent)', marginBottom: 8 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="8" r="6" />
-                    <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
-                  </svg>
-                </div>
-              )}
-              <h2 style={{ margin: '0 0 6px', fontSize: 18 }}>{misiSel.title}</h2>
-              <p style={{ color: 'var(--mute)', fontSize: 14, margin: '0 0 12px' }}>{misiSel.desc}</p>
-              <div style={{
-                display: 'inline-block',
-                background: misiSel.unlocked ? 'var(--accent)' : 'var(--line)',
-                color: misiSel.unlocked ? '#fff' : 'var(--mute)',
-                borderRadius: 20,
-                padding: '4px 14px',
-                fontSize: 13,
-                fontWeight: 700,
-                marginBottom: 8,
-              }}>
-                {misiSel.unlocked ? `✓ Selesai · +${misiSel.xp} XP` : `${misiSel.xp} XP · Belum selesai`}
-              </div>
-              {misiSel.progressLabel && (
-                <p style={{ fontSize: 12, color: 'var(--mute)', margin: '8px 0 0' }}>{misiSel.progressLabel}</p>
-              )}
-              {!misiSel.unlocked && misiSel.progress !== undefined && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ height: 6, borderRadius: 6, background: 'var(--line)', overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%',
-                      borderRadius: 6,
-                      background: 'var(--accent)',
-                      width: `${misiSel.progress}%`,
-                    }} />
-                  </div>
-                  <small style={{ fontSize: 11, color: 'var(--mute)', marginTop: 4, display: 'block' }}>
-                    Progress {misiSel.progress}%
-                  </small>
-                </div>
-              )}
+              <h2 style={{ margin: '0 0 6px', fontSize: 20 }}>{rewardReveal.title}</h2>
+              <p style={{ color: 'var(--mute)', fontSize: 13, margin: '0 0 16px' }}>&ldquo;{rewardReveal.quote}&rdquo;</p>
               <button
+                type="button"
                 className="btn"
-                style={{ marginTop: 20, width: '100%' }}
-                onClick={() => setMisiSel(null)}
+                style={{ width: '100%', marginBottom: 8 }}
+                onClick={() => { togglePartner(rewardReveal); setRewardReveal(null); }}
               >
-                Tutup
+                Pasang di Halaman Utama
+              </button>
+              <button type="button" className="btn ghost" style={{ width: '100%' }} onClick={() => setRewardReveal(null)}>
+                Simpan ke Album
               </button>
             </div>
           </div>
