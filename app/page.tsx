@@ -1021,9 +1021,8 @@ export default function Page() {
       <div className="app" style={{ '--accent': '#0F766E', display: 'grid', placeItems: 'center', minHeight: '100dvh', padding: 20 } as React.CSSProperties}>
         <section className="card" style={{ width: '100%', maxWidth: 360, padding: '26px 22px', gap: 14 }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'color-mix(in srgb, var(--accent) 12%, #fff)', color: 'var(--accent)', display: 'inline-grid', placeItems: 'center', marginBottom: 10 }}>
-              <BookIcon book={MAIN} size={26} />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon-192.png" alt="Logo Keuangan Kita" style={{ width: 64, height: 64, borderRadius: 18, marginBottom: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }} />
             <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Keuangan Kita</h1>
             <p className="mute" style={{ margin: 0 }}>Masukkan nama pos tabunganmu untuk masuk</p>
           </div>
