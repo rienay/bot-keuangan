@@ -507,7 +507,7 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
-  const [sheet, setSheet] = useState<null | 'budget' | 'debt' | 'tx' | 'goal' | 'deposit' | 'more' | 'transfer' | 'books'>(null);
+  const [sheet, setSheet] = useState<null | 'budget' | 'debt' | 'tx' | 'goal' | 'deposit' | 'more' | 'transfer'>(null);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [q, setQ] = useState('');
   const [typeF, setTypeF] = useState<'all' | 'Pemasukan' | 'Pengeluaran'>('all');
@@ -2319,70 +2319,6 @@ export default function Page() {
         </Sheet>
       )}
 
-      {sheet === 'books' && (
-        <Sheet title="Pos Tabungan" onClose={() => setSheet(null)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-            {[MAIN, ALL, ...books.filter((b) => b !== MAIN && b !== ALL)].map((b) => {
-              const active = book === b;
-              const canDel = b !== MAIN && b !== ALL;
-              return (
-                <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => { setShowMisi(false); setBook(b); setSheet(null); }}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: active ? '1.5px solid var(--accent)' : '1px solid var(--line)',
-                      background: active ? 'rgba(15,118,110,0.06)' : 'var(--bg)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ color: bookStyle(b).c }}><BookIcon book={b} size={18} /></span>
-                      <span>
-                        <b style={{ display: 'block', fontSize: 14 }}>{b === ALL ? 'Semua pos' : b}</b>
-                        <small style={{ color: 'var(--mute)', fontSize: 11 }}>{b === MAIN ? 'Kas utama' : b === ALL ? 'Gabungan semua pos' : 'Pos kegiatan'}</small>
-                      </span>
-                    </span>
-                    {active && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>Aktif</span>}
-                  </button>
-                  {canDel && (
-                    <button
-                      type="button"
-                      className="icbtn"
-                      onClick={() => deleteBook(b)}
-                      disabled={bookBusy}
-                      aria-label={`Hapus pos ${b}`}
-                      style={{ color: '#DC2626' }}
-                    >
-                      <Ic d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <form onSubmit={createBook} style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
-            <input
-              value={newBookName}
-              onChange={(e) => setNewBookName(e.target.value)}
-              placeholder="Nama pos baru (misal: Liburan)"
-              style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--line)', fontSize: 13 }}
-              required
-            />
-            <button type="submit" className="btn" style={{ width: 'auto', padding: '0 14px', fontSize: 13 }} disabled={bookBusy}>
-              {bookBusy ? '...' : 'Buat'}
-            </button>
-          </form>
-        </Sheet>
-      )}
-
       {sheet === 'more' && (() => {
         const claimedSet = new Set(claimedIds);
         const claimedList = missions.filter((m) => m.unlocked && claimedSet.has(m.id));
@@ -2425,7 +2361,7 @@ export default function Page() {
             {/* Pintasan Fitur Bot (Grid 2 kolom) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
               {[
-                { label: 'Pos Tabungan', sub: 'Ganti / buat pos', fn: () => setSheet('books') },
+                { label: 'Misi & Stiker', sub: 'Klaim hadiah kucing', fn: () => { setSheet(null); setShowMisi(true); window.scrollTo({ top: 0 }); } },
                 { label: 'Catat Transaksi', sub: 'Input manual', fn: openAdd },
                 { label: 'Pindah Saldo', sub: 'Dompet / antar pos', fn: openTransfer },
                 { label: 'Atur Budget', sub: 'Bulanan & harian', fn: () => { setBudIn(bAmt ? String(bAmt) : ''); setSheet('budget'); } },
