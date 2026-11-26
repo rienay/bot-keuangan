@@ -206,9 +206,9 @@ function BookIcon({ book, size = 18 }: { book: string; size?: number }) {
 const TABS = [
   { id: 'home', label: 'Ringkasan', d: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
   { id: 'wallet', label: 'Dompet', d: 'M3 7a2 2 0 0 1 2-2h13v4M3 7v10a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2zM16 14h2' },
+  { id: 'catat', label: 'Catat', d: 'M12 5v14M5 12h14' },
   { id: 'tx', label: 'Transaksi', d: 'M4 6h16M4 12h16M4 18h10' },
   { id: 'report', label: 'Laporan', d: 'M5 20V10m7 10V4m7 16v-7' },
-  { id: 'debt', label: 'Utang', d: 'M7 7h11l-3-3m3 3-3 3M17 17H6l3 3m-3-3 3-3' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 
@@ -525,6 +525,9 @@ export default function Page() {
   const [budMode, setBudMode] = useState<'monthly' | 'daily'>('monthly');
   const [budIn, setBudIn] = useState('');
   const [debtTab, setDebtTab] = useState<'active' | 'settled'>('active');
+  const [txMode, setTxMode] = useState<'riwayat' | 'utang'>('riwayat');
+  const [catatMode, setCatatMode] = useState<'Pemasukan' | 'Pengeluaran' | 'Transfer'>('Pengeluaran');
+  const [catatBusy, setCatatBusy] = useState(false);
   const [df, setDf] = useState({ type: 'Piutang', person: '', amount: '', desc: '' });
   const [missions, setMissions] = useState<MissionData[]>([]);
   const [missionXp, setMissionXp] = useState(0);
@@ -625,6 +628,26 @@ export default function Page() {
     let i = 0, e = 0;
     yTx.forEach((t) => { if (!isTransfer(t)) t.type === 'Pemasukan' ? (i += t.amount) : (e += t.amount); });
     return { i, e, s: i - e };
+  }, [yTx]);
+  const yearRecords = useMemo(() => {
+    const map = new Map<string, { inc: number; exp: number; label: string }>();
+    yTx.forEach((t) => {
+      if (isTransfer(t)) return;
+      const d = parseDate(t.date);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const cur = map.get(key) || { inc: 0, exp: 0, label: `${MONTHS[d.getMonth()]} ${d.getFullYear()}` };
+      if (t.type === 'Pemasukan') cur.inc += t.amount;
+      else cur.exp += t.amount;
+      map.set(key, cur);
+    });
+    const list = Array.from(map.values());
+    if (!list.length) return null;
+    const highInc = list.filter((m) => m.inc > 0).sort((a, b) => b.inc - a.inc)[0] || null;
+    const highExp = list.filter((m) => m.exp > 0).sort((a, b) => b.exp - a.exp)[0] || null;
+    const avgInc = Math.round(list.reduce((s, m) => s + m.inc, 0) / list.length);
+    const avgExp = Math.round(list.reduce((s, m) => s + m.exp, 0) / list.length);
+    return { highInc, highExp, avgInc, avgExp };
   }, [yTx]);
   const months = useMemo(() => {
     const y = year === ALL ? String(new Date().getFullYear()) : year;
@@ -905,7 +928,7 @@ export default function Page() {
           </span>
           <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{kind}</small></span>
         </button>
-        {!showMisi && tab !== 'debt' && tab !== 'wallet' && (
+        {!showMisi && tab !== 'wallet' && tab !== 'catat' && (
           <select
             value={year}
             onChange={(e) => setYear(e.target.value)}
@@ -1133,26 +1156,266 @@ export default function Page() {
               );
             })()}
 
+            {!showMisi && tab === 'catat' && (() => {
+              const modeColor = catatMode === 'Pemasukan' ? '#2563EB' : catatMode === 'Pengeluaran' ? '#EA580C' : '#1F2937';
+              const curDate = form.date || ymd(new Date());
+              const curFrom = tf.from || walletOpts[0] || 'Cash';
+              const curTo = tf.to || walletOpts[1] || '';
+              const curToBook = tf.toBook || books.find((b) => b !== writeBook) || '';
+
+              const submitCatat = async (keepOpen: boolean) => {
+                if (catatBusy) return;
+                setCatatBusy(true);
+                try {
+                  if (catatMode === 'Transfer') {
+                    const n = parseInt(tf.amount.replace(/\D/g, ''), 10);
+                    if (!n) { say('Isi total nominal dulu'); return; }
+                    if (tf.mode === 'wallet' && (!curTo || curTo === curFrom)) { say('Pilih dompet asal dan tujuan yang berbeda'); return; }
+                    if (tf.mode === 'book' && !curToBook) { say('Pilih pos tujuan'); return; }
+                    await post('/api/transfer', { mode: tf.mode, book: writeBook, from: curFrom, to: curTo, toBook: curToBook, amount: n, description: tf.desc });
+                    say('Transfer berhasil dicatat');
+                    setTf({ ...tf, amount: '', desc: '' });
+                  } else {
+                    const n = parseInt(form.amount.replace(/\D/g, ''), 10);
+                    if (!n) { say('Isi total nominal dulu'); return; }
+                    await post('/api/transactions', {
+                      action: 'add',
+                      book: writeBook,
+                      row: 0,
+                      type: catatMode,
+                      category: form.category || (catatMode === 'Pemasukan' ? 'Pemasukan' : 'Lain-lain'),
+                      amount: n,
+                      description: form.desc,
+                      date: curDate,
+                      wallet: form.wallet || 'Cash',
+                    });
+                    say('Transaksi dicatat');
+                    setForm({ ...form, amount: '', desc: '', category: '' });
+                  }
+                  load(book, true);
+                  if (!keepOpen) setTab('tx');
+                } catch (er: any) {
+                  say(er.message);
+                } finally {
+                  setCatatBusy(false);
+                }
+              };
+
+              return (
+                <>
+                  {/* 3 Tab Mode seperti Money Manager */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {([
+                      { id: 'Pemasukan', label: 'Pendapatan', col: '#2563EB' },
+                      { id: 'Pengeluaran', label: 'Pengeluaran', col: '#EA580C' },
+                      { id: 'Transfer', label: 'Transfer', col: '#1F2937' },
+                    ] as const).map((m) => {
+                      const active = catatMode === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setCatatMode(m.id)}
+                          style={{
+                            minHeight: 42,
+                            borderRadius: 10,
+                            fontSize: 13.5,
+                            fontWeight: active ? 700 : 500,
+                            background: active ? 'var(--card)' : 'var(--bg)',
+                            color: active ? m.col : 'var(--mute)',
+                            border: active ? `1.5px solid ${m.col}` : '1px solid var(--line)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Form Baris demi Baris */}
+                  <section className="card" style={{ gap: 0, padding: '4px 16px' }}>
+                    {catatMode !== 'Transfer' ? (
+                      <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Tanggal</span>
+                          <input type="date" value={curDate} onChange={(e) => setForm({ ...form, date: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }} />
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Total</span>
+                          <input
+                            inputMode="numeric"
+                            value={form.amount}
+                            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                            placeholder="Rp 0"
+                            style={{ flex: 1, border: 0, background: 'transparent', fontSize: 16, fontWeight: 700, outline: 'none', color: modeColor }}
+                          />
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Kategori</span>
+                          <input
+                            list="catat-cats"
+                            value={form.category}
+                            onChange={(e) => setForm({ ...form, category: e.target.value })}
+                            placeholder={catatMode === 'Pemasukan' ? 'Gaji, Bonus, Tabungan' : 'Makan, Transport, Belanja'}
+                            style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}
+                          />
+                          <datalist id="catat-cats">{catOpts.map((c) => <option key={c} value={c} />)}</datalist>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Aset</span>
+                          <select value={form.wallet || 'Cash'} onChange={(e) => setForm({ ...form, wallet: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
+                            {walletOpts.map((w) => <option key={w} value={w}>{wLabel(w)}</option>)}
+                          </select>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Catatan</span>
+                          <input value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} placeholder="Deskripsi (opsional)" style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }} />
+                        </label>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Jenis</span>
+                          <div className="seg" style={{ flex: 1 }}>
+                            <button type="button" className={tf.mode === 'wallet' ? 'on' : ''} style={{ flex: 1 }} onClick={() => setTf({ ...tf, mode: 'wallet' })}>Antar dompet</button>
+                            <button type="button" className={tf.mode === 'book' ? 'on' : ''} style={{ flex: 1 }} onClick={() => setTf({ ...tf, mode: 'book' })}>Antar pos</button>
+                          </div>
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Total</span>
+                          <input
+                            inputMode="numeric"
+                            value={tf.amount}
+                            onChange={(e) => setTf({ ...tf, amount: e.target.value })}
+                            placeholder="Rp 0"
+                            style={{ flex: 1, border: 0, background: 'transparent', fontSize: 16, fontWeight: 700, outline: 'none' }}
+                          />
+                        </label>
+                        {tf.mode === 'wallet' ? (
+                          <>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                              <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Uang keluar</span>
+                              <select value={curFrom} onChange={(e) => setTf({ ...tf, from: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
+                                {walletOpts.map((w) => <option key={w} value={w}>{wLabel(w)}</option>)}
+                              </select>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                              <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Uang masuk</span>
+                              <select value={curTo} onChange={(e) => setTf({ ...tf, to: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
+                                <option value="">Pilih dompet tujuan</option>
+                                {walletOpts.map((w) => <option key={w} value={w}>{wLabel(w)}</option>)}
+                              </select>
+                            </label>
+                          </>
+                        ) : (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+                            <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Ke pos</span>
+                            <select value={curToBook} onChange={(e) => setTf({ ...tf, toBook: e.target.value })} style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }}>
+                              {books.filter((b) => b !== writeBook).map((b) => <option key={b}>{b}</option>)}
+                            </select>
+                          </label>
+                        )}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
+                          <span style={{ width: 80, fontSize: 13, color: 'var(--mute)', flexShrink: 0 }}>Catatan</span>
+                          <input value={tf.desc} onChange={(e) => setTf({ ...tf, desc: e.target.value })} placeholder="Deskripsi (opsional)" style={{ flex: 1, border: 0, background: 'transparent', fontSize: 14, outline: 'none' }} />
+                        </label>
+                      </>
+                    )}
+                  </section>
+
+                  {/* Quick category chips */}
+                  {catatMode !== 'Transfer' && catOpts.length > 0 && (
+                    <div className="chips">
+                      {catOpts.slice(0, 8).map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          className={form.category === c ? 'on' : ''}
+                          onClick={() => setForm({ ...form, category: c })}
+                          style={{ fontSize: 12.5, minHeight: 34, padding: '0 12px' }}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Tombol Simpan & Lanjut */}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={catatBusy}
+                      onClick={() => submitCatat(false)}
+                      style={{ flex: 1, background: modeColor }}
+                    >
+                      {catatBusy ? 'Menyimpan...' : 'Simpan'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={catatBusy}
+                      onClick={() => submitCatat(true)}
+                      style={{ width: 'auto', padding: '0 20px', background: 'var(--card)', color: 'var(--ink)', border: '1px solid var(--line)' }}
+                    >
+                      Lanjut
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
             {!showMisi && tab === 'tx' && (
               <>
-                <div className="filters">
-                  <input type="search" placeholder="Cari keterangan atau kategori" value={q} onChange={(e) => { setQ(e.target.value); setLimit(40); }} aria-label="Cari transaksi" />
-                  <select value={monthF} onChange={(e) => { setMonthF(e.target.value); setLimit(40); }} aria-label="Filter bulan">
-                    <option value="all">Semua bulan</option>
-                    {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                  </select>
-                </div>
                 <div className="seg wide">
-                  {([['all', 'Semua'], ['Pemasukan', 'Masuk'], ['Pengeluaran', 'Keluar']] as const).map(([v, l]) => (
-                    <button key={v} className={typeF === v ? 'on' : ''} onClick={() => { setTypeF(v); setLimit(40); }}>{l}</button>
-                  ))}
+                  <button className={txMode === 'riwayat' ? 'on' : ''} onClick={() => setTxMode('riwayat')}>Riwayat</button>
+                  <button className={txMode === 'utang' ? 'on' : ''} onClick={() => setTxMode('utang')}>Utang &amp; Piutang{actD.length ? ` (${actD.length})` : ''}</button>
                 </div>
-                <p className="mute">{listed.length} transaksi</p>
-                {groups.length === 0 && <Empty>Tidak ada transaksi yang cocok. Ubah filter atau pilih tahun lain.</Empty>}
-                {groups.map(([date, items]) => (
-                  <section key={date} className="card flush"><h3 className="day">{dayLabel(date)}</h3><ul className="txs">{items.map(row)}</ul></section>
-                ))}
-                {listed.length > limit && <button className="btn" onClick={() => setLimit(limit + 40)}>Tampilkan lebih banyak</button>}
+
+                {txMode === 'riwayat' ? (
+                  <>
+                    <div className="filters">
+                      <input type="search" placeholder="Cari keterangan atau kategori" value={q} onChange={(e) => { setQ(e.target.value); setLimit(40); }} aria-label="Cari transaksi" />
+                      <select value={monthF} onChange={(e) => { setMonthF(e.target.value); setLimit(40); }} aria-label="Filter bulan">
+                        <option value="all">Semua bulan</option>
+                        {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div className="seg wide">
+                      {([['all', 'Semua'], ['Pemasukan', 'Masuk'], ['Pengeluaran', 'Keluar']] as const).map(([v, l]) => (
+                        <button key={v} className={typeF === v ? 'on' : ''} onClick={() => { setTypeF(v); setLimit(40); }}>{l}</button>
+                      ))}
+                    </div>
+                    <p className="mute">{listed.length} transaksi</p>
+                    {groups.length === 0 && <Empty>Tidak ada transaksi yang cocok. Ubah filter atau pilih tahun lain.</Empty>}
+                    {groups.map(([date, items]) => (
+                      <section key={date} className="card flush"><h3 className="day">{dayLabel(date)}</h3><ul className="txs">{items.map(row)}</ul></section>
+                    ))}
+                    {listed.length > limit && <button className="btn" onClick={() => setLimit(limit + 40)}>Tampilkan lebih banyak</button>}
+                  </>
+                ) : (
+                  <>
+                    <div className="pair tiles">
+                      <div className="card"><small>Piutang (uang kita di orang)</small><b className="num in">{rp(sumD('Piutang'))}</b></div>
+                      <div className="card"><small>Utang (harus kita bayar)</small><b className="num out">{rp(sumD('Utang'))}</b></div>
+                    </div>
+                    <div className="seg wide">
+                      <button className={debtTab === 'active' ? 'on' : ''} onClick={() => setDebtTab('active')}>Belum lunas ({actD.length})</button>
+                      <button className={debtTab === 'settled' ? 'on' : ''} onClick={() => setDebtTab('settled')}>Sudah lunas ({doneD.length})</button>
+                    </div>
+                    {(debtTab === 'active' ? actD : doneD).length === 0 && <Empty>{debtTab === 'active' ? 'Tidak ada utang atau piutang yang aktif.' : 'Belum ada yang dilunasi.'}</Empty>}
+                    {(debtTab === 'active' ? actD : doneD).map((d) => (
+                      <section key={d.id} className="card debt">
+                        <div className="card-h"><b>{d.person}</b><b className={`num ${d.type === 'Piutang' ? 'in' : 'out'}`}>{rp(debtTab === 'active' ? d.remainingAmount || d.amount : d.amount)}</b></div>
+                        <p className="mute">{d.type}{book === ALL ? `, pos ${d.book}` : ''}. {d.description && d.description !== '-' ? d.description : 'Tanpa keterangan'}</p>
+                        <p className="mute">Dicatat {d.date}{d.settledDate ? `, lunas ${d.settledDate}` : ''}</p>
+                        {debtTab === 'active' && <button className="btn ghost" onClick={() => settle(d)}>{d.type === 'Piutang' ? 'Tandai sudah diterima' : 'Tandai sudah dibayar'}</button>}
+                      </section>
+                    ))}
+                    <button className="btn" onClick={() => setSheet('debt')}>Catat utang atau piutang</button>
+                  </>
+                )}
               </>
             )}
 
@@ -1195,13 +1458,13 @@ export default function Page() {
                   )}
                 </section>
 
-                {data?.monthlyComparison && (
+                {yearRecords && (
                   <section className="card">
-                    <h3>Rekor dan rata-rata</h3>
-                    <div className="kv"><span>Pemasukan tertinggi</span><b className="num">{data.monthlyComparison.highestIncomeMonth ? `${rp(data.monthlyComparison.highestIncomeMonth.amount)} (${data.monthlyComparison.highestIncomeMonth.monthLabel})` : '-'}</b></div>
-                    <div className="kv"><span>Pengeluaran tertinggi</span><b className="num">{data.monthlyComparison.highestExpenseMonth ? `${rp(data.monthlyComparison.highestExpenseMonth.amount)} (${data.monthlyComparison.highestExpenseMonth.monthLabel})` : '-'}</b></div>
-                    <div className="kv"><span>Rata-rata masuk per bulan</span><b className="num">{rp(data.monthlyComparison.averageMonthlyIncome)}</b></div>
-                    <div className="kv"><span>Rata-rata keluar per bulan</span><b className="num">{rp(data.monthlyComparison.averageMonthlyExpense)}</b></div>
+                    <h3>Rekor dan rata-rata{year === ALL ? '' : ` (${year})`}</h3>
+                    <div className="kv"><span>Pemasukan tertinggi</span><b className="num">{yearRecords.highInc ? `${rp(yearRecords.highInc.inc)} (${yearRecords.highInc.label})` : '-'}</b></div>
+                    <div className="kv"><span>Pengeluaran tertinggi</span><b className="num">{yearRecords.highExp ? `${rp(yearRecords.highExp.exp)} (${yearRecords.highExp.label})` : '-'}</b></div>
+                    <div className="kv"><span>Rata-rata masuk per bulan</span><b className="num">{rp(yearRecords.avgInc)}</b></div>
+                    <div className="kv"><span>Rata-rata keluar per bulan</span><b className="num">{rp(yearRecords.avgExp)}</b></div>
                   </section>
                 )}
 
@@ -1213,6 +1476,7 @@ export default function Page() {
                   const net = cur.inc - cur.exp;
                   const saveRate = cur.inc > 0 ? Math.round((net / cur.inc) * 100) : 0;
                   const expDiffPct = prev && prev.exp > 0 ? Math.round(((cur.exp - prev.exp) / prev.exp) * 100) : null;
+                  const maxFlow = Math.max(1, cur.inc, cur.exp);
                   const byCat: Record<string, number> = {};
                   const yTarget = year === ALL ? String(new Date().getFullYear()) : year;
                   yTx.forEach((t) => {
@@ -1221,14 +1485,14 @@ export default function Page() {
                       byCat[t.category] = (byCat[t.category] || 0) + t.amount;
                     }
                   });
-                  const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
-                  const topPct = topCat && cur.exp > 0 ? Math.round((topCat[1] / cur.exp) * 100) : 0;
+                  const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                  const topCat = topCats[0];
                   const isHealthy = net >= 0 && (cur.inc === 0 || saveRate >= 10);
 
                   return (
                     <section className="card">
                       <div className="card-h">
-                        <h3>Evaluasi {cur.name}</h3>
+                        <h3>Statistik &amp; Evaluasi {cur.name}</h3>
                         <span style={{
                           fontSize: 11,
                           fontWeight: 700,
@@ -1240,30 +1504,68 @@ export default function Page() {
                           {net >= 0 ? (saveRate >= 20 ? 'Sangat Sehat' : 'Surplus') : 'Defisit'}
                         </span>
                       </div>
-                      <div className="kv">
-                        <span>Selisih bersih</span>
-                        <b className={`num ${net >= 0 ? 'in' : 'out'}`}>{net >= 0 ? '+' : '-'}{rp(Math.abs(net))}</b>
-                      </div>
-                      {cur.inc > 0 && (
-                        <div className="kv">
-                          <span>Rasio tabungan</span>
-                          <b className="num">{saveRate}% dari pemasukan</b>
+
+                      {/* Bar perbandingan Masuk vs Keluar */}
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                            <span style={{ color: 'var(--mute)' }}>Pemasukan</span>
+                            <b className="num in">+{rp(cur.inc)}</b>
+                          </div>
+                          <div style={{ height: 8, borderRadius: 6, background: 'var(--line)', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', borderRadius: 6, background: 'var(--in)', width: `${Math.round((cur.inc / maxFlow) * 100)}%`, transition: 'width 0.4s ease' }} />
+                          </div>
                         </div>
-                      )}
-                      {expDiffPct !== null && prev && (
-                        <div className="kv">
-                          <span>Dibanding {prev.name}</span>
-                          <b className={`num ${expDiffPct <= 0 ? 'in' : 'out'}`}>
-                            {expDiffPct === 0 ? 'Sama' : expDiffPct < 0 ? `Lebih hemat ${-expDiffPct}%` : `Naik ${expDiffPct}%`}
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                            <span style={{ color: 'var(--mute)' }}>Pengeluaran</span>
+                            <b className="num out">-{rp(cur.exp)}</b>
+                          </div>
+                          <div style={{ height: 8, borderRadius: 6, background: 'var(--line)', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', borderRadius: 6, background: 'var(--out)', width: `${Math.round((cur.exp / maxFlow) * 100)}%`, transition: 'width 0.4s ease' }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3 Tile Metrik Statistik */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                        <div style={{ background: 'var(--bg)', padding: '8px 10px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                          <small style={{ display: 'block', fontSize: 10.5 }}>Selisih</small>
+                          <b className={`num ${net >= 0 ? 'in' : 'out'}`} style={{ fontSize: 12.5 }}>{net >= 0 ? '+' : '-'}{short(Math.abs(net))}</b>
+                        </div>
+                        <div style={{ background: 'var(--bg)', padding: '8px 10px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                          <small style={{ display: 'block', fontSize: 10.5 }}>Tabungan</small>
+                          <b className="num" style={{ fontSize: 12.5 }}>{cur.inc > 0 ? `${saveRate}%` : '-'}</b>
+                        </div>
+                        <div style={{ background: 'var(--bg)', padding: '8px 10px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                          <small style={{ display: 'block', fontSize: 10.5 }}>vs {prev ? prev.name.slice(0, 3) : 'Lalu'}</small>
+                          <b className={`num ${expDiffPct === null ? '' : expDiffPct <= 0 ? 'in' : 'out'}`} style={{ fontSize: 12.5 }}>
+                            {expDiffPct === null ? '-' : expDiffPct === 0 ? '0%' : expDiffPct < 0 ? `${expDiffPct}%` : `+${expDiffPct}%`}
                           </b>
                         </div>
-                      )}
-                      {topCat && (
-                        <div className="kv">
-                          <span>Pos paling boros</span>
-                          <b>{topCat[0]} ({topPct}%)</b>
+                      </div>
+
+                      {/* Top 3 Kategori Pengeluaran */}
+                      {topCats.length > 0 && (
+                        <div style={{ display: 'grid', gap: 7, paddingTop: 4 }}>
+                          <small style={{ fontWeight: 700, color: 'var(--ink)' }}>Top Pengeluaran {cur.name}</small>
+                          {topCats.map(([name, amt], idx) => {
+                            const pct = cur.exp > 0 ? Math.round((amt / cur.exp) * 100) : 0;
+                            return (
+                              <div key={name}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                                  <span>{name}</span>
+                                  <span className="num" style={{ color: 'var(--mute)' }}>{rp(amt)} · <b style={{ color: 'var(--ink)' }}>{pct}%</b></span>
+                                </div>
+                                <div style={{ height: 5, borderRadius: 5, background: 'var(--line)', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', borderRadius: 5, background: PAL[idx % PAL.length], width: `${pct}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
+
                       <p className="mute" style={{ marginTop: 2 }}>
                         {net < 0
                           ? `Pengeluaran ${cur.name} lebih besar dari pemasukan${topCat ? `, terutama di kategori ${topCat[0]}` : ''}. Coba rem sedikit di bulan berikutnya.`
@@ -1274,29 +1576,6 @@ export default function Page() {
                     </section>
                   );
                 })()}
-              </>
-            )}
-
-            {!showMisi && tab === 'debt' && (
-              <>
-                <div className="pair tiles">
-                  <div className="card"><small>Piutang (uang kita di orang)</small><b className="num in">{rp(sumD('Piutang'))}</b></div>
-                  <div className="card"><small>Utang (harus kita bayar)</small><b className="num out">{rp(sumD('Utang'))}</b></div>
-                </div>
-                <div className="seg wide">
-                  <button className={debtTab === 'active' ? 'on' : ''} onClick={() => setDebtTab('active')}>Belum lunas ({actD.length})</button>
-                  <button className={debtTab === 'settled' ? 'on' : ''} onClick={() => setDebtTab('settled')}>Sudah lunas ({doneD.length})</button>
-                </div>
-                {(debtTab === 'active' ? actD : doneD).length === 0 && <Empty>{debtTab === 'active' ? 'Tidak ada utang atau piutang yang aktif.' : 'Belum ada yang dilunasi.'}</Empty>}
-                {(debtTab === 'active' ? actD : doneD).map((d) => (
-                  <section key={d.id} className="card debt">
-                    <div className="card-h"><b>{d.person}</b><b className={`num ${d.type === 'Piutang' ? 'in' : 'out'}`}>{rp(debtTab === 'active' ? d.remainingAmount || d.amount : d.amount)}</b></div>
-                    <p className="mute">{d.type}{book === ALL ? `, pos ${d.book}` : ''}. {d.description && d.description !== '-' ? d.description : 'Tanpa keterangan'}</p>
-                    <p className="mute">Dicatat {d.date}{d.settledDate ? `, lunas ${d.settledDate}` : ''}</p>
-                    {debtTab === 'active' && <button className="btn ghost" onClick={() => settle(d)}>{d.type === 'Piutang' ? 'Tandai sudah diterima' : 'Tandai sudah dibayar'}</button>}
-                  </section>
-                ))}
-                <button className="btn" onClick={() => setSheet('debt')}>Catat utang atau piutang</button>
               </>
             )}
 
@@ -1554,8 +1833,14 @@ export default function Page() {
 
       <nav className="nav" aria-label="Menu utama">
         {TABS.map((t) => (
-          <button key={t.id} aria-current={!showMisi && tab === t.id ? 'page' : undefined} onClick={() => { setShowMisi(false); setTab(t.id); window.scrollTo({ top: 0 }); }}>
-            <Ic d={t.d} /><span>{t.label}</span>
+          <button
+            key={t.id}
+            className={t.id === 'catat' ? 'nav-center' : undefined}
+            aria-current={!showMisi && tab === t.id ? 'page' : undefined}
+            onClick={() => { setShowMisi(false); setTab(t.id); window.scrollTo({ top: 0 }); }}
+          >
+            {t.id === 'catat' ? <span className="nav-plus"><Ic d={t.d} /></span> : <Ic d={t.d} />}
+            <span>{t.label}</span>
           </button>
         ))}
       </nav>
@@ -1585,8 +1870,6 @@ export default function Page() {
           </form>
         </Sheet>
       )}
-
-      {tab !== 'debt' && tab !== 'report' && !sheet && <button className="fab" onClick={openAdd} aria-label="Catat transaksi">+</button>}
 
       {sheet === 'tx' && (
         <Sheet title={form.id ? 'Ubah transaksi' : 'Catat transaksi'} onClose={() => setSheet(null)}>
