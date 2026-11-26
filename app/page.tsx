@@ -530,6 +530,7 @@ export default function Page() {
   const [budMode, setBudMode] = useState<'monthly' | 'daily'>('monthly');
   const [budIn, setBudIn] = useState('');
   const [debtTab, setDebtTab] = useState<'active' | 'settled'>('active');
+  const [reportTab, setReportTab] = useState<'pengeluaran' | 'pemasukan' | 'evaluasi'>('pengeluaran');
   const [txMode, setTxMode] = useState<'riwayat' | 'utang'>('riwayat');
   const [catatMode, setCatatMode] = useState<'Pemasukan' | 'Pengeluaran' | 'Transfer'>('Pengeluaran');
   const [catatBusy, setCatatBusy] = useState(false);
@@ -671,6 +672,50 @@ export default function Page() {
     const avgExp = Math.round(list.reduce((s, m) => s + m.exp, 0) / list.length);
     return { highInc, highExp, avgInc, avgExp };
   }, [yTx]);
+  const incCats = useMemo(() => {
+    const m: Record<string, number> = {};
+    let tot = 0;
+    yTx.forEach((t) => {
+      if (isTransfer(t) || t.type !== 'Pemasukan') return;
+      if (pick !== null && parseDate(t.date)?.getMonth() !== pick) return;
+      m[t.category] = (m[t.category] || 0) + t.amount;
+      tot += t.amount;
+    });
+    const list = Object.entries(m).sort((a, b) => b[1] - a[1]).map(([name, amt], k) => ({ name, amt, pct: Math.round((amt / (tot || 1)) * 100), color: PAL[k % PAL.length] }));
+    let a = 0;
+    const parts = list.map((c) => { const s = a; a += (c.amt / (tot || 1)) * 100; return `${c.color} ${s}% ${a}%`; });
+    return { list, tot, bg: parts.length ? `conic-gradient(${parts.join(',')})` : 'var(--line)' };
+  }, [yTx, pick]);
+  const walletStats = useMemo(() => {
+    const outM: Record<string, number> = {};
+    const inM: Record<string, number> = {};
+    let totOut = 0, totIn = 0;
+    yTx.forEach((t) => {
+      if (isTransfer(t)) return;
+      if (pick !== null && parseDate(t.date)?.getMonth() !== pick) return;
+      const w = wLabel(t.wallet || 'Cash');
+      if (t.type === 'Pengeluaran') { outM[w] = (outM[w] || 0) + t.amount; totOut += t.amount; }
+      else { inM[w] = (inM[w] || 0) + t.amount; totIn += t.amount; }
+    });
+    const outList = Object.entries(outM).sort((a, b) => b[1] - a[1]).map(([name, amt], k) => ({ name, amt, pct: Math.round((amt / (totOut || 1)) * 100), color: PAL[k % PAL.length] }));
+    const inList = Object.entries(inM).sort((a, b) => b[1] - a[1]).map(([name, amt], k) => ({ name, amt, pct: Math.round((amt / (totIn || 1)) * 100), color: PAL[k % PAL.length] }));
+    return { outList, inList, totOut, totIn };
+  }, [yTx, pick]);
+  const dayStats = useMemo(() => {
+    const labels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    const totals = [0, 0, 0, 0, 0, 0, 0];
+    yTx.forEach((t) => {
+      if (isTransfer(t) || t.type !== 'Pengeluaran') return;
+      const d = parseDate(t.date);
+      if (!d) return;
+      if (pick !== null && d.getMonth() !== pick) return;
+      const dow = (d.getDay() + 6) % 7;
+      totals[dow] += t.amount;
+    });
+    const max = Math.max(1, ...totals);
+    const maxVal = Math.max(...totals);
+    return labels.map((l, i) => ({ l, amt: totals[i], pct: Math.round((totals[i] / max) * 100), isPeak: maxVal > 0 && totals[i] === maxVal }));
+  }, [yTx, pick]);
   const months = useMemo(() => {
     const y = year === ALL ? String(new Date().getFullYear()) : year;
     let run = 0;
@@ -1891,54 +1936,148 @@ export default function Page() {
 
             {!showMisi && tab === 'report' && (
               <>
-                <section className="card">
-                  <div className="card-h">
-                    <h3>Arus kas per bulan</h3>
-                    <span className="legend"><i className="in" />Masuk<i className="out" />Keluar</span>
-                  </div>
-                  <div className="bars">
-                    {months.map((m) => (
-                      <button key={m.i} className={pick === m.i ? 'on' : ''} onClick={() => setPick(pick === m.i ? null : m.i)} aria-label={`${m.name}: masuk ${rp(m.inc)}, keluar ${rp(m.exp)}`} aria-pressed={pick === m.i}>
-                        <span className="bc"><i className="in" style={{ height: `${(m.inc / maxBar) * 100}%` }} /><i className="out" style={{ height: `${(m.exp / maxBar) * 100}%` }} /></span>
-                        <small>{m.name.slice(0, 3)}</small>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="kv"><span>{pm ? `${pm.name}, masuk` : 'Total masuk'}</span><b className="num in">+{rp(pm ? pm.inc : months.reduce((s, m) => s + m.inc, 0))}</b></div>
-                  <div className="kv"><span>{pm ? `${pm.name}, keluar` : 'Total keluar'}</span><b className="num out">-{rp(pm ? pm.exp : months.reduce((s, m) => s + m.exp, 0))}</b></div>
-                  <div className="kv"><span>{pm ? 'Saldo akhir bulan' : 'Saldo akhir tahun'}</span><b className="num">{rp(pm ? pm.bal : months[11].bal)}</b></div>
-                  {pm && <button className="link" onClick={() => setPick(null)}>Tampilkan setahun penuh</button>}
-                </section>
+                <div className="seg wide">
+                  <button className={reportTab === 'pengeluaran' ? 'on' : ''} onClick={() => setReportTab('pengeluaran')}>Pengeluaran</button>
+                  <button className={reportTab === 'pemasukan' ? 'on' : ''} onClick={() => setReportTab('pemasukan')}>Pemasukan</button>
+                  <button className={reportTab === 'evaluasi' ? 'on' : ''} onClick={() => setReportTab('evaluasi')}>Evaluasi</button>
+                </div>
 
-                <section className="card">
-                  <h3>Pengeluaran per kategori{pm ? `, ${pm.name}` : ''}</h3>
-                  {cats.list.length === 0 ? <Empty>Belum ada pengeluaran pada periode ini.</Empty> : (
-                    <>
-                      <div className="donut" style={{ background: cats.bg }}><div><small>Total</small><b className="num">{rp(cats.tot)}</b></div></div>
-                      <ul className="cats">
-                        {cats.list.map((c) => (
-                          <li key={c.name}>
-                            <span className="dot" style={{ background: c.color }} />
-                            <span className="cn"><CatIcon category={c.name} size={15} /> <span>{c.name}</span></span>
-                            <b className="num">{rp(c.amt)}</b><small>{c.pct}%</small>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                </section>
-
-                {yearRecords && (
-                  <section className="card">
-                    <h3>Rekor dan rata-rata{year === ALL ? '' : ` (${year})`}</h3>
-                    <div className="kv"><span>Pemasukan tertinggi</span><b className="num">{yearRecords.highInc ? `${rp(yearRecords.highInc.inc)} (${yearRecords.highInc.label})` : '-'}</b></div>
-                    <div className="kv"><span>Pengeluaran tertinggi</span><b className="num">{yearRecords.highExp ? `${rp(yearRecords.highExp.exp)} (${yearRecords.highExp.label})` : '-'}</b></div>
-                    <div className="kv"><span>Rata-rata masuk per bulan</span><b className="num">{rp(yearRecords.avgInc)}</b></div>
-                    <div className="kv"><span>Rata-rata keluar per bulan</span><b className="num">{rp(yearRecords.avgExp)}</b></div>
-                  </section>
+                {pm && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 10, background: 'var(--card)', border: '1px solid var(--line)', fontSize: 13 }}>
+                    <span>Periode: <b>{pm.name}</b></span>
+                    <button type="button" className="link" onClick={() => setPick(null)} style={{ fontSize: 12.5 }}>Setahun penuh</button>
+                  </div>
                 )}
 
-                {(() => {
+                {reportTab === 'pengeluaran' && (
+                  <>
+                    <section className="card">
+                      <h3>Pengeluaran per kategori{pm ? `, ${pm.name}` : ''}</h3>
+                      {cats.list.length === 0 ? <Empty>Belum ada pengeluaran pada periode ini.</Empty> : (
+                        <>
+                          <div className="donut" style={{ background: cats.bg }}><div><small>Total</small><b className="num">{rp(cats.tot)}</b></div></div>
+                          <ul className="cats">
+                            {cats.list.map((c) => (
+                              <li key={c.name}>
+                                <span className="dot" style={{ background: c.color }} />
+                                <span className="cn"><CatIcon category={c.name} size={15} /> <span>{c.name}</span></span>
+                                <b className="num">{rp(c.amt)}</b><small>{c.pct}%</small>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </section>
+
+                    <section className="card">
+                      <h3>Metode bayar / Dompet{pm ? `, ${pm.name}` : ''}</h3>
+                      {walletStats.outList.length === 0 ? <Empty>Belum ada pengeluaran pada periode ini.</Empty> : (
+                        <div style={{ display: 'grid', gap: 10 }}>
+                          {walletStats.outList.map((w) => (
+                            <div key={w.name}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                                <b>{w.name}</b>
+                                <span className="num" style={{ color: 'var(--mute)' }}>{rp(w.amt)} · <b style={{ color: 'var(--ink)' }}>{w.pct}%</b></span>
+                              </div>
+                              <div style={{ height: 7, borderRadius: 7, background: 'var(--line)', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', borderRadius: 7, background: w.color, width: `${w.pct}%`, transition: 'width 0.4s ease' }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="card">
+                      <div className="card-h">
+                        <h3>Pola hari boros{pm ? `, ${pm.name}` : ''}</h3>
+                        <small className="mute">{dayStats.find((d) => d.isPeak) ? `Paling sering: ${dayStats.find((d) => d.isPeak)?.l}` : '-'}</small>
+                      </div>
+                      <div className="week">
+                        {dayStats.map((d) => (
+                          <div key={d.l} className={`wd ${d.isPeak ? 'today' : ''}`}>
+                            <span className="num wv">{d.amt ? short(d.amt) : ''}</span>
+                            <span className="wb"><i style={{ height: `${Math.max(d.amt ? 8 : 0, d.pct)}%`, background: d.isPeak ? 'var(--out)' : undefined }} /></span>
+                            <small>{d.l}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  </>
+                )}
+
+                {reportTab === 'pemasukan' && (
+                  <>
+                    <section className="card">
+                      <h3>Pemasukan per kategori{pm ? `, ${pm.name}` : ''}</h3>
+                      {incCats.list.length === 0 ? <Empty>Belum ada pemasukan pada periode ini.</Empty> : (
+                        <>
+                          <div className="donut" style={{ background: incCats.bg }}><div><small>Total</small><b className="num">{rp(incCats.tot)}</b></div></div>
+                          <ul className="cats">
+                            {incCats.list.map((c) => (
+                              <li key={c.name}>
+                                <span className="dot" style={{ background: c.color }} />
+                                <span className="cn"><CatIcon category={c.name} size={15} /> <span>{c.name}</span></span>
+                                <b className="num">{rp(c.amt)}</b><small>{c.pct}%</small>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </section>
+
+                    <section className="card">
+                      <h3>Masuk ke dompet{pm ? `, ${pm.name}` : ''}</h3>
+                      {walletStats.inList.length === 0 ? <Empty>Belum ada pemasukan pada periode ini.</Empty> : (
+                        <div style={{ display: 'grid', gap: 10 }}>
+                          {walletStats.inList.map((w) => (
+                            <div key={w.name}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                                <b>{w.name}</b>
+                                <span className="num" style={{ color: 'var(--mute)' }}>{rp(w.amt)} · <b style={{ color: 'var(--in)' }}>{w.pct}%</b></span>
+                              </div>
+                              <div style={{ height: 7, borderRadius: 7, background: 'var(--line)', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', borderRadius: 7, background: 'var(--in)', width: `${w.pct}%`, transition: 'width 0.4s ease' }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
+
+                {reportTab === 'evaluasi' && (
+                  <>
+                    <section className="card">
+                      <div className="card-h">
+                        <h3>Arus kas per bulan</h3>
+                        <span className="legend"><i className="in" />Masuk<i className="out" />Keluar</span>
+                      </div>
+                      <div className="bars">
+                        {months.map((m) => (
+                          <button key={m.i} className={pick === m.i ? 'on' : ''} onClick={() => setPick(pick === m.i ? null : m.i)} aria-label={`${m.name}: masuk ${rp(m.inc)}, keluar ${rp(m.exp)}`} aria-pressed={pick === m.i}>
+                            <span className="bc"><i className="in" style={{ height: `${(m.inc / maxBar) * 100}%` }} /><i className="out" style={{ height: `${(m.exp / maxBar) * 100}%` }} /></span>
+                            <small>{m.name.slice(0, 3)}</small>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="kv"><span>{pm ? `${pm.name}, masuk` : 'Total masuk'}</span><b className="num in">+{rp(pm ? pm.inc : months.reduce((s, m) => s + m.inc, 0))}</b></div>
+                      <div className="kv"><span>{pm ? `${pm.name}, keluar` : 'Total keluar'}</span><b className="num out">-{rp(pm ? pm.exp : months.reduce((s, m) => s + m.exp, 0))}</b></div>
+                      <div className="kv"><span>{pm ? 'Saldo akhir bulan' : 'Saldo akhir tahun'}</span><b className="num">{rp(pm ? pm.bal : months[11].bal)}</b></div>
+                    </section>
+
+                    {yearRecords && (
+                      <section className="card">
+                        <h3>Rekor dan rata-rata{year === ALL ? '' : ` (${year})`}</h3>
+                        <div className="kv"><span>Pemasukan tertinggi</span><b className="num">{yearRecords.highInc ? `${rp(yearRecords.highInc.inc)} (${yearRecords.highInc.label})` : '-'}</b></div>
+                        <div className="kv"><span>Pengeluaran tertinggi</span><b className="num">{yearRecords.highExp ? `${rp(yearRecords.highExp.exp)} (${yearRecords.highExp.label})` : '-'}</b></div>
+                        <div className="kv"><span>Rata-rata masuk per bulan</span><b className="num">{rp(yearRecords.avgInc)}</b></div>
+                        <div className="kv"><span>Rata-rata keluar per bulan</span><b className="num">{rp(yearRecords.avgExp)}</b></div>
+                      </section>
+                    )}
+
+                {reportTab === 'evaluasi' && (() => {
                   const evalIdx = pick !== null ? pick : new Date().getMonth();
                   const cur = months[evalIdx];
                   if (!cur || (cur.inc === 0 && cur.exp === 0)) return null;
@@ -2046,6 +2185,8 @@ export default function Page() {
                     </section>
                   );
                 })()}
+                  </>
+                )}
               </>
             )}
 
