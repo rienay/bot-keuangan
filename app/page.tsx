@@ -815,7 +815,7 @@ export default function Page() {
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
           </span>
-          <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{showMisi ? '← Kembali' : kind}</small></span>
+          <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{kind}</small></span>
         </button>
         <button className={`icbtn ${busy ? 'spin' : ''}`} onClick={() => load(book, true)} disabled={busy} aria-label="Muat ulang dari Google Sheets">
           <Ic d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
@@ -1093,20 +1093,13 @@ export default function Page() {
 
             {showMisi && (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    style={{ width: 'auto', padding: '6px 12px', fontSize: 13 }}
-                    onClick={() => setShowMisi(false)}
-                  >
-                    ← Kembali
-                  </button>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>⭐ Misi & Stiker</span>
-                </div>
                 {/* Header XP */}
                 <section className="card hero" style={{ textAlign: 'center', paddingBottom: 20 }}>
-                  <div style={{ fontSize: 36, marginBottom: 4 }}>⭐</div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: '50%', background: 'var(--line)', color: 'var(--accent)', marginBottom: 8 }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  </div>
                   <div className="big" style={{ fontSize: 28 }}>{missionXp} XP</div>
                   <small style={{ opacity: 0.7 }}>
                     {missions.filter((m) => m.unlocked).length}/{missions.length} misi selesai
@@ -1131,7 +1124,18 @@ export default function Page() {
                 {/* Stiker koleksi — yang sudah unlocked */}
                 {missions.filter((m) => m.unlocked).length > 0 && (
                   <section className="card">
-                    <div className="card-h"><h3>Koleksi Stiker 🎁</h3></div>
+                    <div className="card-h">
+                      <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="20 12 20 22 4 22 4 12" />
+                          <rect x="2" y="7" width="20" height="5" rx="1" />
+                          <line x1="12" y1="22" x2="12" y2="7" />
+                          <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+                          <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+                        </svg>
+                        Koleksi Stiker
+                      </h3>
+                    </div>
                     <div style={{
                       display: 'flex',
                       flexWrap: 'wrap',
@@ -1180,7 +1184,20 @@ export default function Page() {
                     {(['unlocked', 'locked'] as const).map((group) => (
                       <section key={group} className="card flush">
                         <div className="card-h" style={{ padding: '12px 16px 8px' }}>
-                          <h3>{group === 'unlocked' ? '✅ Sudah Selesai' : '🔒 Belum Tercapai'}</h3>
+                          <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {group === 'unlocked' ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="m9 12 2 2 4-4" />
+                              </svg>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                              </svg>
+                            )}
+                            {group === 'unlocked' ? 'Sudah Selesai' : 'Belum Tercapai'}
+                          </h3>
                         </div>
                         {missions.filter((m) => group === 'unlocked' ? m.unlocked : !m.unlocked).length === 0 ? (
                           <p className="empty" style={{ padding: '0 16px 16px' }}>
@@ -1417,7 +1434,12 @@ export default function Page() {
                 />
               </div>
               {misiSel.unlocked && (
-                <div style={{ fontSize: 28, marginBottom: 4 }}>🎉</div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: 'var(--line)', color: 'var(--accent)', marginBottom: 8 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="8" r="6" />
+                    <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+                  </svg>
+                </div>
               )}
               <h2 style={{ margin: '0 0 6px', fontSize: 18 }}>{misiSel.title}</h2>
               <p style={{ color: 'var(--mute)', fontSize: 14, margin: '0 0 12px' }}>{misiSel.desc}</p>
@@ -1494,7 +1516,12 @@ export default function Page() {
               <img src={`/stiker/${m.stiker}`} alt={m.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <div>
-              <b style={{ fontSize: 13 }}>🎊 Misi selesai!</b>
+              <b style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                Misi selesai!
+              </b>
               <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--mute)' }}>{m.title} · +{m.xp} XP</p>
             </div>
             <button

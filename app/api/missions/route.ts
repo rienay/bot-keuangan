@@ -63,7 +63,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
   const missions: Mission[] = [
     {
       id: 'first_tx',
-      title: '✨ Langkah Pertama',
+      title: 'Langkah Pertama',
       desc: 'Catat transaksi pertamamu!',
       stiker: 'ha.jpg',
       stikerAlt: 'Kucing kaget kegirangan',
@@ -74,7 +74,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'five_tx',
-      title: '📝 Rajin Mencatat',
+      title: 'Rajin Mencatat',
       desc: 'Catat 5 transaksi. Konsisten itu kunci!',
       stiker: 'cling.jpg',
       stikerAlt: 'Kucing bersemangat',
@@ -85,7 +85,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'twenty_tx',
-      title: '📚 Jagoan Keuangan',
+      title: 'Jagoan Keuangan',
       desc: 'Sudah 20 transaksi tercatat. Luar biasa!',
       stiker: 'hah.jpg',
       stikerAlt: 'Kucing takjub',
@@ -96,7 +96,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'hemat_week',
-      title: '💚 Minggu Hemat',
+      title: 'Minggu Hemat',
       desc: 'Pengeluaran minggu ini lebih sedikit dari minggu lalu!',
       stiker: 'yopyu.jpg',
       stikerAlt: 'Kucing pawing cantik',
@@ -113,7 +113,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'first_goal',
-      title: '🎯 Punya Mimpi',
+      title: 'Punya Mimpi',
       desc: 'Buat tujuan tabungan pertamamu.',
       stiker: 'kuro.jpg',
       stikerAlt: 'Kucing croissant serius',
@@ -124,7 +124,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'half_goal',
-      title: '⚡ Separuh Jalan',
+      title: 'Separuh Jalan',
       desc: 'Tabungan salah satu goalmu sudah 50%!',
       stiker: 'slurp.jpg',
       stikerAlt: 'Kucing slurp',
@@ -135,18 +135,18 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'complete_goal',
-      title: '🏆 Goal Tercapai!',
+      title: 'Goal Tercapai!',
       desc: 'Yeay! Salah satu tujuan tabunganmu berhasil!',
       stiker: 'emuch.jpg',
       stikerAlt: 'Kucing emush bahagia',
       xp: 100,
       unlocked: completedGoal,
       progress: completedGoal ? 100 : 0,
-      progressLabel: completedGoal ? '🎉 Selamat!' : 'Belum tercapai',
+      progressLabel: completedGoal ? 'Selamat!' : 'Belum tercapai',
     },
     {
       id: 'streak_7',
-      title: '🔥 Konsisten 7 Hari',
+      title: 'Konsisten 7 Hari',
       desc: 'Catat transaksi 7 hari berturut-turut.',
       stiker: 'slekedung.jpg',
       stikerAlt: 'Kucing cemberut tapi keren',
@@ -157,7 +157,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'no_debt',
-      title: '🧹 Bebas Utang',
+      title: 'Bebas Utang',
       desc: 'Semua utang/piutang sudah beres!',
       stiker: 'eumm.jpg',
       stikerAlt: 'Kucing manggut puas',
@@ -168,7 +168,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'has_income',
-      title: '💰 Ada Pemasukan',
+      title: 'Ada Pemasukan',
       desc: 'Catat pemasukan pertamamu. Rezeki harus dicatat!',
       stiker: 'apelo.jpg',
       stikerAlt: 'Kucing berdoa',
@@ -179,7 +179,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'fifty_tx',
-      title: '🌟 Legend',
+      title: 'Legend',
       desc: 'Wow! 50 transaksi? Kamu serius banget nih.',
       stiker: 'punanas.jpg',
       stikerAlt: 'Kucing bananas',
@@ -190,7 +190,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'transfer_done',
-      title: '🔄 Atur Dompet',
+      title: 'Atur Dompet',
       desc: 'Lakukan transfer antar dompet atau pos pertamamu.',
       stiker: 'ikan.jpg',
       stikerAlt: 'Kucing ikan',
@@ -201,7 +201,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'godong',
-      title: '🌿 Hemat Makan',
+      title: 'Hemat Makan',
       desc: 'Transaksi kategori makanan kurang dari 10 kali bulan ini.',
       stiker: 'godong.jpg',
       stikerAlt: 'Kucing daun hijau',
@@ -236,7 +236,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'ehem',
-      title: '😤 Anti Jajan',
+      title: 'Anti Jajan',
       desc: 'Tidak ada pengeluaran hiburan bulan ini. Serius amat!',
       stiker: 'ehem.jpg',
       stikerAlt: 'Kucing ngambek lucu',
@@ -254,7 +254,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'eak',
-      title: '😱 Tanggal Tua Survive',
+      title: 'Tanggal Tua Survive',
       desc: 'Masih punya saldo di atas 0 di akhir bulan.',
       stiker: 'eak.jpg',
       stikerAlt: 'Kucing kaget panik',
@@ -272,7 +272,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'hemp',
-      title: '😤 Disiplin Budget',
+      title: 'Disiplin Budget',
       desc: 'Budget bulanan tidak terlampaui. Terkontrol banget!',
       stiker: 'hemp.jpg',
       stikerAlt: 'Kucing tegas berbowo merah',
@@ -283,7 +283,7 @@ function computeMissions(txs: any[], goals: any[], debts: any[]): Mission[] {
     },
     {
       id: 'alamak',
-      title: '🙈 Alamak!',
+      title: 'Alamak!',
       desc: 'Budget sudah terlampaui tapi kamu masih nyoba. Semangat!',
       stiker: 'alamak.jpg',
       stikerAlt: 'Kucing tomaat terbang',
