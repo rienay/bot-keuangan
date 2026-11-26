@@ -539,8 +539,6 @@ export default function Page() {
   const [rewardReveal, setRewardReveal] = useState<MissionData | null>(null);
   const [newBookName, setNewBookName] = useState('');
   const [bookBusy, setBookBusy] = useState(false);
-  const [aiText, setAiText] = useState('');
-  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
     try {
@@ -855,27 +853,6 @@ export default function Page() {
       else load(book, true);
       say(`Pos "${name}" dihapus`);
     } catch (er: any) { say(er.message); } finally { setBookBusy(false); }
-  };
-  const parseAiTx = async () => {
-    if (!aiText.trim() || aiBusy) return;
-    setAiBusy(true);
-    try {
-      const r = await fetch('/api/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: aiText.trim() }) });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.error || 'AI gagal membaca teks');
-      const p = j.parsed;
-      setForm((f) => ({
-        ...f,
-        type: p.type === 'Pemasukan' ? 'Pemasukan' : 'Pengeluaran',
-        category: p.category || f.category,
-        amount: p.amount ? String(p.amount) : f.amount,
-        desc: p.description || aiText.trim(),
-        date: p.date || f.date,
-        wallet: p.wallet || f.wallet,
-      }));
-      setAiText('');
-      say('Berhasil diisi otomatis oleh AI!');
-    } catch (er: any) { say(er.message); } finally { setAiBusy(false); }
   };
 
   const row = (t: WebTransactionItem) => (
@@ -1543,29 +1520,6 @@ export default function Page() {
 
       {sheet === 'tx' && (
         <Sheet title={form.id ? 'Ubah transaksi' : 'Catat transaksi'} onClose={() => setSheet(null)}>
-          {!form.id && (
-            <div style={{ background: 'var(--bg)', padding: 10, borderRadius: 12, marginBottom: 12, border: '1px solid var(--line)' }}>
-              <small style={{ display: 'block', fontWeight: 700, marginBottom: 6, color: 'var(--accent)' }}>Catat Cepat AI (seperti di bot)</small>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  value={aiText}
-                  onChange={(e) => setAiText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), parseAiTx())}
-                  placeholder="Contoh: beli kopi 25rb qris"
-                  style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 13 }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ width: 'auto', padding: '0 12px', fontSize: 12 }}
-                  onClick={parseAiTx}
-                  disabled={aiBusy}
-                >
-                  {aiBusy ? '...' : 'Isi AI'}
-                </button>
-              </div>
-            </div>
-          )}
           <form onSubmit={saveTx} className="form">
             <div className="seg wide">
               <button type="button" className={form.type === 'Pengeluaran' ? 'on' : ''} onClick={() => setForm({ ...form, type: 'Pengeluaran' })}>Keluar</button>
@@ -1735,7 +1689,7 @@ export default function Page() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
               {[
                 { label: 'Pos Tabungan', sub: 'Ganti / buat pos', fn: () => setSheet('books') },
-                { label: 'Catat Transaksi', sub: 'Manual atau AI', fn: openAdd },
+                { label: 'Catat Transaksi', sub: 'Input manual', fn: openAdd },
                 { label: 'Pindah Saldo', sub: 'Dompet / antar pos', fn: openTransfer },
                 { label: 'Atur Budget', sub: 'Bulanan & harian', fn: () => { setBudIn(bAmt ? String(bAmt) : ''); setSheet('budget'); } },
                 { label: 'Target Tabungan', sub: 'Buat goal baru', fn: () => { setGf({ id: '', name: '', target: '', due: '', amount: '' }); setSheet('goal'); } },
