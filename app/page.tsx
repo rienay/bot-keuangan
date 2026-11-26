@@ -507,7 +507,7 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
-  const [sheet, setSheet] = useState<null | 'budget' | 'debt' | 'tx' | 'goal' | 'deposit' | 'more' | 'transfer'>(null);
+  const [sheet, setSheet] = useState<null | 'budget' | 'debt' | 'tx' | 'goal' | 'deposit' | 'more' | 'transfer' | 'books'>(null);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [q, setQ] = useState('');
   const [typeF, setTypeF] = useState<'all' | 'Pemasukan' | 'Pengeluaran'>('all');
@@ -537,6 +537,10 @@ export default function Page() {
   const [partnerId, setPartnerId] = useState<string | null>(null);
   const [partnerBubble, setPartnerBubble] = useState(false);
   const [rewardReveal, setRewardReveal] = useState<MissionData | null>(null);
+  const [newBookName, setNewBookName] = useState('');
+  const [bookBusy, setBookBusy] = useState(false);
+  const [aiText, setAiText] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
     try {
@@ -826,6 +830,53 @@ export default function Page() {
     try { next ? localStorage.setItem('misi_partner_id', next) : localStorage.removeItem('misi_partner_id'); } catch { /* */ }
     say(next ? `${m.title} dipasang di halaman utama!` : 'Partner beranda dilepas');
   };
+  const createBook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBookName.trim() || bookBusy) return;
+    setBookBusy(true);
+    try {
+      const r = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', name: newBookName.trim() }) });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || 'Gagal membuat pos');
+      setNewBookName('');
+      setSheet(null);
+      setBook(j.bookName);
+      say(`Pos "${j.bookName}" dibuat!`);
+    } catch (er: any) { say(er.message); } finally { setBookBusy(false); }
+  };
+  const deleteBook = async (name: string) => {
+    if (!confirm(`Hapus pos "${name}"? Data di sheet "${name}" akan ikut terhapus.`)) return;
+    setBookBusy(true);
+    try {
+      const r = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', name }) });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || 'Gagal menghapus pos');
+      if (book === name) setBook(MAIN);
+      else load(book, true);
+      say(`Pos "${name}" dihapus`);
+    } catch (er: any) { say(er.message); } finally { setBookBusy(false); }
+  };
+  const parseAiTx = async () => {
+    if (!aiText.trim() || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const r = await fetch('/api/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: aiText.trim() }) });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || 'AI gagal membaca teks');
+      const p = j.parsed;
+      setForm((f) => ({
+        ...f,
+        type: p.type === 'Pemasukan' ? 'Pemasukan' : 'Pengeluaran',
+        category: p.category || f.category,
+        amount: p.amount ? String(p.amount) : f.amount,
+        desc: p.description || aiText.trim(),
+        date: p.date || f.date,
+        wallet: p.wallet || f.wallet,
+      }));
+      setAiText('');
+      say('Berhasil diisi otomatis oleh AI!');
+    } catch (er: any) { say(er.message); } finally { setAiBusy(false); }
+  };
 
   const row = (t: WebTransactionItem) => (
     <li key={t.id} className="tx">
@@ -855,8 +906,8 @@ export default function Page() {
         <button
           type="button"
           className="bookbtn"
-          onClick={() => { setShowMisi((v) => !v); window.scrollTo({ top: 0 }); }}
-          aria-label={`Pos aktif: ${book}. Ketuk untuk buka misi`}
+          onClick={() => setSheet('books')}
+          aria-label={`Pos aktif: ${book}. Ketuk untuk ganti pos`}
           style={{ cursor: 'pointer', textAlign: 'left', border: 'none' }}
         >
           <span className="bk-emoji" style={{ color: st.c, overflow: 'hidden', padding: 2 }}>
@@ -883,7 +934,10 @@ export default function Page() {
             onChange={(e) => setYear(e.target.value)}
             aria-label="Filter tahun"
             style={{
-              height: 36,
+              width: 'auto',
+              minWidth: 0,
+              flexShrink: 0,
+              height: 44,
               padding: '0 10px',
               borderRadius: 99,
               border: '1px solid var(--line)',
@@ -902,7 +956,17 @@ export default function Page() {
         <button className={`icbtn ${busy ? 'spin' : ''}`} onClick={() => load(book, true)} disabled={busy} aria-label="Muat ulang dari Google Sheets">
           <Ic d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
         </button>
-        <button className="icbtn" onClick={() => setSheet('more')} aria-label="Menu lainnya"><Ic d="M5 12h.01M12 12h.01M19 12h.01" /></button>
+        <button
+          className="icbtn"
+          onClick={() => setSheet('more')}
+          aria-label="Profil & Menu"
+          style={{ position: 'relative' }}
+        >
+          <Ic d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+          {missions.some((m) => m.unlocked && !claimedIds.includes(m.id)) && (
+            <span style={{ position: 'absolute', top: 7, right: 7, width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', border: '1.5px solid var(--card)' }} />
+          )}
+        </button>
       </header>
 
       <main className="content">
@@ -1479,6 +1543,29 @@ export default function Page() {
 
       {sheet === 'tx' && (
         <Sheet title={form.id ? 'Ubah transaksi' : 'Catat transaksi'} onClose={() => setSheet(null)}>
+          {!form.id && (
+            <div style={{ background: 'var(--bg)', padding: 10, borderRadius: 12, marginBottom: 12, border: '1px solid var(--line)' }}>
+              <small style={{ display: 'block', fontWeight: 700, marginBottom: 6, color: 'var(--accent)' }}>Catat Cepat AI (seperti di bot)</small>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={aiText}
+                  onChange={(e) => setAiText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), parseAiTx())}
+                  placeholder="Contoh: beli kopi 25rb qris"
+                  style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 13 }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ width: 'auto', padding: '0 12px', fontSize: 12 }}
+                  onClick={parseAiTx}
+                  disabled={aiBusy}
+                >
+                  {aiBusy ? '...' : 'Isi AI'}
+                </button>
+              </div>
+            </div>
+          )}
           <form onSubmit={saveTx} className="form">
             <div className="seg wide">
               <button type="button" className={form.type === 'Pengeluaran' ? 'on' : ''} onClick={() => setForm({ ...form, type: 'Pengeluaran' })}>Keluar</button>
@@ -1541,17 +1628,143 @@ export default function Page() {
         </Sheet>
       )}
 
-      {sheet === 'more' && (
-        <Sheet title="Lainnya" onClose={() => setSheet(null)}>
-          <ul className="menu">
-            <li><button onClick={openTransfer}>Pindah saldo</button></li>
-            <li><button onClick={exportCsv}>Ekspor transaksi ke CSV</button></li>
-            <li><button onClick={printReport}>Cetak laporan atau simpan PDF</button></li>
-            <li><button onClick={install}>Pasang di layar utama</button></li>
-            <li><a href="https://t.me/nabung_date_bot" target="_blank" rel="noopener noreferrer">Buka bot Telegram</a></li>
-          </ul>
+      {sheet === 'books' && (
+        <Sheet title="Pos Tabungan" onClose={() => setSheet(null)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+            {[MAIN, ALL, ...books.filter((b) => b !== MAIN && b !== ALL)].map((b) => {
+              const active = book === b;
+              const canDel = b !== MAIN && b !== ALL;
+              return (
+                <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowMisi(false); setBook(b); setSheet(null); }}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: active ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                      background: active ? 'rgba(15,118,110,0.06)' : 'var(--bg)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ color: bookStyle(b).c }}><BookIcon book={b} size={18} /></span>
+                      <span>
+                        <b style={{ display: 'block', fontSize: 14 }}>{b === ALL ? 'Semua pos' : b}</b>
+                        <small style={{ color: 'var(--mute)', fontSize: 11 }}>{b === MAIN ? 'Kas utama' : b === ALL ? 'Gabungan semua pos' : 'Pos kegiatan'}</small>
+                      </span>
+                    </span>
+                    {active && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>Aktif</span>}
+                  </button>
+                  {canDel && (
+                    <button
+                      type="button"
+                      className="icbtn"
+                      onClick={() => deleteBook(b)}
+                      disabled={bookBusy}
+                      aria-label={`Hapus pos ${b}`}
+                      style={{ color: '#DC2626' }}
+                    >
+                      <Ic d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <form onSubmit={createBook} style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+            <input
+              value={newBookName}
+              onChange={(e) => setNewBookName(e.target.value)}
+              placeholder="Nama pos baru (misal: Liburan)"
+              style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--line)', fontSize: 13 }}
+              required
+            />
+            <button type="submit" className="btn" style={{ width: 'auto', padding: '0 14px', fontSize: 13 }} disabled={bookBusy}>
+              {bookBusy ? '...' : 'Buat'}
+            </button>
+          </form>
         </Sheet>
       )}
+
+      {sheet === 'more' && (() => {
+        const claimedSet = new Set(claimedIds);
+        const claimedList = missions.filter((m) => m.unlocked && claimedSet.has(m.id));
+        const readyCount = missions.filter((m) => m.unlocked && !claimedSet.has(m.id)).length;
+        const activeXp = claimedList.reduce((s, m) => s + m.xp, 0);
+        const rank = getRank(activeXp);
+        const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
+
+        return (
+          <Sheet title="Profil & Pintasan" onClose={() => setSheet(null)}>
+            {/* Kartu Profil Mini */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+              borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--line)', marginBottom: 14,
+            }}>
+              <div style={{ width: 52, height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {partner ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={`/stiker/${partner.stiker}`} alt={partner.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--line)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ic d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </div>
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <b style={{ display: 'block', fontSize: 15 }}>Lv. {rank.lv} · {rank.name}</b>
+                <small style={{ color: 'var(--mute)' }}>{activeXp} XP · {claimedList.length}/{missions.length} stiker</small>
+              </div>
+              <button
+                type="button"
+                className="btn"
+                style={{ width: 'auto', padding: '7px 12px', fontSize: 12, position: 'relative' }}
+                onClick={() => { setSheet(null); setShowMisi(true); window.scrollTo({ top: 0 }); }}
+              >
+                {readyCount > 0 ? `Misi (${readyCount})` : 'Misi'}
+              </button>
+            </div>
+
+            {/* Pintasan Fitur Bot (Grid 2 kolom) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+              {[
+                { label: 'Pos Tabungan', sub: 'Ganti / buat pos', fn: () => setSheet('books') },
+                { label: 'Catat Transaksi', sub: 'Manual atau AI', fn: openAdd },
+                { label: 'Pindah Saldo', sub: 'Dompet / antar pos', fn: openTransfer },
+                { label: 'Atur Budget', sub: 'Bulanan & harian', fn: () => { setBudIn(bAmt ? String(bAmt) : ''); setSheet('budget'); } },
+                { label: 'Target Tabungan', sub: 'Buat goal baru', fn: () => { setGf({ id: '', name: '', target: '', due: '', amount: '' }); setSheet('goal'); } },
+                { label: 'Utang & Piutang', sub: 'Catat pinjaman', fn: () => setSheet('debt') },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.fn}
+                  style={{
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 12,
+                    border: '1px solid var(--line)', background: 'var(--bg)', cursor: 'pointer',
+                  }}
+                >
+                  <b style={{ display: 'block', fontSize: 13 }}>{item.label}</b>
+                  <small style={{ color: 'var(--mute)', fontSize: 11 }}>{item.sub}</small>
+                </button>
+              ))}
+            </div>
+
+            <ul className="menu">
+              <li><button onClick={exportCsv}>Ekspor transaksi ke CSV</button></li>
+              <li><button onClick={printReport}>Cetak laporan atau simpan PDF</button></li>
+              <li><button onClick={install}>Pasang di layar utama</button></li>
+              <li><a href="https://t.me/nabung_date_bot" target="_blank" rel="noopener noreferrer">Buka bot Telegram</a></li>
+            </ul>
+          </Sheet>
+        );
+      })()}
 
       {toast && <div className="toast" role="status">{toast}</div>}
 

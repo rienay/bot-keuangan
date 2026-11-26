@@ -13,12 +13,13 @@ h3{font-size:16px;font-weight:650}
 .mute{color:var(--mute);font-size:13px}
 small{font-size:12.5px;color:var(--mute)}
 .app{min-height:100dvh;padding-bottom:calc(var(--bar) + env(safe-area-inset-bottom) + 12px)}
-.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px)}
-.bookbtn{display:flex;align-items:center;gap:10px;min-height:48px;max-width:calc(100% - 108px);padding:6px 16px 6px 7px;background:var(--card);border:1px solid var(--line);border-radius:999px;text-align:left;cursor:default;user-select:none}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:6px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px)}
+.bookbtn{display:flex;align-items:center;gap:10px;min-height:48px;min-width:0;margin-right:auto;padding:6px 14px 6px 7px;background:var(--card);border:1px solid var(--line);border-radius:999px;text-align:left;cursor:pointer;user-select:none}
 .bk-emoji{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,#fff);color:var(--accent)}
 .bk-emoji svg{display:block}
 .bk-t{min-width:0;display:grid}
-.bk-t b{font-size:16px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bk-t b,.bk-t small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bk-t b{font-size:15px;line-height:1.15}
 .icbtn{flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:50%;background:var(--card);border:1px solid var(--line)}
 .spin svg{animation:sp 1s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
