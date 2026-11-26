@@ -208,7 +208,7 @@ const TABS = [
   { id: 'wallet', label: 'Dompet', d: 'M3 7a2 2 0 0 1 2-2h13v4M3 7v10a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2zM16 14h2' },
   { id: 'catat', label: 'Catat', d: 'M12 5v14M5 12h14' },
   { id: 'tx', label: 'Transaksi', d: 'M4 6h16M4 12h16M4 18h10' },
-  { id: 'report', label: 'Laporan', d: 'M5 20V10m7 10V4m7 16v-7' },
+  { id: 'profil', label: 'Profil', d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 
@@ -531,12 +531,14 @@ export default function Page() {
   const [budIn, setBudIn] = useState('');
   const [debtTab, setDebtTab] = useState<'active' | 'settled'>('active');
   const [reportTab, setReportTab] = useState<'pengeluaran' | 'pemasukan' | 'evaluasi'>('pengeluaran');
-  const [txMode, setTxMode] = useState<'riwayat' | 'utang'>('riwayat');
+  const [txMode, setTxMode] = useState<'riwayat' | 'statistik' | 'utang'>('riwayat');
   const [catatMode, setCatatMode] = useState<'Pemasukan' | 'Pengeluaran' | 'Transfer'>('Pengeluaran');
   const [catatBusy, setCatatBusy] = useState(false);
   const [catatField, setCatatField] = useState<null | 'total' | 'category' | 'asset' | 'from' | 'to'>(null);
   const [catatPhoto, setCatatPhoto] = useState<{ file: File; preview: string } | null>(null);
   const [df, setDf] = useState({ type: 'Piutang', person: '', amount: '', desc: '' });
+  const [debtPhoto, setDebtPhoto] = useState<{ file: File; preview: string } | null>(null);
+  const [debtBusy, setDebtBusy] = useState(false);
   const [missions, setMissions] = useState<MissionData[]>([]);
   const [missionXp, setMissionXp] = useState(0);
   const [missionLoading, setMissionLoading] = useState(false);
@@ -858,12 +860,25 @@ export default function Page() {
   };
   const addDebt = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (debtBusy) return;
     const n = parseInt(df.amount.replace(/\D/g, ''), 10);
     if (!df.person.trim() || !n) return say('Isi nama dan nominal');
+    setDebtBusy(true);
     try {
-      await post('/api/debts', { action: 'add', book: writeBook, type: df.type, person: df.person.trim(), amount: n, description: df.desc.trim() || '-' });
-      setDf({ type: df.type, person: '', amount: '', desc: '' }); setSheet(null); say('Catatan disimpan'); load(book, true);
-    } catch (er: any) { say(er.message); }
+      let descText = df.desc.trim();
+      if (debtPhoto) {
+        const fd = new FormData();
+        fd.append('file', debtPhoto.file);
+        const up = await fetch('/api/upload', { method: 'POST', body: fd });
+        const upJ = await up.json();
+        if (!upJ.success) throw new Error(upJ.error || 'Gagal mengunggah foto');
+        descText = descText ? `${descText} | Foto: ${upJ.url}` : `Foto: ${upJ.url}`;
+      }
+      await post('/api/debts', { action: 'add', book: writeBook, type: df.type, person: df.person.trim(), amount: n, description: descText || '-' });
+      setDf({ type: df.type, person: '', amount: '', desc: '' });
+      if (debtPhoto) { URL.revokeObjectURL(debtPhoto.preview); setDebtPhoto(null); }
+      setSheet(null); say('Catatan disimpan'); load(book, true);
+    } catch (er: any) { say(er.message); } finally { setDebtBusy(false); }
   };
 
   const rowNo = (t: WebTransactionItem) => Number(t.id.split('-').slice(-2)[0]);
@@ -899,7 +914,7 @@ export default function Page() {
     URL.revokeObjectURL(a.href);
     setSheet(null);
   };
-  const printReport = () => { setTab('report'); setSheet(null); setTimeout(() => window.print(), 350); };
+  const printReport = () => { setTab('tx'); setTxMode('statistik'); setReportTab('evaluasi'); setSheet(null); setTimeout(() => window.print(), 350); };
   const install = async () => {
     if (installEv) { installEv.prompt(); setInstallEv(null); setSheet(null); } else say('iPhone: ketuk Bagikan lalu Tambah ke Layar Utama. Android: menu browser lalu Instal aplikasi.');
   };
@@ -1078,7 +1093,7 @@ export default function Page() {
           </span>
           <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{kind}</small></span>
         </button>
-        {!showMisi && tab !== 'wallet' && tab !== 'catat' && (
+        {!showMisi && tab !== 'wallet' && tab !== 'catat' && tab !== 'profil' && (
           <select
             value={year}
             onChange={(e) => setYear(e.target.value)}
@@ -1244,11 +1259,11 @@ export default function Page() {
 
   return (
                 <>
-                  {/* Tumpukan Kartu Dompet (ketuk / geser untuk pindah kartu depan ke belakang) */}
+                  {/* Tumpukan Kartu Dompet ala Apple Wallet: semua saldo terlihat, ketuk kartu untuk tukar ke depan */}
                   <div
                     style={{
                       position: 'relative',
-                      height: 195 + (visibleOffsets.length - 1) * 12,
+                      height: 195 + (count - 1) * 52,
                       margin: '4px 0 8px',
                       touchAction: 'pan-y',
                     }}
@@ -1260,11 +1275,11 @@ export default function Page() {
                       if (Math.abs(dx) > 40) dx < 0 ? cycleNext() : cyclePrev();
                     }}
                   >
-                    {[...visibleOffsets].reverse().map((offset) => {
-                      const idx = (frontIdx + offset) % count;
+                    {Array.from({ length: count }, (_, k) => {
+                      const idx = (frontIdx + 1 + k) % count;
                       const w = wal[idx];
-                      const isFront = offset === 0;
-  return (
+                      const isFront = k === count - 1;
+                      return (
                         <div
                           key={w.key}
                           className="wcard"
@@ -1276,16 +1291,17 @@ export default function Page() {
                             maxWidth: 'none',
                             width: '100%',
                             background: w.theme.gradient,
-                            transform: `translateY(${offset * 12}px) scale(${1 - offset * 0.04})`,
-                            zIndex: 10 - offset,
-                            opacity: isFront ? 1 : Math.max(0.75, 1 - offset * 0.1),
-                            filter: isFront ? 'none' : 'brightness(0.9)',
-                            transition: 'transform 0.32s cubic-bezier(.2,.9,.3,1), opacity 0.3s ease, filter 0.3s ease',
+                            transform: `translateY(${k * 52}px)`,
+                            zIndex: k + 1,
+                            transition: 'transform 0.34s cubic-bezier(.2,.9,.3,1), box-shadow 0.3s ease',
                           }}
-                          onClick={cycleNext}
+                          onClick={() => {
+                            if (isFront) cycleNext();
+                            else { setWalletIdx(idx); setWSel(null); }
+                          }}
                           role="button"
-                          tabIndex={isFront ? 0 : -1}
-                          aria-label={`${w.label}, saldo ${rp(w.bal)}. Ketuk untuk kartu berikutnya`}
+                          tabIndex={0}
+                          aria-label={`${w.label}, saldo ${rp(w.bal)}`}
                         >
                           <div className="wc-inner">
                             <div className="wc-header">
@@ -1294,7 +1310,11 @@ export default function Page() {
                                 <span className="wc-name">{w.label}</span>
                               </div>
                               <div className="wc-header-right">
-                                <ContactlessWave />
+                                {isFront ? (
+                                  <ContactlessWave />
+                                ) : (
+                                  <b className="num" style={{ fontSize: 15, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>{rp(w.bal)}</b>
+                                )}
                               </div>
                             </div>
 
@@ -1325,13 +1345,7 @@ export default function Page() {
                     })}
                   </div>
 
-                  {/* Kontrol navigasi tumpukan kartu */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button type="button" className="icbtn" style={{ width: 36, height: 36 }} onClick={cyclePrev} aria-label="Kartu sebelumnya">‹</button>
-                      <span className="num mute" style={{ fontSize: 12.5, minWidth: 36, textAlign: 'center' }}>{frontIdx + 1} / {count}</span>
-                      <button type="button" className="icbtn" style={{ width: 36, height: 36 }} onClick={cycleNext} aria-label="Kartu berikutnya">›</button>
-                    </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button
                       type="button"
                       className="link"
@@ -1884,10 +1898,11 @@ export default function Page() {
               <>
                 <div className="seg wide">
                   <button className={txMode === 'riwayat' ? 'on' : ''} onClick={() => setTxMode('riwayat')}>Riwayat</button>
-                  <button className={txMode === 'utang' ? 'on' : ''} onClick={() => setTxMode('utang')}>Utang &amp; Piutang{actD.length ? ` (${actD.length})` : ''}</button>
+                  <button className={txMode === 'statistik' ? 'on' : ''} onClick={() => setTxMode('statistik')}>Statistik</button>
+                  <button className={txMode === 'utang' ? 'on' : ''} onClick={() => setTxMode('utang')}>Utang{actD.length ? ` (${actD.length})` : ''}</button>
                 </div>
 
-                {txMode === 'riwayat' ? (
+                {txMode === 'riwayat' && (
                   <>
                     <div className="filters">
                       <input type="search" placeholder="Cari keterangan atau kategori" value={q} onChange={(e) => { setQ(e.target.value); setLimit(40); }} aria-label="Cari transaksi" />
@@ -1908,7 +1923,9 @@ export default function Page() {
                     ))}
                     {listed.length > limit && <button className="btn" onClick={() => setLimit(limit + 40)}>Tampilkan lebih banyak</button>}
                   </>
-                ) : (
+                )}
+
+                {txMode === 'utang' && (
                   <>
                     <div className="pair tiles">
                       <div className="card"><small>Piutang (uang kita di orang)</small><b className="num in">{rp(sumD('Piutang'))}</b></div>
@@ -1919,22 +1936,25 @@ export default function Page() {
                       <button className={debtTab === 'settled' ? 'on' : ''} onClick={() => setDebtTab('settled')}>Sudah lunas ({doneD.length})</button>
                     </div>
                     {(debtTab === 'active' ? actD : doneD).length === 0 && <Empty>{debtTab === 'active' ? 'Tidak ada utang atau piutang yang aktif.' : 'Belum ada yang dilunasi.'}</Empty>}
-                    {(debtTab === 'active' ? actD : doneD).map((d) => (
-                      <section key={d.id} className="card debt">
-                        <div className="card-h"><b>{d.person}</b><b className={`num ${d.type === 'Piutang' ? 'in' : 'out'}`}>{rp(debtTab === 'active' ? d.remainingAmount || d.amount : d.amount)}</b></div>
-                        <p className="mute">{d.type}{book === ALL ? `, pos ${d.book}` : ''}. {d.description && d.description !== '-' ? d.description : 'Tanpa keterangan'}</p>
-                        <p className="mute">Dicatat {d.date}{d.settledDate ? `, lunas ${d.settledDate}` : ''}</p>
-                        {debtTab === 'active' && <button className="btn ghost" onClick={() => settle(d)}>{d.type === 'Piutang' ? 'Tandai sudah diterima' : 'Tandai sudah dibayar'}</button>}
-                      </section>
-                    ))}
+                    {(debtTab === 'active' ? actD : doneD).map((d) => {
+                      const urlMatch = d.description?.match(/https?:\/\/\S+/);
+                      const cleanDesc = d.description ? d.description.replace(/\s*\|\s*Foto:\s*https?:\/\/\S+/g, '').replace(/Foto:\s*https?:\/\/\S+/g, '').trim() : '';
+                      return (
+                        <section key={d.id} className="card debt">
+                          <div className="card-h"><b>{d.person}</b><b className={`num ${d.type === 'Piutang' ? 'in' : 'out'}`}>{rp(debtTab === 'active' ? d.remainingAmount || d.amount : d.amount)}</b></div>
+                          <p className="mute">{d.type}{book === ALL ? `, pos ${d.book}` : ''}. {cleanDesc && cleanDesc !== '-' ? cleanDesc : 'Tanpa keterangan'}</p>
+                          <p className="mute">Dicatat {d.date}{d.settledDate ? `, lunas ${d.settledDate}` : ''}</p>
+                          {urlMatch && <a href={urlMatch[0]} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 600 }}>Lihat foto bukti</a>}
+                          {debtTab === 'active' && <button className="btn ghost" onClick={() => settle(d)}>{d.type === 'Piutang' ? 'Tandai sudah diterima' : 'Tandai sudah dibayar'}</button>}
+                        </section>
+                      );
+                    })}
                     <button className="btn" onClick={() => setSheet('debt')}>Catat utang atau piutang</button>
                   </>
                 )}
-              </>
-            )}
 
-            {!showMisi && tab === 'report' && (
-              <>
+                {txMode === 'statistik' && (
+                  <>
                 <div className="seg wide">
                   <button className={reportTab === 'pengeluaran' ? 'on' : ''} onClick={() => setReportTab('pengeluaran')}>Pengeluaran</button>
                   <button className={reportTab === 'pemasukan' ? 'on' : ''} onClick={() => setReportTab('pemasukan')}>Pemasukan</button>
@@ -2186,8 +2206,94 @@ export default function Page() {
                 })()}
                   </>
                 )}
+                  </>
+                )}
               </>
             )}
+
+            {!showMisi && tab === 'profil' && (() => {
+              const claimedSet = new Set(claimedIds);
+              const claimedList = missions.filter((m) => m.unlocked && claimedSet.has(m.id));
+              const readyCount = missions.filter((m) => m.unlocked && !claimedSet.has(m.id)).length;
+              const activeXp = claimedList.reduce((s, m) => s + m.xp, 0);
+              const rank = getRank(activeXp);
+              const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
+
+              return (
+                <>
+                  {/* Kartu Profil */}
+                  <section className="card hero" style={{ padding: '18px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <div style={{ width: 60, height: 60, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {partner ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={`/stiker/${partner.stiker}`} alt={partner.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.28))' }} />
+                        ) : (
+                          <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ic d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <small style={{ opacity: 0.85, display: 'block' }}>Pos {book}</small>
+                        <div className="big" style={{ fontSize: 20, lineHeight: 1.2 }}>Lv. {rank.lv} · {rank.name}</div>
+                        <small style={{ opacity: 0.9, display: 'block', marginTop: 2 }}>{activeXp} XP · {claimedList.length}/{missions.length} stiker</small>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setShowMisi(true); window.scrollTo({ top: 0 }); }}
+                        style={{ padding: '8px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}
+                      >
+                        {readyCount > 0 ? `Misi (${readyCount})` : 'Misi'}
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* Pintasan Fitur */}
+                  <section className="card">
+                    <h3>Pintasan Fitur</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {[
+                        { label: 'Catat Transaksi', sub: 'Masuk, keluar, transfer', fn: () => setTab('catat') },
+                        { label: 'Pindah Saldo', sub: 'Dompet & lainnya', fn: openTransfer },
+                        { label: 'Atur Budget', sub: 'Bulanan & harian', fn: () => { setBudIn(bAmt ? String(bAmt) : ''); setSheet('budget'); } },
+                        { label: 'Target Tabungan', sub: 'Buat goal baru', fn: () => { setGf({ id: '', name: '', target: '', due: '', amount: '' }); setSheet('goal'); } },
+                        { label: 'Utang & Piutang', sub: 'Catat pinjaman', fn: () => setSheet('debt') },
+                        { label: 'Misi & Stiker', sub: 'Klaim hadiah kucing', fn: () => { setShowMisi(true); window.scrollTo({ top: 0 }); } },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={item.fn}
+                          style={{
+                            textAlign: 'left', padding: '10px 12px', borderRadius: 12,
+                            border: '1px solid var(--line)', background: 'var(--bg)', cursor: 'pointer',
+                          }}
+                        >
+                          <b style={{ display: 'block', fontSize: 13 }}>{item.label}</b>
+                          <small style={{ color: 'var(--mute)', fontSize: 11 }}>{item.sub}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+
+                  {/* Pengaturan & Utilitas */}
+                  <section className="card flush">
+                    <ul className="menu" style={{ padding: '4px 16px' }}>
+                      <li><button onClick={exportCsv}>Ekspor transaksi ke CSV</button></li>
+                      <li><button onClick={printReport}>Cetak laporan atau simpan PDF</button></li>
+                      <li><button onClick={install}>Pasang di layar utama</button></li>
+                      <li><a href="https://t.me/nabung_date_bot" target="_blank" rel="noopener noreferrer">Buka bot Telegram</a></li>
+                      <li><button onClick={logout} style={{ color: '#DC2626', fontWeight: 600 }}>Keluar / Ganti Pos</button></li>
+                    </ul>
+                  </section>
+
+                  <p className="mute" style={{ textAlign: 'center', fontSize: 12, paddingBottom: 8 }}>
+                    Meowney · Versi 2.0.0
+                  </p>
+                </>
+              );
+            })()}
 
             {showMisi && (() => {
               const claimedSet = new Set(claimedIds);
@@ -2476,7 +2582,41 @@ export default function Page() {
             <label className="fld">Nama orang atau pihak<input value={df.person} onChange={(e) => setDf({ ...df, person: e.target.value })} placeholder="Mamah, Kak Budi, Toko ABC" required /></label>
             <label className="fld">Nominal (Rp)<input inputMode="numeric" value={df.amount} onChange={(e) => setDf({ ...df, amount: e.target.value })} placeholder="70000" required /></label>
             <label className="fld">Keterangan<input value={df.desc} onChange={(e) => setDf({ ...df, desc: e.target.value })} placeholder="Untuk apa" /></label>
-            <button className="btn" type="submit">Simpan {df.type.toLowerCase()}</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--bg)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                {debtPhoto ? 'Ganti foto' : 'Tambah foto'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    if (debtPhoto) URL.revokeObjectURL(debtPhoto.preview);
+                    setDebtPhoto({ file: f, preview: URL.createObjectURL(f) });
+                  }}
+                />
+              </label>
+              {debtPhoto && (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={debtPhoto.preview} alt="Preview foto utang" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--line)' }} />
+                  <button
+                    type="button"
+                    aria-label="Hapus foto"
+                    onClick={() => { URL.revokeObjectURL(debtPhoto.preview); setDebtPhoto(null); }}
+                    style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#1F2937', color: '#fff', fontSize: 12, lineHeight: 1, display: 'grid', placeItems: 'center' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+            <button className="btn" type="submit" disabled={debtBusy}>{debtBusy ? 'Menyimpan...' : `Simpan ${df.type.toLowerCase()}`}</button>
           </form>
         </Sheet>
       )}
