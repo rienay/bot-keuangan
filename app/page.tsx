@@ -219,11 +219,14 @@ interface MissionData {
 }
 
 const RANKS = [
-  { lv: 1, name: 'Pemula Hemat', min: 0, max: 50 },
-  { lv: 2, name: 'Penjaga Dompet', min: 50, max: 120 },
-  { lv: 3, name: 'Juragan Kucing', min: 120, max: 250 },
-  { lv: 4, name: 'Sultan Tabungan', min: 250, max: 450 },
-  { lv: 5, name: 'Grandmaster Keuangan', min: 450, max: 9999 },
+  { lv: 1, name: 'Pemula Hemat', min: 0, max: 60 },
+  { lv: 2, name: 'Penjaga Dompet', min: 60, max: 160 },
+  { lv: 3, name: 'Juragan Kucing', min: 160, max: 320 },
+  { lv: 4, name: 'Kapten Tabungan', min: 320, max: 550 },
+  { lv: 5, name: 'Sultan Kucing', min: 550, max: 850 },
+  { lv: 6, name: 'Raja Cashflow', min: 850, max: 1200 },
+  { lv: 7, name: 'Legenda Finansial', min: 1200, max: 1650 },
+  { lv: 8, name: 'Grandmaster Keuangan', min: 1650, max: 99999 },
 ];
 const getRank = (xp: number) => RANKS.find((r) => xp < r.max) || RANKS[RANKS.length - 1];
 const RARITY_CFG: Record<string, { label: string; bg: string; color: string }> = {
@@ -1181,7 +1184,7 @@ export default function Page() {
               const lockedList = missions.filter((m) => !m.unlocked);
               const activeXp = claimedList.reduce((s, m) => s + m.xp, 0);
               const rank = getRank(activeXp);
-              const rankPct = rank.lv === 5 ? 100 : Math.min(100, Math.round(((activeXp - rank.min) / (rank.max - rank.min)) * 100));
+              const rankPct = rank.lv === 8 ? 100 : Math.min(100, Math.round(((activeXp - rank.min) / (rank.max - rank.min)) * 100));
               const partner = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
 
               return (
@@ -1215,7 +1218,7 @@ export default function Page() {
                     <div style={{ marginTop: 14 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.85, marginBottom: 4 }}>
                         <span>Progress Level</span>
-                        <span>{rank.lv === 5 ? 'MAX' : `${activeXp} / ${rank.max} XP`}</span>
+                        <span>{rank.lv === 8 ? 'MAX' : `${activeXp} / ${rank.max} XP`}</span>
                       </div>
                       <div style={{ height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.24)', overflow: 'hidden' }}>
                         <div style={{ height: '100%', borderRadius: 8, background: '#FDE68A', width: `${rankPct}%`, transition: 'width 0.5s ease' }} />
