@@ -57,6 +57,7 @@ const CACHE_TTL_MS = 300_000; // 5 menit
 // Set cache untuk sheet yang sudah pasti ada dan terverifikasi di spreadsheet
 // Mencegah panggilan API spreadsheets.get / values.get berulang kali yang menghabiskan kuota
 const knownSpecialSheets = new Set<string>([
+  '_goals',
   BUDGET_SHEET_NAME.toLowerCase(),
   DEBT_SHEET_NAME.toLowerCase(),
   '_dompet',
@@ -1476,10 +1477,9 @@ export async function getAllTransactionsForWeb(
         const noteLink = noteLinkRaw && String(noteLinkRaw).startsWith('http') ? String(noteLinkRaw).trim() : undefined;
         const inputTime = waktuRaw ? String(waktuRaw).trim() : undefined;
         let wallet = dompetRaw ? String(dompetRaw).trim() : (jenis === 'Pemasukan' ? 'Bank' : 'Cash');
-        if (!['Bank', 'E-Wallet', 'Cash'].includes(wallet)) {
-          wallet = 'Bank';
-        }
-        const walletKey = wallet as 'Bank' | 'E-Wallet' | 'Cash';
+        // Nama dompet per rekening (mis. "Bank - BCA") dipertahankan apa adanya; hanya jenisnya yang dipakai untuk saldo
+        const wl = wallet.toLowerCase();
+        const walletKey: 'Bank' | 'E-Wallet' | 'Cash' = wl.startsWith('e-wallet') ? 'E-Wallet' : wl.startsWith('cash') ? 'Cash' : 'Bank';
 
         // Ekstrak PIC jika ada di keterangan, e.g. (PIC: @username) atau (PIC: nama)
         let pic: string | undefined;
@@ -3026,4 +3026,91 @@ export async function getDebtsSummary(bookName?: string): Promise<DebtsSummary> 
     totalPiutangBelumLunas,
     items,
   };
+}
+
+
+// ============================================================
+// FITUR WEB: edit/hapus transaksi, target tabungan
+// ============================================================
+
+export async function resolveBook(name: string): Promise<string> {
+  const books = await getAllSheetBooks();
+  const found = books.find((b) => b.toLowerCase() === String(name || '').trim().toLowerCase());
+  if (!found) throw new Error(`Pos "${name}" tidak ditemukan.`);
+  return found;
+}
+
+export async function updateTransactionRow(
+  sheetName: string,
+  row: number,
+  tx: { date: string; type: string; category: string; amount: number; description: string; wallet: string }
+): Promise<void> {
+  if (!Number.isInteger(row) || row < 2) throw new Error('Baris transaksi tidak valid.');
+  const sheets = google.sheets({ version: 'v4', auth: getGoogleAuth() });
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: getSpreadsheetId(),
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: `'${sheetName}'!A${row}:E${row}`, values: [[`'${tx.date}`, tx.type, tx.category, tx.amount, tx.description]] },
+        { range: `'${sheetName}'!H${row}`, values: [[tx.wallet]] },
+      ],
+    },
+  });
+  webFinanceCache.clear();
+}
+
+export async function clearTransactionRow(sheetName: string, row: number): Promise<void> {
+  if (!Number.isInteger(row) || row < 2) throw new Error('Baris transaksi tidak valid.');
+  const sheets = google.sheets({ version: 'v4', auth: getGoogleAuth() });
+  await sheets.spreadsheets.values.clear({ spreadsheetId: getSpreadsheetId(), range: `'${sheetName}'!A${row}:H${row}` });
+  webFinanceCache.clear();
+}
+
+export const GOAL_SHEET_NAME = '_Goals';
+export interface GoalItem { id: string; book: string; name: string; target: number; saved: number; due: string }
+
+async function goalCtx() {
+  const sheets = google.sheets({ version: 'v4', auth: getGoogleAuth() });
+  const spreadsheetId = getSpreadsheetId();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  if (!meta.data.sheets?.some((s: any) => s.properties?.title === GOAL_SHEET_NAME)) {
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: [{ addSheet: { properties: { title: GOAL_SHEET_NAME } } }] } });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `'${GOAL_SHEET_NAME}'!A1:F1`, valueInputOption: 'RAW',
+      requestBody: { values: [['ID', 'Pos', 'Nama', 'Target', 'Terkumpul', 'Tenggat']] },
+    });
+  }
+  return { sheets, spreadsheetId };
+}
+
+export async function getGoals(book?: string): Promise<GoalItem[]> {
+  const { sheets, spreadsheetId } = await goalCtx();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${GOAL_SHEET_NAME}'!A2:F` });
+  return (res.data.values || [])
+    .filter((r: any[]) => r[0])
+    .map((r: any[]) => ({ id: String(r[0]), book: String(r[1] || ''), name: String(r[2] || ''), target: Number(r[3]) || 0, saved: Number(r[4]) || 0, due: String(r[5] || '') }))
+    .filter((x: GoalItem) => !book || x.book.toLowerCase() === book.toLowerCase());
+}
+
+export async function addGoal(p: { book: string; name: string; target: number; due?: string }): Promise<void> {
+  const { sheets, spreadsheetId } = await goalCtx();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId, range: `'${GOAL_SHEET_NAME}'!A:F`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [[`g${Date.now().toString(36)}`, p.book, p.name, p.target, 0, p.due || '']] },
+  });
+}
+
+export async function changeGoal(id: string, op: 'deposit' | 'delete', amount = 0): Promise<void> {
+  const { sheets, spreadsheetId } = await goalCtx();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${GOAL_SHEET_NAME}'!A2:E` });
+  const idx = (res.data.values || []).findIndex((r: any[]) => String(r[0]) === id);
+  if (idx < 0) throw new Error('Target tidak ditemukan.');
+  const row = idx + 2;
+  if (op === 'delete') {
+    await sheets.spreadsheets.values.clear({ spreadsheetId, range: `'${GOAL_SHEET_NAME}'!A${row}:F${row}` });
+  } else {
+    const saved = Number((res.data.values || [])[idx][4]) || 0;
+    await sheets.spreadsheets.values.update({ spreadsheetId, range: `'${GOAL_SHEET_NAME}'!E${row}`, valueInputOption: 'RAW', requestBody: { values: [[Math.max(0, saved + amount)]] } });
+  }
 }
