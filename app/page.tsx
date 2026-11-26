@@ -846,11 +846,6 @@ export default function Page() {
     </li>
   );
   const Empty = ({ children }: { children: React.ReactNode }) => <p className="empty">{children}</p>;
-  const yearChips = (
-    <div className="chips" role="group" aria-label="Pilih tahun">
-      {years.map((y) => <button key={y} className={year === y ? 'on' : ''} onClick={() => setYear(y)}>{y === ALL ? 'Semua tahun' : y}</button>)}
-    </div>
-  );
   const pm = pick !== null ? months[pick] : null;
   const books = (data?.books ?? [book]).filter((b) => !b.startsWith('_'));
 
@@ -864,13 +859,46 @@ export default function Page() {
           aria-label={`Pos aktif: ${book}. Ketuk untuk buka misi`}
           style={{ cursor: 'pointer', textAlign: 'left', border: 'none' }}
         >
-          <span className="bk-emoji" style={{ color: st.c }}>
-            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
+          <span className="bk-emoji" style={{ color: st.c, overflow: 'hidden', padding: 2 }}>
+            {(() => {
+              const p = partnerId ? missions.find((m) => m.id === partnerId && m.unlocked) : null;
+              if (p) {
+                return (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={`/stiker/${p.stiker}`} alt={p.stikerAlt} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                );
+              }
+              return (
+                <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              );
+            })()}
           </span>
           <span className="bk-t"><b>{book === ALL ? 'Semua pos' : book}</b><small>{kind}</small></span>
         </button>
+        {!showMisi && tab !== 'debt' && tab !== 'wallet' && (
+          <select
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            aria-label="Filter tahun"
+            style={{
+              height: 36,
+              padding: '0 10px',
+              borderRadius: 99,
+              border: '1px solid var(--line)',
+              background: 'var(--card)',
+              color: 'var(--ink)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>{y === ALL ? 'Semua' : y}</option>
+            ))}
+          </select>
+        )}
         <button className={`icbtn ${busy ? 'spin' : ''}`} onClick={() => load(book, true)} disabled={busy} aria-label="Muat ulang dari Google Sheets">
           <Ic d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
         </button>
@@ -881,8 +909,6 @@ export default function Page() {
         {error && <div className="err" role="alert"><span>{error}</span><button onClick={() => load(book)}>Coba lagi</button></div>}
         {loading && !data ? <><div className="skel h" /><div className="skel" /><div className="skel" /></> : (
           <>
-            {!showMisi && tab !== 'debt' && tab !== 'wallet' && yearChips}
-
             {!showMisi && tab === 'home' && (
               <>
                 <section className="card hero" style={{ position: 'relative', overflow: 'visible' }}>
@@ -994,69 +1020,55 @@ export default function Page() {
 
             {!showMisi && tab === 'wallet' && (() => {
               const sel = wal.find((w) => w.key === wSel) || null;
-              const ordered = sel ? [sel, ...wal.filter((w) => w !== sel)] : wal;
               return (
                 <>
-                  <div className={`wstack ${sel ? 'sel' : ''}`}>
-                    {ordered.map((w) => {
-                      const isExpanded = sel?.key === w.key;
+                  <div className="wstack">
+                    {wal.map((w) => {
+                      const isSelected = sel?.key === w.key;
                       return (
                         <div
                           key={w.key}
-                          className={`wcard ${isExpanded ? 'is-sel' : ''}`}
+                          className={`wcard ${isSelected ? 'is-sel' : ''}`}
                           style={{ background: w.theme.gradient }}
-                          onClick={() => setWSel(isExpanded ? null : w.key)}
+                          onClick={() => setWSel(isSelected ? null : w.key)}
                           role="button"
                           tabIndex={0}
-                          aria-expanded={isExpanded}
+                          aria-pressed={isSelected}
                           aria-label={`${w.label}, saldo ${rp(w.bal)}`}
                         >
-                          {isExpanded ? (
-                            <div className="wc-inner">
-                              <div className="wc-header">
-                                <div className="wc-brand">
-                                  {w.theme.badge}
-                                  <span className="wc-name">{w.label}</span>
-                                </div>
-                                <div className="wc-header-right">
-                                  <ContactlessWave />
-                                </div>
-                              </div>
-
-                              <div className="wc-mid">
-                                <CardChip />
-                                <div className="wc-bal-wrap">
-                                  <span className="wc-bal-label">Saldo Saat Ini</span>
-                                  <span className="wc-bal">{rp(w.bal)}</span>
-                                </div>
-                              </div>
-
-                              <div className="wc-foot">
-                                <div className="wc-pill in">
-                                  <span>Masuk</span>
-                                  <b className="num">+{rp(w.inM)}</b>
-                                </div>
-                                <div className="wc-pill out">
-                                  <span>Keluar</span>
-                                  <b className="num">-{rp(w.outM)}</b>
-                                </div>
-                                <div className="wc-card-no">
-                                  •••• {Math.abs(w.key.split('').reduce((a, b) => a + b.charCodeAt(0), 1000) % 9000 + 1000)}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="wc-peek">
+                          <div className="wc-inner">
+                            <div className="wc-header">
                               <div className="wc-brand">
                                 {w.theme.badge}
                                 <span className="wc-name">{w.label}</span>
                               </div>
-                              <div className="wc-peek-right">
-                                <b className="num wc-mini">{rp(w.bal)}</b>
-                                <span className="wc-chevron">›</span>
+                              <div className="wc-header-right">
+                                <ContactlessWave />
                               </div>
                             </div>
-                          )}
+
+                            <div className="wc-mid">
+                              <CardChip />
+                              <div className="wc-bal-wrap">
+                                <span className="wc-bal-label">Saldo Saat Ini</span>
+                                <span className="wc-bal">{rp(w.bal)}</span>
+                              </div>
+                            </div>
+
+                            <div className="wc-foot">
+                              <div className="wc-pill in">
+                                <span>Masuk</span>
+                                <b className="num">+{rp(w.inM)}</b>
+                              </div>
+                              <div className="wc-pill out">
+                                <span>Keluar</span>
+                                <b className="num">-{rp(w.outM)}</b>
+                              </div>
+                              <div className="wc-card-no">
+                                •••• {Math.abs(w.key.split('').reduce((a, b) => a + b.charCodeAt(0), 1000) % 9000 + 1000)}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
@@ -1065,14 +1077,14 @@ export default function Page() {
                     <section className="card flush">
                       <div className="card-h" style={{ padding: '8px 16px' }}>
                         <h3 className="day" style={{ padding: 0 }}>Mutasi {sel.label}</h3>
-                        <button className="link" onClick={() => setWSel(null)} style={{ fontSize: '13px' }}>Tutup kartu</button>
+                        <button className="link" onClick={() => setWSel(null)} style={{ fontSize: '13px' }}>Tutup mutasi</button>
                       </div>
                       {sel.list.length ? <ul className="txs">{sel.list.slice(0, 30).map(row)}</ul> : <div className="pad"><Empty>Belum ada transaksi di dompet ini.</Empty></div>}
                     </section>
                   ) : (
                     <section className="card">
                       <div className="kv"><span>Total semua dompet</span><b className="num">{rp(walTotal)}</b></div>
-                      <p className="mute">Ketuk salah satu kartu untuk melihat rincian mutasi dompet.</p>
+                      <p className="mute">Geser kartu ke samping untuk melihat dompet lain, ketuk kartu untuk melihat mutasi.</p>
                       <button className="btn ghost" onClick={openTransfer}>Pindah uang antar dompet</button>
                     </section>
                   )}
